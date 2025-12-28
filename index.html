@@ -1,4 +1,4 @@
-    <!DOCTYPE html>
+   <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -4244,13 +4244,257 @@
           const startBtn = document.getElementById('start-game-btn');
           if (startBtn) {
             startBtn.addEventListener('click', () => {
-              overlay.remove();
-              // Set auth state to logged in
+              // Set auth state to logged in FIRST
               AuthManager.login(account.accountId);
-              initializeGame();
+              
+              // Remove overlay
+              overlay.remove();
+              
+              // Rebuild app structure and initialize game
+              const app = document.getElementById('app');
+              if (!app) {
+                console.error('App container not found!');
+                return;
+              }
+              
+              // Show loading state briefly
+              app.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100vh; color: #e0e0e0; font-size: 18px;">🎮 Loading your criminal empire...</div>';
+              
+              // Wait a moment, then rebuild and initialize
+              setTimeout(() => {
+                this.rebuildAppStructure();
+                initializeGame();
+              }, 300);
             });
           }
         }, 0);
+      },
+      
+      rebuildAppStructure() {
+        const app = document.getElementById('app');
+        if (!app) return;
+        
+        // Restore original app HTML structure
+        app.innerHTML = `
+          <div id="content">
+            <!-- Profile Tab -->
+            <div id="profile-tab" class="tab-content active">
+              <div class="page-header">Profile</div>
+              <div class="stat-grid">
+                <div class="stat-card">
+                  <div class="stat-label">Player</div>
+                  <div class="stat-value" id="player-name">Unknown</div>
+                </div>
+                <div class="stat-card">
+                  <div class="stat-label">Cash</div>
+                  <div class="stat-value" id="player-cash">$1,000</div>
+                </div>
+                <div class="stat-card">
+                  <div class="stat-label">XP / Level</div>
+                  <div class="stat-value">
+                    <span id="player-xp">0</span> / <span id="player-level">1</span>
+                  </div>
+                </div>
+                <div class="stat-card">
+                  <div class="stat-label">Reputation</div>
+                  <div class="stat-value" id="player-rep">0</div>
+                </div>
+                <div class="stat-card">
+                  <div class="stat-label">Heat Level</div>
+                  <div class="stat-value" id="player-heat">0%</div>
+                </div>
+                <div class="stat-card">
+                  <div class="stat-label">Global Heat</div>
+                  <div class="stat-value" id="player-global-heat">0%</div>
+                </div>
+                <div class="stat-card">
+                  <div class="stat-label">Stats</div>
+                  <div class="stat-row">
+                    <span>Strength</span>
+                    <span id="stat-strength">5</span>
+                  </div>
+                  <div class="stat-row">
+                    <span>Intelligence</span>
+                    <span id="stat-intelligence">5</span>
+                  </div>
+                  <div class="stat-row">
+                    <span>Charisma</span>
+                    <span id="stat-charisma">5</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Turf Tab -->
+            <div id="turf-tab" class="tab-content">
+              <div class="page-header">Turf</div>
+              
+              <div class="status-controls">
+                <button class="status-btn laying_low selected" data-status="laying_low">
+                  <span>💤</span>
+                  <span>Lay Low</span>
+                </button>
+                <button class="status-btn active-status" data-status="active">
+                  <span>🔥</span>
+                  <span>Active</span>
+                </button>
+              </div>
+
+              <div class="heat-indicator">
+                <div class="heat-icon">🔥</div>
+                <div class="heat-bar-container">
+                  <div class="heat-bar-fill" id="heat-bar-fill" style="width: 0%"></div>
+                </div>
+                <div class="heat-value" id="heat-value">0%</div>
+              </div>
+
+              <div class="roam-controls">
+                <button class="roam-btn" id="roam-toggle-btn">
+                  <span id="roam-icon">🚶</span>
+                  <span id="roam-label">Start Free Roam</span>
+                </button>
+              </div>
+              
+              <div id="city-map">
+                <canvas id="map-canvas"></canvas>
+                <div id="event-notification-container"></div>
+                <div id="map-icons"></div>
+                <div id="floating-pickups"></div>
+                <div id="character-sprite" class="character-icon">
+                  <div class="status-indicator laying_low">💤</div>
+                  <div class="suspicion-eye" id="suspicion-eye">👁️</div>
+                  <div class="character-silhouette">👨</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Crimes Tab -->
+            <div id="crimes-tab" class="tab-content">
+              <div class="page-header">Crimes</div>
+              <div class="placeholder">
+                <div class="placeholder-icon">🔫</div>
+                <div class="placeholder-text">No crimes available</div>
+              </div>
+            </div>
+
+            <!-- Safe House Tab -->
+            <div id="safehouse-tab" class="tab-content">
+              <div class="page-header">Safe House</div>
+              
+              <div class="character-creator">
+                <div class="character-preview">
+                  <div class="preview-sprite" id="preview-sprite">
+                    <span id="preview-character">👤</span>
+                    <span id="preview-wardrobe"></span>
+                  </div>
+                  <div class="preview-details" id="preview-details">
+                    <span class="preview-tag">Male</span>
+                    <span class="preview-tag">Human</span>
+                    <span class="preview-tag">Short Hair</span>
+                  </div>
+                </div>
+
+                <div class="creator-section">
+                  <div class="section-title">Gender</div>
+                  <div class="option-grid">
+                    <button class="option-btn selected" data-trait="gender" data-value="male">
+                      <span>♂️</span>
+                      <span>Male</span>
+                    </button>
+                    <button class="option-btn" data-trait="gender" data-value="female">
+                      <span>♀️</span>
+                      <span>Female</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div class="creator-section">
+                  <div class="section-title">Race</div>
+                  <div class="option-grid">
+                    <button class="option-btn selected" data-trait="race" data-value="human">Human</button>
+                    <button class="option-btn" data-trait="race" data-value="elf">Elf</button>
+                    <button class="option-btn" data-trait="race" data-value="dwarf">Dwarf</button>
+                    <button class="option-btn" data-trait="race" data-value="orc">Orc</button>
+                  </div>
+                </div>
+
+                <div class="creator-section">
+                  <div class="section-title">Face</div>
+                  <div class="option-grid">
+                    <button class="option-btn selected" data-trait="face" data-value="neutral">Neutral</button>
+                    <button class="option-btn" data-trait="face" data-value="sharp">Sharp</button>
+                    <button class="option-btn" data-trait="face" data-value="round">Round</button>
+                    <button class="option-btn" data-trait="face" data-value="weathered">Weathered</button>
+                  </div>
+                </div>
+
+                <div class="creator-section">
+                  <div class="section-title">Body Type</div>
+                  <div class="option-grid">
+                    <button class="option-btn selected" data-trait="body" data-value="average">Average</button>
+                    <button class="option-btn" data-trait="body" data-value="slim">Slim</button>
+                    <button class="option-btn" data-trait="body" data-value="athletic">Athletic</button>
+                    <button class="option-btn" data-trait="body" data-value="heavy">Heavy</button>
+                  </div>
+                </div>
+
+                <div class="creator-section">
+                  <div class="section-title">Hair Style</div>
+                  <div class="option-grid">
+                    <button class="option-btn selected" data-trait="hair" data-value="short">Short</button>
+                    <button class="option-btn" data-trait="hair" data-value="long">Long</button>
+                    <button class="option-btn" data-trait="hair" data-value="bald">Bald</button>
+                    <button class="option-btn" data-trait="hair" data-value="mohawk">Mohawk</button>
+                  </div>
+                </div>
+
+                <div class="creator-section">
+                  <div class="section-title">Wardrobe</div>
+                  <div class="wardrobe-grid" id="wardrobe-grid"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Inventory Tab -->
+            <div id="inventory-tab" class="tab-content">
+              <div class="page-header">Inventory</div>
+              <div class="placeholder">
+                <div class="placeholder-icon">🎒</div>
+                <div class="placeholder-text">Empty</div>
+              </div>
+            </div>
+
+            <!-- Gang Tab -->
+            <div id="gang-tab" class="tab-content">
+              <div class="page-header">Gang</div>
+              <div id="gang-content"></div>
+            </div>
+          </div>
+
+          <!-- Tab Bar -->
+          <div id="tab-bar">
+            <div class="tab active" data-tab="profile">
+              <div class="tab-icon">👤</div>
+              <div class="tab-label">Profile</div>
+            </div>
+            <div class="tab" data-tab="turf">
+              <div class="tab-icon">🗺️</div>
+              <div class="tab-label">Turf</div>
+            </div>
+            <div class="tab" data-tab="crimes">
+              <div class="tab-icon">🔫</div>
+              <div class="tab-label">Crimes</div>
+            </div>
+            <div class="tab" data-tab="safehouse">
+              <div class="tab-icon">🏠</div>
+              <div class="tab-label">Safe House</div>
+            </div>
+            <div class="tab" data-tab="gang">
+              <div class="tab-icon">👥</div>
+              <div class="tab-label">Gang</div>
+            </div>
+          </div>
+        `;
       },
       
       // Show sign-in prompt
@@ -11070,8 +11314,14 @@
       
       // Show player profile modal
       showPlayerProfile(playerId) {
-        const player = this.cachedLeaderboard.find(p => p.accountId === playerId);
-        if (!player) return;
+        // Get player from cached leaderboard
+        const leaderboard = GlobalLeaderboard.cachedLeaderboard;
+        const player = leaderboard.find(p => p.accountId === playerId);
+        
+        if (!player) {
+          console.error('Player not found:', playerId);
+          return;
+        }
         
         const isCurrentPlayer = playerId === GameState.accountId;
         const now = Date.now();
@@ -11127,8 +11377,8 @@
               </div>
             </div>
             
-            ${!isCurrentPlayer ? `
-              <div class="player-profile-actions">
+            <div class="player-profile-actions">
+              ${!isCurrentPlayer ? `
                 <button class="player-action-btn primary" id="message-player-btn">
                   <span>💬</span>
                   <span>Send Message</span>
@@ -11137,19 +11387,12 @@
                   <span>⚔️</span>
                   <span>Send Challenge</span>
                 </button>
-                <button class="player-action-btn" id="close-profile-btn">
-                  <span>✕</span>
-                  <span>Close</span>
-                </button>
-              </div>
-            ` : `
-              <div class="player-profile-actions">
-                <button class="player-action-btn" id="close-profile-btn">
-                  <span>✕</span>
-                  <span>Close</span>
-                </button>
-              </div>
-            `}
+              ` : ''}
+              <button class="player-action-btn" id="close-profile-btn">
+                <span>✕</span>
+                <span>Close</span>
+              </button>
+            </div>
           </div>
         `;
         
