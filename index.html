@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+    <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -571,6 +571,344 @@
         inset 0 1px 0 rgba(255, 255, 255, 0.1);
     }
     
+    /* Chat System Styles */
+    .chat-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(10, 10, 10, 0.95);
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      animation: chat-fade-in 0.3s ease-out;
+    }
+
+    @keyframes chat-fade-in {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .chat-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px;
+      background: #1a1a1a;
+      border-bottom: 1px solid #2a2a2a;
+    }
+
+    .chat-title {
+      font-size: 18px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .chat-close-btn {
+      background: transparent;
+      border: 1px solid #2a2a2a;
+      color: #e0e0e0;
+      font-size: 18px;
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
+      min-width: 44px;
+      min-height: 44px;
+    }
+
+    .chat-close-btn:hover {
+      background: #2a2a2a;
+      border-color: #4a4a4a;
+    }
+
+    .chat-messages-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .chat-message {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      max-width: 80%;
+      animation: message-slide-in 0.2s ease-out;
+    }
+
+    @keyframes message-slide-in {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .chat-message.own {
+      align-self: flex-end;
+    }
+
+    .chat-message.other {
+      align-self: flex-start;
+    }
+
+    .chat-message-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      opacity: 0.7;
+    }
+
+    .chat-message.own .chat-message-header {
+      flex-direction: row-reverse;
+    }
+
+    .chat-message-username {
+      font-weight: 600;
+    }
+
+    .chat-message-time {
+      font-size: 10px;
+    }
+
+    .chat-message-bubble {
+      padding: 10px 14px;
+      border-radius: 12px;
+      word-wrap: break-word;
+      line-height: 1.4;
+      font-size: 14px;
+    }
+
+    .chat-message.own .chat-message-bubble {
+      background: #8ab4f8;
+      color: #0a0a0a;
+      border-bottom-right-radius: 4px;
+    }
+
+    .chat-message.other .chat-message-bubble {
+      background: #2a2a2a;
+      color: #e0e0e0;
+      border-bottom-left-radius: 4px;
+    }
+
+    .chat-input-container {
+      padding: 16px;
+      background: #1a1a1a;
+      border-top: 1px solid #2a2a2a;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .chat-input {
+      flex: 1;
+      padding: 12px;
+      background: #0a0a0a;
+      border: 1px solid #2a2a2a;
+      border-radius: 4px;
+      color: #e0e0e0;
+      font-size: 14px;
+      font-family: inherit;
+      resize: none;
+      max-height: 100px;
+      min-height: 44px;
+    }
+
+    .chat-input:focus {
+      outline: none;
+      border-color: #8ab4f8;
+    }
+
+    .chat-send-btn {
+      background: #8ab4f8;
+      border: 1px solid #8ab4f8;
+      color: #0a0a0a;
+      font-size: 20px;
+      padding: 12px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
+      min-width: 44px;
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .chat-send-btn:hover {
+      background: #9ac4ff;
+      border-color: #9ac4ff;
+    }
+
+    .chat-send-btn:active {
+      transform: scale(0.95);
+    }
+
+    .chat-send-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .chat-empty {
+      text-align: center;
+      padding: 60px 20px;
+      opacity: 0.5;
+    }
+
+    .chat-empty-icon {
+      font-size: 48px;
+      margin-bottom: 12px;
+    }
+
+    .chat-empty-text {
+      font-size: 14px;
+    }
+
+    /* Player Profile Modal */
+    .player-profile-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(10, 10, 10, 0.95);
+      z-index: 1100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      animation: modal-fade-in 0.3s ease-out;
+    }
+
+    .player-profile-content {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 4px;
+      padding: 24px;
+      max-width: 400px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+
+    .player-profile-header {
+      text-align: center;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #2a2a2a;
+    }
+
+    .player-profile-avatar {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #8ab4f8 0%, #5a84c8 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+      font-weight: 700;
+      color: #0a0a0a;
+      margin: 0 auto 12px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+    }
+
+    .player-profile-username {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .player-profile-status {
+      font-size: 12px;
+      opacity: 0.7;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .player-profile-stats {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .player-profile-stat {
+      background: #0a0a0a;
+      padding: 12px;
+      border-radius: 4px;
+      border: 1px solid #2a2a2a;
+      text-align: center;
+    }
+
+    .player-profile-stat-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      opacity: 0.6;
+      margin-bottom: 4px;
+    }
+
+    .player-profile-stat-value {
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .player-profile-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .player-action-btn {
+      padding: 14px 20px;
+      background: #2a2a2a;
+      border: 1px solid #4a4a4a;
+      border-radius: 4px;
+      color: #e0e0e0;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      min-height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .player-action-btn:hover {
+      background: #3a3a3a;
+      border-color: #5a5a5a;
+    }
+
+    .player-action-btn:active {
+      transform: scale(0.98);
+    }
+
+    .player-action-btn.primary {
+      background: #8ab4f8;
+      border-color: #8ab4f8;
+      color: #0a0a0a;
+    }
+
+    .player-action-btn.primary:hover {
+      background: #9ac4ff;
+      border-color: #9ac4ff;
+    }
+
     /* Leaderboard Styles */
     .leaderboard-container {
       margin: 20px 0;
@@ -2942,6 +3280,321 @@
   <script>eruda.init();</script>
   
   <script>
+    // ========================================
+    // CHAT SYSTEM: Real-time Messaging
+    // ========================================
+    const ChatSystem = {
+      currentChatWith: null,
+      messageListener: null,
+      unreadCounts: {},
+      
+      // Open chat overlay
+      openChat(targetPlayerId = null) {
+        console.log('Opening chat with:', targetPlayerId || 'global');
+        
+        this.currentChatWith = targetPlayerId;
+        
+        // Create chat overlay
+        const overlay = document.createElement('div');
+        overlay.className = 'chat-overlay';
+        overlay.id = 'chat-overlay';
+        
+        const chatTitle = targetPlayerId ? this.getPlayerName(targetPlayerId) : 'Global Chat';
+        
+        overlay.innerHTML = `
+          <div class="chat-header">
+            <div class="chat-title">
+              <span>💬</span>
+              <span>${chatTitle}</span>
+            </div>
+            <button class="chat-close-btn" id="chat-close-btn">✕</button>
+          </div>
+          <div class="chat-messages-container" id="chat-messages-container">
+            <div class="chat-empty">
+              <div class="chat-empty-icon">💭</div>
+              <div class="chat-empty-text">No messages yet. Start the conversation!</div>
+            </div>
+          </div>
+          <div class="chat-input-container">
+            <textarea 
+              class="chat-input" 
+              id="chat-input" 
+              placeholder="Type a message..." 
+              rows="1"
+              maxlength="500"
+            ></textarea>
+            <button class="chat-send-btn" id="chat-send-btn">📨</button>
+          </div>
+        `;
+        
+        document.getElementById('app').appendChild(overlay);
+        
+        // Add event listeners
+        document.getElementById('chat-close-btn')?.addEventListener('click', () => {
+          this.closeChat();
+        });
+        
+        document.getElementById('chat-send-btn')?.addEventListener('click', () => {
+          this.sendMessage();
+        });
+        
+        const chatInput = document.getElementById('chat-input');
+        chatInput?.addEventListener('keypress', (e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            this.sendMessage();
+          }
+        });
+        
+        // Auto-resize textarea
+        chatInput?.addEventListener('input', (e) => {
+          e.target.style.height = 'auto';
+          e.target.style.height = e.target.scrollHeight + 'px';
+        });
+        
+        // Load messages
+        this.loadMessages();
+        
+        // Mark as read
+        if (targetPlayerId) {
+          this.unreadCounts[targetPlayerId] = 0;
+          this.updateChatButton();
+        }
+      },
+      
+      // Close chat overlay
+      closeChat() {
+        const overlay = document.getElementById('chat-overlay');
+        if (overlay) overlay.remove();
+        
+        // Remove message listener
+        if (this.messageListener && database) {
+          database.ref(this.getChatPath()).off('child_added', this.messageListener);
+          this.messageListener = null;
+        }
+        
+        this.currentChatWith = null;
+      },
+      
+      // Get chat path in Firebase
+      getChatPath() {
+        if (!this.currentChatWith) {
+          return 'global_chat';
+        }
+        
+        // Create consistent chat room ID (sorted to ensure same room for both users)
+        const ids = [GameState.accountId, this.currentChatWith].sort();
+        return `private_chats/${ids[0]}_${ids[1]}`;
+      },
+      
+      // Send message
+      sendMessage() {
+        const input = document.getElementById('chat-input');
+        const message = input?.value.trim();
+        
+        if (!message) {
+          console.log('Empty message, not sending');
+          return;
+        }
+        
+        if (!database) {
+          console.error('Firebase not initialized');
+          alert('Chat is not available - Firebase not connected');
+          return;
+        }
+        
+        if (!GameState.accountId || !GameState.player.name) {
+          console.error('Player data missing');
+          alert('Player data not loaded');
+          return;
+        }
+        
+        console.log('Sending message:', message);
+        console.log('Chat path:', this.getChatPath());
+        
+        const chatPath = this.getChatPath();
+        const messageData = {
+          senderId: GameState.accountId,
+          senderName: GameState.player.name,
+          message: message,
+          timestamp: Date.now()
+        };
+        
+        console.log('Message data:', messageData);
+        
+        // Disable send button temporarily
+        const sendBtn = document.getElementById('chat-send-btn');
+        if (sendBtn) sendBtn.disabled = true;
+        
+        // Push to Firebase
+        database.ref(chatPath).push(messageData)
+          .then(() => {
+            console.log('✅ Message sent successfully:', message);
+            input.value = '';
+            input.style.height = 'auto';
+            if (sendBtn) sendBtn.disabled = false;
+            input.focus();
+          })
+          .catch((error) => {
+            console.error('❌ Failed to send message:', error);
+            alert('Failed to send message: ' + error.message);
+            if (sendBtn) sendBtn.disabled = false;
+          });
+      },
+      
+      // Load messages from Firebase
+      loadMessages() {
+        if (!database) return;
+        
+        const chatPath = this.getChatPath();
+        const messagesRef = database.ref(chatPath).limitToLast(50);
+        
+        // Load existing messages
+        messagesRef.once('value', (snapshot) => {
+          const container = document.getElementById('chat-messages-container');
+          if (!container) return;
+          
+          container.innerHTML = '';
+          
+          const hasMessages = snapshot.numChildren() > 0;
+          
+          if (!hasMessages) {
+            container.innerHTML = `
+              <div class="chat-empty">
+                <div class="chat-empty-icon">💭</div>
+                <div class="chat-empty-text">No messages yet. Start the conversation!</div>
+              </div>
+            `;
+          } else {
+            snapshot.forEach((childSnapshot) => {
+              const messageData = childSnapshot.val();
+              this.renderMessage(messageData);
+            });
+          }
+          
+          this.scrollToBottom();
+        });
+        
+        // Listen for new messages (child_added fires for ALL children on attach, so we track what we've seen)
+        let initialLoadComplete = false;
+        
+        messagesRef.once('value', () => {
+          initialLoadComplete = true;
+        });
+        
+        this.messageListener = messagesRef.on('child_added', (snapshot) => {
+          // Only render new messages after initial load
+          if (initialLoadComplete) {
+            const messageData = snapshot.val();
+            const container = document.getElementById('chat-messages-container');
+            
+            if (container) {
+              // Remove empty state if exists
+              const emptyState = container.querySelector('.chat-empty');
+              if (emptyState) {
+                emptyState.remove();
+              }
+              
+              this.renderMessage(messageData);
+              this.scrollToBottom();
+            }
+          }
+        });
+      },
+      
+      // Render a message
+      renderMessage(messageData) {
+        const container = document.getElementById('chat-messages-container');
+        if (!container) return;
+        
+        const isOwnMessage = messageData.senderId === GameState.accountId;
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `chat-message ${isOwnMessage ? 'own' : 'other'}`;
+        
+        const time = new Date(messageData.timestamp).toLocaleTimeString([], { 
+          hour: '2-digit', 
+          minute: '2-digit' 
+        });
+        
+        messageDiv.innerHTML = `
+          <div class="chat-message-header">
+            <span class="chat-message-username">${messageData.senderName}</span>
+            <span class="chat-message-time">${time}</span>
+          </div>
+          <div class="chat-message-bubble">${this.escapeHtml(messageData.message)}</div>
+        `;
+        
+        container.appendChild(messageDiv);
+      },
+      
+      // Scroll to bottom
+      scrollToBottom() {
+        const container = document.getElementById('chat-messages-container');
+        if (container) {
+          container.scrollTop = container.scrollHeight;
+        }
+      },
+      
+      // Escape HTML to prevent XSS
+      escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      },
+      
+      // Get player name by ID
+      getPlayerName(playerId) {
+        // Try to get from cached leaderboard
+        const player = GlobalLeaderboard.cachedLeaderboard.find(p => p.accountId === playerId);
+        return player ? player.username : 'Unknown Player';
+      },
+      
+      // Update chat button with unread count
+      updateChatButton() {
+        const chatBtn = document.getElementById('chat-tab-btn');
+        if (!chatBtn) return;
+        
+        const totalUnread = Object.values(this.unreadCounts).reduce((sum, count) => sum + count, 0);
+        
+        if (totalUnread > 0) {
+          chatBtn.innerHTML = `💬 <span style="background: #f28b82; padding: 2px 6px; border-radius: 10px; font-size: 10px; margin-left: 4px;">${totalUnread}</span>`;
+        } else {
+          chatBtn.textContent = '💬';
+        }
+      },
+      
+      // Listen for new messages (for unread counts)
+      startListeningForMessages() {
+        if (!database || !GameState.accountId) return;
+        
+        // Listen to all chats involving this player
+        const chatsRef = database.ref('private_chats');
+        
+        chatsRef.on('child_added', (snapshot) => {
+          const chatId = snapshot.key;
+          
+          // Check if this chat involves current player
+          if (chatId.includes(GameState.accountId)) {
+            const lastMessageRef = snapshot.ref.limitToLast(1);
+            
+            lastMessageRef.on('child_added', (msgSnapshot) => {
+              const message = msgSnapshot.val();
+              
+              // Increment unread if not from self and chat not open
+              if (message.senderId !== GameState.accountId) {
+                const otherPlayerId = chatId.replace(GameState.accountId, '').replace('_', '');
+                
+                if (this.currentChatWith !== otherPlayerId) {
+                  this.unreadCounts[otherPlayerId] = (this.unreadCounts[otherPlayerId] || 0) + 1;
+                  this.updateChatButton();
+                }
+              }
+            });
+          }
+        });
+      }
+    };
+
     // ========================================
     // FIREBASE: Initialize Connection
     // ========================================
@@ -9532,8 +10185,8 @@
       },
       
       // Update or add player entry to Firebase
-      updatePlayer(accountId, username, level, cash, reputation) {
-        console.log('🔵 updatePlayer called with:', { accountId, username, level, cash, reputation });
+      updatePlayer(accountId, username, level, cash, reputation, heat, position, status) {
+        console.log('🔵 updatePlayer called with:', { accountId, username, level, cash, reputation, heat, position, status });
         
         if (!database) {
           console.error('❌ Firebase not initialized - database is null');
@@ -9542,12 +10195,18 @@
         
         console.log('✅ Database exists, preparing entry...');
         
+        // Determine zone name from position
+        const zoneName = this.getZoneName(position);
+        
         const entry = {
           accountId: accountId,
           username: username,
           level: level,
           cash: cash,
           reputation: reputation,
+          heat: Math.round(heat),
+          lastKnownZone: zoneName,
+          status: status, // 'laying_low' or 'active'
           lastUpdated: Date.now()
         };
         
@@ -9566,6 +10225,20 @@
             console.error('❌ Failed to update leaderboard:', error);
             console.error('❌ Error details:', error.message, error.code);
           });
+      },
+      
+      // Get zone name from position
+      getZoneName(position) {
+        if (!GameState.map.grid) return 'Unknown';
+        
+        const gridX = Math.floor((position.x / 100) * GameState.map.width);
+        const gridY = Math.floor((position.y / 100) * GameState.map.height);
+        const tile = TileGridGenerator.getTile(GameState.map.grid, gridX, gridY);
+        
+        if (!tile) return 'Unknown';
+        
+        const biome = Object.values(BIOMES).find(b => b.id === tile.biome);
+        return biome ? biome.name : 'Unknown';
       },
       
       // Get sorted leaderboard (by reputation, then level, then cash)
@@ -9786,7 +10459,10 @@
           GameState.player.name || account.username,
           GameState.player.level,
           GameState.player.cash,
-          GameState.player.reputation
+          GameState.player.reputation,
+          GameState.player.heat,
+          GameState.character.position,
+          GameState.playerStatus
         );
       },
       
@@ -10202,10 +10878,11 @@
         }
       },
       
-      showPlayersOnlineModal() {
-        // Generate random player count
-        const onlineCount = Math.floor(Math.random() * 50) + 150;
-        const nearbyCount = Math.floor(Math.random() * 15) + 5;
+      async showPlayersOnlineModal() {
+        if (!database) {
+          console.error('Firebase not initialized');
+          return;
+        }
         
         // Create modal
         const modal = document.createElement('div');
@@ -10215,57 +10892,15 @@
         modal.innerHTML = `
           <div class="event-modal-content">
             <div class="event-modal-icon">👥</div>
-            <div class="event-modal-title">Players Online</div>
+            <div class="event-modal-title">All Players</div>
             <div class="event-modal-description">
-              ${onlineCount} criminals are active in the city right now.
+              Loading player activity...
             </div>
             
-            <div style="margin: 20px 0; padding: 16px; background: #0a0a0a; border: 1px solid #2a2a2a; border-radius: 4px;">
-              <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 1px; opacity: 0.6; margin-bottom: 12px;">Nearby Players</div>
-              
-              <div style="display: flex; flex-direction: column; gap: 8px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px; background: rgba(129, 201, 149, 0.1); border-left: 3px solid #81c995; border-radius: 4px;">
-                  <div style="display: flex; align-items: center; gap: 12px;">
-                    <span style="font-size: 24px;">🟢</span>
-                    <div>
-                      <div style="font-size: 14px; font-weight: 600;">Street Runner</div>
-                      <div style="font-size: 11px; opacity: 0.7;">Level 6 • Nearby</div>
-                    </div>
-                  </div>
-                  <div style="font-size: 11px; opacity: 0.7;">Active</div>
-                </div>
-                
-                <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px; background: rgba(129, 201, 149, 0.1); border-left: 3px solid #81c995; border-radius: 4px;">
-                  <div style="display: flex; align-items: center; gap: 12px;">
-                    <span style="font-size: 24px;">🟢</span>
-                    <div>
-                      <div style="font-size: 14px; font-weight: 600;">Night Hawk</div>
-                      <div style="font-size: 11px; opacity: 0.7;">Level 8 • Downtown</div>
-                    </div>
-                  </div>
-                  <div style="font-size: 11px; opacity: 0.7;">Active</div>
-                </div>
-                
-                <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px; background: rgba(253, 214, 99, 0.1); border-left: 3px solid #fdd663; border-radius: 4px;">
-                  <div style="display: flex; align-items: center; gap: 12px;">
-                    <span style="font-size: 24px;">🟡</span>
-                    <div>
-                      <div style="font-size: 14px; font-weight: 600;">Silent Blade</div>
-                      <div style="font-size: 11px; opacity: 0.7;">Level 5 • Laying Low</div>
-                    </div>
-                  </div>
-                  <div style="font-size: 11px; opacity: 0.7;">Idle</div>
-                </div>
-                
-                <div style="text-align: center; padding: 12px; opacity: 0.5; font-size: 12px;">
-                  +${nearbyCount} more nearby
-                </div>
-              </div>
-              
-              <div style="margin-top: 12px; padding: 12px; background: rgba(138, 180, 248, 0.1); border-left: 3px solid #8ab4f8; border-radius: 4px;">
-                <div style="font-size: 12px; opacity: 0.9; line-height: 1.5;">
-                  💡 <strong>Coming Soon:</strong> Player interactions, alliances, PvP challenges, and real-time territory control.
-                </div>
+            <div id="players-list-container" style="margin: 20px 0; padding: 16px; background: #0a0a0a; border: 1px solid #2a2a2a; border-radius: 4px; max-height: 400px; overflow-y: auto;">
+              <div style="text-align: center; padding: 20px;">
+                <div style="font-size: 32px; margin-bottom: 8px;">⏳</div>
+                <div style="opacity: 0.7;">Loading players...</div>
               </div>
             </div>
             
@@ -10279,6 +10914,308 @@
         document.getElementById('close-players-modal')?.addEventListener('click', () => {
           modal.remove();
         });
+        
+        // Fetch real player data from Firebase
+        try {
+          const leaderboardRef = database.ref('leaderboard');
+          const snapshot = await leaderboardRef.once('value');
+          const players = snapshot.val();
+          
+          if (!players) {
+            this.showNoPlayersMessage();
+            return;
+          }
+          
+          // Convert to array and add online status
+          const now = Date.now();
+          const ONLINE_THRESHOLD = 5 * 60 * 1000; // 5 minutes
+          
+          const playerArray = Object.values(players).map(player => {
+            const lastActive = player.lastUpdated || 0;
+            const timeSinceActive = now - lastActive;
+            const isOnline = timeSinceActive < ONLINE_THRESHOLD;
+            
+            return {
+              ...player,
+              isOnline,
+              timeSinceActive,
+              lastActiveText: this.getLastActiveText(timeSinceActive)
+            };
+          });
+          
+          // Sort: Online first, then by reputation
+          playerArray.sort((a, b) => {
+            if (a.isOnline !== b.isOnline) return b.isOnline - a.isOnline;
+            return b.reputation - a.reputation;
+          });
+          
+          this.renderPlayersList(playerArray);
+          
+        } catch (error) {
+          console.error('Failed to load players:', error);
+          this.showErrorMessage();
+        }
+      },
+      
+      getLastActiveText(ms) {
+        const seconds = Math.floor(ms / 1000);
+        const minutes = Math.floor(seconds / 60);
+        const hours = Math.floor(minutes / 60);
+        const days = Math.floor(hours / 24);
+        
+        if (seconds < 60) return 'Just now';
+        if (minutes < 60) return `${minutes}m ago`;
+        if (hours < 24) return `${hours}h ago`;
+        return `${days}d ago`;
+      },
+      
+      renderPlayersList(players) {
+        const container = document.getElementById('players-list-container');
+        if (!container) return;
+        
+        const currentAccountId = GameState.accountId;
+        const onlineCount = players.filter(p => p.isOnline).length;
+        const offlineCount = players.length - onlineCount;
+        
+        // Update description
+        const description = document.querySelector('#players-online-modal .event-modal-description');
+        if (description) {
+          description.innerHTML = `
+            <span style="color: #81c995;">🟢 ${onlineCount} online</span> • 
+            <span style="opacity: 0.6;">⚫ ${offlineCount} offline</span>
+          `;
+        }
+        
+        let html = '<div style="display: flex; flex-direction: column; gap: 8px;">';
+        
+        players.forEach(player => {
+          const isCurrentPlayer = player.accountId === currentAccountId;
+          const statusColor = player.isOnline ? '#81c995' : '#4a4a4a';
+          const statusIcon = player.isOnline ? '🟢' : '⚫';
+          const statusText = player.isOnline ? 'Online' : player.lastActiveText;
+          const opacity = player.isOnline ? '1' : '0.5';
+          
+          // Heat level color (gradient from green to red)
+          const heatLevel = player.heat || 0;
+          let heatColor = '#81c995'; // Low heat (green)
+          if (heatLevel > 60) heatColor = '#f28b82'; // High heat (red)
+          else if (heatLevel > 30) heatColor = '#fdd663'; // Medium heat (yellow)
+          
+          // Player status emoji
+          const playerStatusEmoji = player.status === 'active' ? '👁️' : '💤';
+          
+          html += `
+            <div class="player-card-item" data-player-id="${player.accountId}" style="
+              display: flex; 
+              justify-content: space-between; 
+              align-items: center; 
+              padding: 10px; 
+              background: ${player.isOnline ? 'rgba(129, 201, 149, 0.1)' : 'rgba(74, 74, 74, 0.1)'}; 
+              border-left: 3px solid ${statusColor}; 
+              border-radius: 4px;
+              opacity: ${opacity};
+              cursor: pointer;
+              transition: all 0.2s;
+              ${isCurrentPlayer ? 'box-shadow: 0 0 12px rgba(138, 180, 248, 0.3); border: 2px solid #8ab4f8;' : ''}
+            ">
+              <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
+                <span style="font-size: 20px;">${statusIcon}</span>
+                <div style="flex: 1;">
+                  <div style="font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px;">
+                    ${player.username}
+                    ${isCurrentPlayer ? '<span style="font-size: 9px; padding: 2px 6px; background: #8ab4f8; color: #0a0a0a; border-radius: 3px; font-weight: 700;">YOU</span>' : ''}
+                    <span style="font-size: 12px; opacity: 0.8;" title="${player.status === 'active' ? 'Active' : 'Laying Low'}">${playerStatusEmoji}</span>
+                  </div>
+                  <div style="font-size: 11px; opacity: 0.7; display: flex; gap: 12px; margin-top: 4px;">
+                    <span>⭐ Lvl ${player.level}</span>
+                    <span>💵 ${player.cash.toLocaleString()}</span>
+                    <span>👑 ${player.reputation}</span>
+                  </div>
+                  <div style="font-size: 11px; opacity: 0.8; display: flex; gap: 12px; margin-top: 4px;">
+                    <span style="color: ${heatColor};" title="Heat Level">🔥 ${heatLevel}%</span>
+                    <span title="Last Known Location">📍 ${player.lastKnownZone || 'Unknown'}</span>
+                  </div>
+                </div>
+              </div>
+              <div style="text-align: right;">
+                <div style="font-size: 11px; opacity: 0.7;">${statusText}</div>
+              </div>
+            </div>
+          `;
+        });
+        
+        html += '</div>';
+        
+        container.innerHTML = html;
+        
+        // Add click listeners to player cards
+        container.querySelectorAll('.player-card-item').forEach(card => {
+          card.addEventListener('click', () => {
+            const playerId = card.dataset.playerId;
+            this.showPlayerProfile(playerId);
+          });
+          
+          card.addEventListener('mouseenter', () => {
+            card.style.background = 'rgba(138, 180, 248, 0.2)';
+          });
+          
+          card.addEventListener('mouseleave', () => {
+            const player = players.find(p => p.accountId === card.dataset.playerId);
+            if (player) {
+              card.style.background = player.isOnline ? 'rgba(129, 201, 149, 0.1)' : 'rgba(74, 74, 74, 0.1)';
+            }
+          });
+        });
+      },
+      
+      // Show player profile modal
+      showPlayerProfile(playerId) {
+        const player = this.cachedLeaderboard.find(p => p.accountId === playerId);
+        if (!player) return;
+        
+        const isCurrentPlayer = playerId === GameState.accountId;
+        const now = Date.now();
+        const ONLINE_THRESHOLD = 5 * 60 * 1000;
+        const isOnline = (now - player.lastUpdated) < ONLINE_THRESHOLD;
+        
+        const modal = document.createElement('div');
+        modal.className = 'player-profile-modal';
+        modal.id = 'player-profile-modal';
+        
+        // Heat color
+        const heatLevel = player.heat || 0;
+        let heatColor = '#81c995';
+        if (heatLevel > 60) heatColor = '#f28b82';
+        else if (heatLevel > 30) heatColor = '#fdd663';
+        
+        modal.innerHTML = `
+          <div class="player-profile-content">
+            <div class="player-profile-header">
+              <div class="player-profile-avatar">${player.username.charAt(0).toUpperCase()}</div>
+              <div class="player-profile-username">
+                ${player.username}
+                ${isCurrentPlayer ? '<span style="font-size: 10px; padding: 2px 6px; background: #8ab4f8; color: #0a0a0a; border-radius: 3px; margin-left: 8px;">YOU</span>' : ''}
+              </div>
+              <div class="player-profile-status">
+                <span>${isOnline ? '🟢' : '⚫'}</span>
+                <span>${isOnline ? 'Online' : 'Offline'}</span>
+                <span>•</span>
+                <span>${player.status === 'active' ? '👁️ Active' : '💤 Laying Low'}</span>
+              </div>
+            </div>
+            
+            <div class="player-profile-stats">
+              <div class="player-profile-stat">
+                <div class="player-profile-stat-label">Level</div>
+                <div class="player-profile-stat-value">⭐ ${player.level}</div>
+              </div>
+              <div class="player-profile-stat">
+                <div class="player-profile-stat-label">Cash</div>
+                <div class="player-profile-stat-value">💵 ${player.cash.toLocaleString()}</div>
+              </div>
+              <div class="player-profile-stat">
+                <div class="player-profile-stat-label">Reputation</div>
+                <div class="player-profile-stat-value">👑 ${player.reputation}</div>
+              </div>
+              <div class="player-profile-stat">
+                <div class="player-profile-stat-label">Heat</div>
+                <div class="player-profile-stat-value" style="color: ${heatColor};">🔥 ${heatLevel}%</div>
+              </div>
+              <div class="player-profile-stat" style="grid-column: span 2;">
+                <div class="player-profile-stat-label">Last Known Location</div>
+                <div class="player-profile-stat-value">📍 ${player.lastKnownZone || 'Unknown'}</div>
+              </div>
+            </div>
+            
+            ${!isCurrentPlayer ? `
+              <div class="player-profile-actions">
+                <button class="player-action-btn primary" id="message-player-btn">
+                  <span>💬</span>
+                  <span>Send Message</span>
+                </button>
+                <button class="player-action-btn" id="challenge-player-btn">
+                  <span>⚔️</span>
+                  <span>Send Challenge</span>
+                </button>
+                <button class="player-action-btn" id="close-profile-btn">
+                  <span>✕</span>
+                  <span>Close</span>
+                </button>
+              </div>
+            ` : `
+              <div class="player-profile-actions">
+                <button class="player-action-btn" id="close-profile-btn">
+                  <span>✕</span>
+                  <span>Close</span>
+                </button>
+              </div>
+            `}
+          </div>
+        `;
+        
+        document.getElementById('app').appendChild(modal);
+        
+        // Event listeners
+        document.getElementById('close-profile-btn')?.addEventListener('click', () => {
+          modal.remove();
+        });
+        
+        if (!isCurrentPlayer) {
+          document.getElementById('message-player-btn')?.addEventListener('click', () => {
+            modal.remove();
+            ChatSystem.openChat(playerId);
+          });
+          
+          document.getElementById('challenge-player-btn')?.addEventListener('click', () => {
+            modal.remove();
+            this.sendChallenge(player);
+          });
+        }
+        
+        // Close on background click
+        modal.addEventListener('click', (e) => {
+          if (e.target === modal) {
+            modal.remove();
+          }
+        });
+      },
+      
+      // Send challenge (placeholder)
+      sendChallenge(player) {
+        const notification = document.createElement('div');
+        notification.className = 'xp-notification';
+        notification.innerHTML = `<span class="xp-positive">⚔️ Challenge sent to ${player.username}!</span>`;
+        document.getElementById('app').appendChild(notification);
+        setTimeout(() => notification.remove(), 3000);
+        
+        console.log('Challenge sent to:', player.username);
+        // TODO: Implement challenge system
+      },
+      
+      showNoPlayersMessage() {
+        const container = document.getElementById('players-list-container');
+        if (!container) return;
+        
+        container.innerHTML = `
+          <div style="text-align: center; padding: 40px 20px;">
+            <div style="font-size: 48px; margin-bottom: 16px; opacity: 0.5;">👥</div>
+            <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">No Players Yet</div>
+            <div style="font-size: 13px; opacity: 0.7;">Be the first to build your criminal empire!</div>
+          </div>
+        `;
+      },
+      
+      showErrorMessage() {
+        const container = document.getElementById('players-list-container');
+        if (!container) return;
+        
+        container.innerHTML = `
+          <div style="text-align: center; padding: 40px 20px;">
+            <div style="font-size: 48px; margin-bottom: 16px;">⚠️</div>
+            <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">Failed to Load</div>
+            <div style="font-size: 13px; opacity: 0.7;">Could not connect to player database</div>
+          </div>
+        `;
       },
       
       showLeaderboardModal() {
@@ -10303,14 +11240,47 @@
         const profileHeader = document.querySelector('#profile-tab .page-header');
         if (!profileHeader) return;
         
+        // Create button container
+        const buttonContainer = document.createElement('div');
+        buttonContainer.style.cssText = `
+          position: absolute;
+          top: 12px;
+          right: 12px;
+          display: flex;
+          gap: 8px;
+        `;
+        
+        // Chat button
+        const chatBtn = document.createElement('button');
+        chatBtn.id = 'chat-tab-btn';
+        chatBtn.innerHTML = '💬';
+        chatBtn.title = 'Chat';
+        chatBtn.style.cssText = `
+          background: transparent;
+          border: 1px solid #2a2a2a;
+          color: #e0e0e0;
+          font-size: 18px;
+          padding: 8px 12px;
+          border-radius: 4px;
+          cursor: pointer;
+          transition: all 0.2s;
+          min-width: 44px;
+          min-height: 44px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        `;
+        
+        chatBtn.addEventListener('click', () => {
+          ChatSystem.openChat(); // Open global chat
+        });
+        
+        // Logout button
         const logoutBtn = document.createElement('button');
         logoutBtn.id = 'logout-btn';
         logoutBtn.innerHTML = '🚪';
         logoutBtn.title = 'Logout';
         logoutBtn.style.cssText = `
-          position: absolute;
-          top: 12px;
-          right: 12px;
           background: transparent;
           border: 1px solid #2a2a2a;
           color: #e0e0e0;
@@ -10330,8 +11300,14 @@
           AuthManager.logout();
         });
         
+        buttonContainer.appendChild(chatBtn);
+        buttonContainer.appendChild(logoutBtn);
+        
         profileHeader.style.position = 'relative';
-        profileHeader.appendChild(logoutBtn);
+        profileHeader.appendChild(buttonContainer);
+        
+        // Start listening for messages
+        ChatSystem.startListeningForMessages();
       },
       
       renderHeatLog() {
