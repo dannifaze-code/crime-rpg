@@ -1,4 +1,4 @@
-   <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -14,7 +14,9 @@
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: #0a0a0a;
+      background: #0a0a0a !important;
+      background-image: none !important;
+      background-size: auto !important;
       color: #e0e0e0;
       overflow: hidden;
       height: 100vh;
@@ -330,7 +332,7 @@
       display: block;
     }
 
-    /* Profile Tab Map Background */
+    /* Profile Tab - Clean Background (No Grid) */
     #profile-tab {
       position: relative;
       background: #0a0a0a;
@@ -346,73 +348,8 @@
       opacity: 0.15;
       pointer-events: none;
       z-index: 0;
-      background-image: 
-        /* Vertical roads */
-        repeating-linear-gradient(
-          90deg,
-          transparent,
-          transparent 18%,
-          #2a2a2a 18%,
-          #2a2a2a 20%,
-          transparent 20%,
-          transparent 48%,
-          #2a2a2a 48%,
-          #2a2a2a 50%,
-          transparent 50%,
-          transparent 78%,
-          #2a2a2a 78%,
-          #2a2a2a 80%,
-          transparent 80%
-        ),
-        /* Horizontal roads */
-        repeating-linear-gradient(
-          0deg,
-          transparent,
-          transparent 18%,
-          #2a2a2a 18%,
-          #2a2a2a 20%,
-          transparent 20%,
-          transparent 48%,
-          #2a2a2a 48%,
-          #2a2a2a 50%,
-          transparent 50%,
-          transparent 78%,
-          #2a2a2a 78%,
-          #2a2a2a 80%,
-          transparent 80%
-        ),
-        /* City blocks - dark */
-        repeating-linear-gradient(
-          45deg,
-          #1a1a1a 0px,
-          #1a1a1a 60px,
-          #151515 60px,
-          #151515 120px
-        ),
-        /* Green zones (parks) */
-        radial-gradient(
-          circle at 25% 30%,
-          rgba(129, 201, 149, 0.08) 0%,
-          transparent 15%
-        ),
-        radial-gradient(
-          circle at 75% 70%,
-          rgba(129, 201, 149, 0.08) 0%,
-          transparent 15%
-        ),
-        /* Industrial zones */
-        radial-gradient(
-          circle at 50% 50%,
-          rgba(138, 138, 138, 0.05) 0%,
-          transparent 20%
-        );
-      background-size: 
-        200px 200px,
-        200px 200px,
-        120px 120px,
-        100% 100%,
-        100% 100%,
-        100% 100%;
+      /* Grid pattern completely removed for clean look */
+      background: transparent;
     }
 
     /* Ensure all Profile content appears above the map */
@@ -1370,7 +1307,7 @@
       border-bottom: 1px solid #2a2a2a;
     }
 
-    /* City Map */
+    /* City Map - Clean Background (No Grid) */
     #city-map {
       position: relative;
       width: 100%;
@@ -1381,6 +1318,48 @@
       border-radius: 4px;
       overflow: hidden;
       margin: 0 auto;
+    }
+    
+    /* Remove any grid patterns from Turf tab */
+    #turf-tab {
+      background: transparent;
+    }
+    
+    #turf-tab::before,
+    #turf-tab::after {
+      display: none;
+    }
+    
+    /* CRITICAL: Keep icons within map bounds */
+    #map-icons {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      pointer-events: none;
+    }
+    
+    #map-icons > * {
+      pointer-events: auto;
+    }
+    
+    /* DIAGNOSTIC: Remove any potential grid-creating styles */
+    #tile-layer,
+    #tile-layer *,
+    #city-map,
+    #city-map * {
+      border: none !important;
+      outline: none !important;
+      box-shadow: none !important;
+    }
+    
+    /* Force SVG paths to have no stroke */
+    svg path,
+    svg rect {
+      stroke: none !important;
+      stroke-width: 0 !important;
     }
 
     #map-canvas {
@@ -1402,22 +1381,23 @@
 
     .map-icon {
       position: absolute;
-      font-size: 32px;
+      font-size: 40px;
       transform: translate(-50%, -50%);
       transition: all 0.3s ease;
       pointer-events: auto;
       cursor: pointer;
       user-select: none;
+      filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.8));
     }
 
     .map-icon.dormant {
-      opacity: 0.4;
-      filter: grayscale(70%);
+      opacity: 1;
+      filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.8)) brightness(0.9);
     }
 
     .map-icon.active {
       opacity: 1;
-      filter: none;
+      filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.8)) brightness(1.1);
       animation: icon-pulse 3s ease-in-out infinite;
     }
 
@@ -1458,6 +1438,63 @@
       opacity: 1;
       filter: none;
       animation: none;
+    }
+
+    /* Interactive Building Icons - Mobile Optimized */
+    .building-icon {
+      cursor: pointer;
+      z-index: 5;
+      transition: transform 0.12s ease, filter 0.12s ease;
+      /* Touch-friendly tap area */
+      min-width: 44px;
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .building-icon:hover {
+      z-index: 100;
+    }
+
+    .building-icon:active {
+      transform: translate(-50%, -70%) scale(1.05) !important;
+    }
+
+    /* 2.5D Building Styles */
+    .building-3d {
+      pointer-events: auto;
+    }
+    
+    .building-3d svg {
+      display: block;
+      overflow: visible;
+    }
+    
+    /* Building type specific glow on hover/touch */
+    .building-3d[data-type="gun_shop"]:hover,
+    .building-3d[data-type="gun_shop"]:active {
+      filter: brightness(1.2) drop-shadow(0 0 6px rgba(242, 139, 130, 0.6));
+    }
+
+    .building-3d[data-type="chop_shop"]:hover,
+    .building-3d[data-type="chop_shop"]:active {
+      filter: brightness(1.2) drop-shadow(0 0 6px rgba(138, 180, 248, 0.6));
+    }
+
+    .building-3d[data-type="casino"]:hover,
+    .building-3d[data-type="casino"]:active {
+      filter: brightness(1.2) drop-shadow(0 0 8px rgba(253, 214, 99, 0.7));
+    }
+
+    .building-3d[data-type="nightclub"]:hover,
+    .building-3d[data-type="nightclub"]:active {
+      filter: brightness(1.2) drop-shadow(0 0 6px rgba(186, 130, 245, 0.6));
+    }
+
+    .building-3d[data-type="safehouse"]:hover,
+    .building-3d[data-type="safehouse"]:active {
+      filter: brightness(1.2) drop-shadow(0 0 6px rgba(129, 201, 149, 0.6));
     }
 
     /* Character Sprite */
@@ -1568,6 +1605,7 @@
       background: #1a1a1a;
       border: 1px solid #2a2a2a;
       border-radius: 4px;
+      position: relative;
     }
 
     .roam-btn {
@@ -1596,6 +1634,44 @@
       border-color: #4a4a4a;
       color: #8ab4f8;
       box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+    }
+    
+    .map-refresh-btn {
+      position: absolute;
+      top: 50%;
+      right: 8px;
+      transform: translateY(-50%);
+      width: 36px;
+      height: 36px;
+      padding: 0;
+      background: #0a0a0a;
+      border: 1px solid #2a2a2a;
+      border-radius: 4px;
+      color: #8ab4f8;
+      font-size: 16px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .map-refresh-btn:hover {
+      background: #1a1a1a;
+      border-color: #4a4a4a;
+    }
+    
+    .map-refresh-btn:active {
+      transform: translateY(-50%) scale(0.95);
+    }
+    
+    .map-refresh-btn.spinning {
+      animation: spin 0.5s ease-in-out;
+    }
+    
+    @keyframes spin {
+      from { transform: translateY(-50%) rotate(0deg); }
+      to { transform: translateY(-50%) rotate(360deg); }
     }
 
     /* Event Notification */
@@ -3122,6 +3198,7 @@
             <span id="roam-icon">🚶</span>
             <span id="roam-label">Start Free Roam</span>
           </button>
+          <button class="map-refresh-btn" id="map-refresh-btn" title="Regenerate Map">🔄</button>
         </div>
         
         <div id="city-map">
@@ -4353,6 +4430,7 @@
                   <span id="roam-icon">🚶</span>
                   <span id="roam-label">Start Free Roam</span>
                 </button>
+                <button class="map-refresh-btn" id="map-refresh-btn" title="Regenerate Map">🔄</button>
               </div>
               
               <div id="city-map">
@@ -4830,6 +4908,7 @@
                     <span id="roam-icon">🚶</span>
                     <span id="roam-label">Start Free Roam</span>
                   </button>
+                  <button class="map-refresh-btn" id="map-refresh-btn" title="Regenerate Map">🔄</button>
                 </div>
                 
                 <div id="city-map">
@@ -5208,6 +5287,7 @@
         width: 50,
         height: 50,
         grid: null,
+        buildings: [], // Interactive buildings placed on map
         viewport: {
           x: 25,
           y: 25
@@ -5688,6 +5768,218 @@
       TILE_SIZE: 100       // Each tile = 100x100 units
     };
 
+    // ========================================
+    // TILE OCCUPANCY SYSTEM
+    // Tracks what occupies each tile for placement validation
+    // ========================================
+    const TileOccupancy = {
+      grid: null,
+      
+      // Tile types
+      TYPES: {
+        WATER: 'water',
+        ROAD: 'road', 
+        GRASS: 'grass',
+        BUILDING: 'building',
+        LANDMARK: 'landmark'
+      },
+      
+      // Initialize occupancy grid from biome data
+      initFromBiomeGrid(biomeGrid) {
+        const height = biomeGrid.length;
+        const width = biomeGrid[0].length;
+        
+        // Valid land biomes that can have buildings/landmarks
+        const LAND_BIOMES = ['suburban', 'rural', 'urban', 'industrial'];
+        
+        this.grid = [];
+        
+        for (let y = 0; y < height; y++) {
+          const row = [];
+          for (let x = 0; x < width; x++) {
+            const tile = biomeGrid[y][x];
+            let type;
+            
+            // Classify tile based on biome - STRICT per-tile validation
+            if (tile.biome === 'coastal') {
+              // Water - never buildable
+              type = this.TYPES.WATER;
+            } else if (tile.metadata && tile.metadata.isRoad) {
+              // Road - never buildable
+              type = this.TYPES.ROAD;
+            } else if (LAND_BIOMES.includes(tile.biome)) {
+              // Valid land biome - can be built on
+              type = this.TYPES.GRASS;
+            } else {
+              // Unknown biome - treat as water (forbidden)
+              type = this.TYPES.WATER;
+            }
+            
+            row.push({
+              type: type,
+              biome: tile.biome, // Store original biome for reference
+              occupiedBy: null
+            });
+          }
+          this.grid.push(row);
+        }
+        
+        console.log(`TileOccupancy: Initialized ${width}x${height} grid`);
+        this.debugStats();
+      },
+      
+      // Update road tiles after road generation
+      markRoads(biomeGrid) {
+        if (!this.grid) return;
+        
+        const height = biomeGrid.length;
+        const width = biomeGrid[0].length;
+        
+        for (let y = 0; y < height; y++) {
+          for (let x = 0; x < width; x++) {
+            const tile = biomeGrid[y][x];
+            if (tile.metadata && tile.metadata.isRoad) {
+              this.grid[y][x].type = this.TYPES.ROAD;
+            }
+          }
+        }
+        
+        console.log('TileOccupancy: Roads marked');
+      },
+      
+      // Check if a tile is available for placement
+      isAvailable(x, y) {
+        if (!this.grid) return false;
+        if (y < 0 || y >= this.grid.length) return false;
+        if (x < 0 || x >= this.grid[0].length) return false;
+        
+        const cell = this.grid[y][x];
+        return cell.type === this.TYPES.GRASS && cell.occupiedBy === null;
+      },
+      
+      // Check if entire footprint is available
+      isFootprintAvailable(x, y, width, height) {
+        for (let dy = 0; dy < height; dy++) {
+          for (let dx = 0; dx < width; dx++) {
+            if (!this.isAvailable(x + dx, y + dy)) {
+              return false;
+            }
+          }
+        }
+        return true;
+      },
+      
+      // Check if a tile is a road
+      isRoad(x, y) {
+        if (!this.grid) return false;
+        if (y < 0 || y >= this.grid.length) return false;
+        if (x < 0 || x >= this.grid[0].length) return false;
+        return this.grid[y][x].type === this.TYPES.ROAD;
+      },
+      
+      // Check if a tile is adjacent (N/E/S/W) to a road
+      isAdjacentToRoad(x, y) {
+        // Check North
+        if (this.isRoad(x, y - 1)) return true;
+        // Check South
+        if (this.isRoad(x, y + 1)) return true;
+        // Check West
+        if (this.isRoad(x - 1, y)) return true;
+        // Check East
+        if (this.isRoad(x + 1, y)) return true;
+        return false;
+      },
+      
+      // Check if any tile in footprint is adjacent to a road
+      isFootprintAdjacentToRoad(x, y, width, height) {
+        for (let dy = 0; dy < height; dy++) {
+          for (let dx = 0; dx < width; dx++) {
+            if (this.isAdjacentToRoad(x + dx, y + dy)) {
+              return true;
+            }
+          }
+        }
+        return false;
+      },
+      
+      // Reserve tiles for a building/landmark
+      reserve(x, y, width, height, id) {
+        if (!this.grid) return false;
+        
+        // First verify all tiles are available
+        if (!this.isFootprintAvailable(x, y, width, height)) {
+          console.warn(`TileOccupancy: Cannot reserve (${x},${y}) ${width}x${height} for ${id} - tiles not available`);
+          return false;
+        }
+        
+        // Reserve all tiles
+        for (let dy = 0; dy < height; dy++) {
+          for (let dx = 0; dx < width; dx++) {
+            const cell = this.grid[y + dy][x + dx];
+            cell.type = this.TYPES.BUILDING;
+            cell.occupiedBy = id;
+          }
+        }
+        
+        console.log(`TileOccupancy: Reserved (${x},${y}) ${width}x${height} for ${id}`);
+        return true;
+      },
+      
+      // Reserve a single tile for a landmark
+      reserveLandmark(x, y, id) {
+        if (!this.grid) return false;
+        if (!this.isAvailable(x, y)) {
+          console.warn(`TileOccupancy: Cannot reserve (${x},${y}) for landmark ${id} - tile not available`);
+          return false;
+        }
+        
+        const cell = this.grid[y][x];
+        cell.type = this.TYPES.LANDMARK;
+        cell.occupiedBy = id;
+        
+        console.log(`TileOccupancy: Reserved (${x},${y}) for landmark ${id}`);
+        return true;
+      },
+      
+      // Get tile info (for debugging)
+      getTile(x, y) {
+        if (!this.grid) return null;
+        if (y < 0 || y >= this.grid.length) return null;
+        if (x < 0 || x >= this.grid[0].length) return null;
+        return this.grid[y][x];
+      },
+      
+      // Clear all occupancy (for map regeneration)
+      clear() {
+        this.grid = null;
+        console.log('TileOccupancy: Cleared');
+      },
+      
+      // Debug: show occupancy stats
+      debugStats() {
+        if (!this.grid) {
+          console.log('TileOccupancy: No grid');
+          return;
+        }
+        
+        const counts = { water: 0, road: 0, grass: 0, building: 0, landmark: 0 };
+        
+        for (let y = 0; y < this.grid.length; y++) {
+          for (let x = 0; x < this.grid[0].length; x++) {
+            counts[this.grid[y][x].type]++;
+          }
+        }
+        
+        console.log('=== TileOccupancy Stats ===');
+        console.log(`Water: ${counts.water}`);
+        console.log(`Road: ${counts.road}`);
+        console.log(`Grass: ${counts.grass}`);
+        console.log(`Building: ${counts.building}`);
+        console.log(`Landmark: ${counts.landmark}`);
+        console.log('===========================');
+      }
+    };
+
     // Tile Grid Generator
     const TileGridGenerator = {
       // Create empty grid
@@ -5977,6 +6269,9 @@
       // Generate or load map
       const mapData = ProceduralMapGenerator.getOrGenerateMap();
       
+      // Initialize tile occupancy grid from biome data
+      TileOccupancy.initFromBiomeGrid(mapData.grid);
+      
       console.log('Procedural map ready');
       console.log(`Grid size: ${mapData.width}x${mapData.height}`);
       console.log('================================================');
@@ -5999,6 +6294,10 @@
         console.log(`${biomeData.icon} ${biomeData.name}: ${count} tiles (${percentage}%)`);
       }
       console.log('=========================');
+    };
+    
+    window.showTileOccupancy = function() {
+      TileOccupancy.debugStats();
     };
 
     window.regenerateProceduralMap = function() {
@@ -6150,8 +6449,14 @@
         return !placedLandmarks.some(placed => placed.x === x && placed.y === y);
       },
       
-      // Validate placement position
+      // Validate placement position using TileOccupancy
       isValidPlacement(landmark, x, y, tile, placedLandmarks, width, height) {
+        // PRIMARY CHECK: Use TileOccupancy - tile must be grass and unoccupied
+        if (!TileOccupancy.isAvailable(x, y)) {
+          return false;
+        }
+        
+        // Check biome rules for this landmark type
         if (!this.isBiomeAllowed(landmark, tile)) return false;
         if (!this.isNotOnEdge(x, y, width, height)) return false;
         if (!this.isNotOccupied(x, y, placedLandmarks)) return false;
@@ -6168,13 +6473,20 @@
         const height = grid.length;
         
         // Generate many candidates (adaptive based on biome rarity)
-        const maxAttempts = count * 50;
+        const maxAttempts = count * 100;
         
         for (let i = 0; i < maxAttempts; i++) {
           const x = Math.floor(random() * width);
           const y = Math.floor(random() * height);
+          
+          // PRIMARY CHECK: TileOccupancy must show tile as grass and unoccupied
+          if (!TileOccupancy.isAvailable(x, y)) {
+            continue;
+          }
+          
           const tile = TileGridGenerator.getTile(grid, x, y);
           
+          // SECONDARY CHECK: Biome rules for this landmark type
           if (this.isBiomeAllowed(landmark, tile)) {
             candidates.push({ x, y, tile });
           }
@@ -6255,6 +6567,14 @@
             // Sort by score and pick best
             validCandidates.sort((a, b) => b.score - a.score);
             const best = validCandidates[0];
+            
+            // Reserve tile in occupancy grid BEFORE creating landmark
+            const reserved = TileOccupancy.reserveLandmark(best.x, best.y, landmarkId);
+            
+            if (!reserved) {
+              console.warn(`Failed to reserve tile for landmark ${landmarkId}`);
+              continue;
+            }
             
             // Create landmark
             const landmark = {
@@ -6447,15 +6767,27 @@
       
       // Main render function
       renderMap() {
+        console.log('🗺️ ProceduralMapRenderer.renderMap() called');
+        console.log('🗺️ RENDER_CONFIG.ENABLE_TILE_RENDERING:', RENDER_CONFIG.ENABLE_TILE_RENDERING);
+        console.log('🗺️ this.rendered:', this.rendered);
+        console.log('🗺️ GameState.map.grid exists:', GameState.map.grid !== null);
+        
         if (!RENDER_CONFIG.ENABLE_TILE_RENDERING) {
           console.log('Tile rendering disabled');
           return;
         }
         
-        // Check if already rendered
+        // Check if already rendered - BUT allow re-render if grid exists and not rendered
         if (this.rendered && RENDER_CONFIG.CACHE_RENDERED_MAP) {
-          console.log('Map already rendered (using cache)');
-          return;
+          // Double-check that the SVG actually exists
+          const mapContainer = document.getElementById('city-map');
+          if (mapContainer && mapContainer.querySelector('#unified-biome-layer')) {
+            console.log('Map already rendered (using cache)');
+            return;
+          } else {
+            console.log('🗺️ Cache says rendered but SVG missing - re-rendering');
+            this.rendered = false;
+          }
         }
         
         console.log('=== Rendering Procedural Map ===');
@@ -6463,18 +6795,22 @@
         
         // Check if map exists
         if (!GameState.map.grid) {
-          console.error('No map grid to render');
+          console.error('❌ No map grid to render - GameState.map.grid is null');
           return;
         }
+        
+        console.log('🗺️ Grid dimensions:', GameState.map.width, 'x', GameState.map.height);
         
         // Get map container
         const mapContainer = document.getElementById('city-map');
         if (!mapContainer) {
-          console.error('Map container not found');
+          console.error('❌ Map container #city-map not found');
           return;
         }
         
-        // Clear any existing tile layer
+        console.log('🗺️ Map container found:', mapContainer);
+        
+        // CRITICAL: Clear container completely to prevent stacking
         this.clearTileLayer(mapContainer);
         
         // Create tile layer
@@ -6490,7 +6826,7 @@
         this.rendered = true;
         
         const duration = performance.now() - startTime;
-        console.log(`Map rendered in ${duration.toFixed(1)}ms`);
+        console.log(`✅ Map rendered in ${duration.toFixed(1)}ms`);
         console.log('===============================');
       },
       
@@ -6517,12 +6853,16 @@
         return layer;
       },
       
-      // Render all tiles
+      // Render all tiles using unified SVG biome rendering
       renderTiles(container) {
+        console.log('🚀 renderTiles() called');
+        
         const grid = GameState.map.grid;
         const width = GameState.map.width;
         const height = GameState.map.height;
         const tileSize = RENDER_CONFIG.TILE_SIZE_PX;
+        
+        console.log('📐 Map dimensions:', width, 'x', height, '- Tile size:', tileSize);
         
         // Calculate container size
         const containerWidth = width * tileSize;
@@ -6532,66 +6872,167 @@
         container.style.width = containerWidth + 'px';
         container.style.height = containerHeight + 'px';
         
-        // Create document fragment for batch rendering (performance)
-        const fragment = document.createDocumentFragment();
+        console.log('📦 Container size set to:', containerWidth, 'x', containerHeight);
         
-        // Render each tile
+        // CRITICAL: Remove ANY old rendering layers
+        const oldUnified = container.querySelector('#unified-biome-layer');
+        if (oldUnified) {
+          console.log('🗑️ Removing old unified layer');
+          oldUnified.remove();
+        }
+        
+        // OPTION A: Unified SVG Biome Rendering with seamless water
+        console.log('🎨 Calling renderUnifiedBiomes...');
+        this.renderUnifiedBiomes(container, grid, width, height, tileSize);
+        
+        // PHASE 7.5: Render roads and buildings on top
+        console.log('🛣️ Rendering roads...');
+        RoadBuildingRenderer.renderRoads(container);
+        
+        console.log('🏢 Rendering buildings...');
+        RoadBuildingRenderer.renderBuildings(container);
+        
+        console.log(`✅ Rendered unified biome layer (${width}x${height})`);
+      },
+      
+      // NEW: Unified SVG biome rendering - Seamless water, soft grass grid
+      renderUnifiedBiomes(container, grid, width, height, tileSize) {
+        console.log('🎨 RENDERING UNIFIED BIOMES - Seamless water active');
+        
+        // CRITICAL: Remove any existing unified layer first
+        const existingUnified = container.querySelector('#unified-biome-layer');
+        if (existingUnified) {
+          console.log('🗑️ Removing existing unified biome layer');
+          existingUnified.remove();
+        }
+        
+        const svgNS = "http://www.w3.org/2000/svg";
+        const svg = document.createElementNS(svgNS, "svg");
+        svg.setAttribute("width", width * tileSize);
+        svg.setAttribute("height", height * tileSize);
+        svg.style.position = 'absolute';
+        svg.style.top = '0';
+        svg.style.left = '0';
+        svg.style.pointerEvents = 'none';
+        svg.style.zIndex = '0';
+        svg.id = 'unified-biome-layer';
+        
+        // CRITICAL: Remove ALL borders
+        svg.style.border = 'none';
+        svg.style.outline = 'none';
+        
+        // Group tiles by biome type for unified rendering
+        const biomeGroups = {};
+        
         for (let y = 0; y < height; y++) {
           for (let x = 0; x < width; x++) {
             const tile = grid[y][x];
-            const tileElement = this.createTileElement(tile, x, y, tileSize);
-            fragment.appendChild(tileElement);
+            const biomeId = tile.biome;
+            
+            if (!biomeGroups[biomeId]) {
+              biomeGroups[biomeId] = [];
+            }
+            
+            biomeGroups[biomeId].push({ x, y });
           }
         }
         
-        // Add all tiles at once (faster than individual appendChild)
-        container.appendChild(fragment);
+        console.log('📊 Biome groups:', Object.keys(biomeGroups).map(id => `${id}: ${biomeGroups[id].length} tiles`));
         
-        // PHASE 7.5: Render roads and buildings
-        RoadBuildingRenderer.renderRoads(container);
-        RoadBuildingRenderer.renderBuildings(container);
+        // Create shared water gradient (once)
+        const waterGradient = document.createElementNS(svgNS, "linearGradient");
+        waterGradient.setAttribute("id", "shared-water-gradient");
+        waterGradient.setAttribute("x1", "0%");
+        waterGradient.setAttribute("y1", "0%");
+        waterGradient.setAttribute("x2", "100%");
+        waterGradient.setAttribute("y2", "100%");
         
-        console.log(`Rendered ${width * height} tiles`);
+        const waterStop1 = document.createElementNS(svgNS, "stop");
+        waterStop1.setAttribute("offset", "0%");
+        waterStop1.setAttribute("stop-color", "#1dd1c1");
+        
+        const waterStop2 = document.createElementNS(svgNS, "stop");
+        waterStop2.setAttribute("offset", "50%");
+        waterStop2.setAttribute("stop-color", "#2dd1c1");
+        
+        const waterStop3 = document.createElementNS(svgNS, "stop");
+        waterStop3.setAttribute("offset", "100%");
+        waterStop3.setAttribute("stop-color", "#1ad1c1");
+        
+        waterGradient.appendChild(waterStop1);
+        waterGradient.appendChild(waterStop2);
+        waterGradient.appendChild(waterStop3);
+        svg.appendChild(waterGradient);
+        
+        // Render each biome group
+        Object.entries(biomeGroups).forEach(([biomeId, tiles]) => {
+          const biome = Object.values(BIOMES).find(b => b.id === biomeId);
+          if (!biome) return;
+          
+          // WATER TILES: Seamless rendering with shared gradient
+          if (biomeId === 'coastal') {
+            tiles.forEach(({x, y}) => {
+              const rectEl = document.createElementNS(svgNS, "rect");
+              rectEl.setAttribute("x", x * tileSize);
+              rectEl.setAttribute("y", y * tileSize);
+              rectEl.setAttribute("width", tileSize);
+              rectEl.setAttribute("height", tileSize);
+              rectEl.setAttribute("fill", "url(#shared-water-gradient)");
+              rectEl.setAttribute("opacity", "0.85");
+              rectEl.setAttribute("stroke", "none");
+              rectEl.setAttribute("stroke-width", "0");
+              svg.appendChild(rectEl);
+            });
+          } 
+          // LAND/GRASS TILES: Soft grid with minimal variance
+          else {
+            tiles.forEach(({x, y}) => {
+              const rectEl = document.createElementNS(svgNS, "rect");
+              rectEl.setAttribute("x", x * tileSize);
+              rectEl.setAttribute("y", y * tileSize);
+              rectEl.setAttribute("width", tileSize);
+              rectEl.setAttribute("height", tileSize);
+              
+              // Parse base color
+              const baseColor = biome.color;
+              
+              // Add subtle variance (±2% luminance)
+              const variance = (Math.random() - 0.5) * 0.04; // -2% to +2%
+              const r = parseInt(baseColor.slice(1, 3), 16);
+              const g = parseInt(baseColor.slice(3, 5), 16);
+              const b = parseInt(baseColor.slice(5, 7), 16);
+              
+              const adjustedR = Math.max(0, Math.min(255, Math.floor(r * (1 + variance))));
+              const adjustedG = Math.max(0, Math.min(255, Math.floor(g * (1 + variance))));
+              const adjustedB = Math.max(0, Math.min(255, Math.floor(b * (1 + variance))));
+              
+              const adjustedColor = `#${adjustedR.toString(16).padStart(2, '0')}${adjustedG.toString(16).padStart(2, '0')}${adjustedB.toString(16).padStart(2, '0')}`;
+              
+              rectEl.setAttribute("fill", adjustedColor);
+              rectEl.setAttribute("opacity", "0.6");
+              
+              // SOFT grid: extremely subtle stroke
+              rectEl.setAttribute("stroke", "rgba(0, 0, 0, 0.03)");
+              rectEl.setAttribute("stroke-width", "0.5");
+              
+              svg.appendChild(rectEl);
+            });
+          }
+        });
+        
+        // HARD RESET: Clear container completely before adding new SVG
+        const tileLayer = container.querySelector('#tile-layer');
+        if (tileLayer) {
+          tileLayer.innerHTML = '';
+          tileLayer.appendChild(svg);
+        } else {
+          container.appendChild(svg);
+        }
+        
+        console.log('✅ Seamless water + soft grass grid rendered');
       },
       
-      // Create individual tile element
-      createTileElement(tile, x, y, size) {
-        const div = document.createElement('div');
-        div.className = 'map-tile';
-        div.dataset.biome = tile.biome;
-        div.dataset.x = x;
-        div.dataset.y = y;
-        
-        // Position
-        div.style.position = 'absolute';
-        div.style.left = (x * size) + 'px';
-        div.style.top = (y * size) + 'px';
-        div.style.width = size + 'px';
-        div.style.height = size + 'px';
-        
-        // Biome color
-        const biome = Object.values(BIOMES).find(b => b.id === tile.biome);
-        if (biome) {
-          div.style.backgroundColor = biome.color;
-          div.style.opacity = '0.6';
-        }
-        
-        // Border (subtle grid)
-        div.style.border = '1px solid rgba(0, 0, 0, 0.1)';
-        div.style.boxSizing = 'border-box';
-        
-        // Optional: Show biome label (for debugging)
-        if (RENDER_CONFIG.SHOW_BIOME_LABELS) {
-          div.textContent = tile.biome.substring(0, 3).toUpperCase();
-          div.style.fontSize = '8px';
-          div.style.color = 'rgba(255, 255, 255, 0.5)';
-          div.style.display = 'flex';
-          div.style.alignItems = 'center';
-          div.style.justifyContent = 'center';
-        }
-        
-        return div;
-      },
+
       
       // Force re-render
       forceRender() {
@@ -6749,6 +7190,687 @@
     };
 
     // ========================================
+    // INTERACTIVE BUILDINGS SYSTEM (Map-Embedded)
+    // ========================================
+    
+    // Building type definitions
+    const BUILDING_TYPES = {
+      gun_shop: {
+        id: 'gun_shop',
+        name: 'Gun Shop',
+        icon: '🔫',
+        footprint: { width: 1, height: 1 },
+        allowedBiomes: ['urban', 'suburban'],
+        forbiddenBiomes: ['coastal', 'rural'],
+        avoidRoads: false,
+        minSpacing: 5, // tiles between same type
+        count: 2, // how many to place
+        interactions: [
+          { id: 'browse', label: '🛒 Browse Weapons', action: 'shop' },
+          { id: 'sell', label: '💰 Sell Items', action: 'coming_soon' }
+        ]
+      },
+      
+      chop_shop: {
+        id: 'chop_shop',
+        name: 'Chop Shop',
+        icon: '🚗',
+        footprint: { width: 2, height: 1 },
+        allowedBiomes: ['industrial', 'urban'],
+        forbiddenBiomes: ['coastal', 'rural', 'suburban'],
+        avoidRoads: false,
+        minSpacing: 8,
+        count: 1,
+        interactions: [
+          { id: 'sell_vehicle', label: '💵 Sell Vehicle', action: 'chop_shop' },
+          { id: 'check_prices', label: '📋 Check Prices', action: 'chop_prices' }
+        ]
+      },
+      
+      casino: {
+        id: 'casino',
+        name: 'Casino',
+        icon: '🎰',
+        footprint: { width: 2, height: 2 },
+        allowedBiomes: ['urban'],
+        forbiddenBiomes: ['coastal', 'rural', 'suburban', 'industrial'],
+        avoidRoads: false,
+        minSpacing: 10,
+        count: 1,
+        interactions: [
+          { id: 'blackjack', label: '🃏 Play Blackjack', action: 'blackjack' },
+          { id: 'slots', label: '🎰 Slot Machines', action: 'slots' }
+        ]
+      },
+      
+      nightclub: {
+        id: 'nightclub',
+        name: 'Nightclub',
+        icon: '🎵',
+        footprint: { width: 1, height: 1 },
+        allowedBiomes: ['urban', 'suburban'],
+        forbiddenBiomes: ['coastal', 'rural', 'industrial'],
+        avoidRoads: false,
+        minSpacing: 6,
+        count: 2,
+        interactions: [
+          { id: 'meet_contacts', label: '👥 Meet Contacts', action: 'contacts' },
+          { id: 'gather_intel', label: '🕵️ Gather Intel', action: 'intel' }
+        ]
+      },
+      
+      safehouse: {
+        id: 'safehouse',
+        name: 'Safehouse',
+        icon: '🏠',
+        footprint: { width: 1, height: 1 },
+        allowedBiomes: ['suburban', 'rural'],
+        forbiddenBiomes: ['coastal', 'urban', 'industrial'],
+        avoidRoads: true,
+        minSpacing: 12,
+        count: 1,
+        interactions: [
+          { id: 'rest', label: '💤 Rest (Recover)', action: 'rest' },
+          { id: 'stash', label: '📦 Access Stash', action: 'stash' }
+        ]
+      }
+    };
+    
+    // Building Placement System
+    const BuildingPlacer = {
+      // Place all buildings using procedural generation
+      placeBuildings(grid, random) {
+        console.log('=== Placing Interactive Buildings ===');
+        const startTime = performance.now();
+        
+        const placedBuildings = [];
+        const width = grid[0].length;
+        const height = grid.length;
+        
+        // Sort by priority (larger footprints first)
+        const buildingTypes = Object.values(BUILDING_TYPES).sort((a, b) => {
+          const areaA = a.footprint.width * a.footprint.height;
+          const areaB = b.footprint.width * b.footprint.height;
+          return areaB - areaA;
+        });
+        
+        for (const buildingType of buildingTypes) {
+          console.log(`Placing ${buildingType.name} (x${buildingType.count})...`);
+          
+          for (let instance = 0; instance < buildingType.count; instance++) {
+            const buildingId = `${buildingType.id}_${instance}`;
+            
+            // Generate candidates using seeded random
+            const candidates = this.generateCandidates(grid, buildingType, placedBuildings, 100, random, width, height);
+            
+            if (candidates.length === 0) {
+              console.warn(`No candidates for ${buildingId}`);
+              continue;
+            }
+            
+            // Pick best candidate
+            const best = candidates[0];
+            
+            // Reserve tiles in occupancy grid BEFORE creating building
+            const reserved = TileOccupancy.reserve(
+              best.x, 
+              best.y, 
+              buildingType.footprint.width, 
+              buildingType.footprint.height, 
+              buildingId
+            );
+            
+            if (!reserved) {
+              console.warn(`Failed to reserve tiles for ${buildingId}`);
+              continue;
+            }
+            
+            // Convert tile coordinates to percentage for map positioning
+            const xPercent = (best.x / width) * 100;
+            const yPercent = (best.y / height) * 100;
+            
+            // Create building
+            const building = {
+              id: buildingId,
+              typeId: buildingType.id,
+              x: best.x,           // Tile coordinates
+              y: best.y,
+              xPercent: xPercent,  // Percentage for rendering
+              yPercent: yPercent,
+              footprint: buildingType.footprint,
+              biome: best.tile.biome,
+              icon: buildingType.icon,
+              name: buildingType.name,
+              interactions: buildingType.interactions
+            };
+            
+            placedBuildings.push(building);
+            console.log(`  ✓ Placed ${buildingId} at tile (${best.x}, ${best.y}) = ${xPercent.toFixed(1)}%, ${yPercent.toFixed(1)}% in ${best.tile.biome}`);
+          }
+        }
+        
+        const duration = performance.now() - startTime;
+        console.log(`Buildings placed in ${duration.toFixed(1)}ms`);
+        console.log('=====================================');
+        
+        return placedBuildings;
+      },
+      
+      // Generate candidate positions using seeded random
+      generateCandidates(grid, buildingType, placedBuildings, maxAttempts, random, width, height) {
+        const candidates = [];
+        
+        for (let i = 0; i < maxAttempts; i++) {
+          const x = Math.floor(random() * (width - buildingType.footprint.width));
+          const y = Math.floor(random() * (height - buildingType.footprint.height));
+          
+          // QUICK PRE-FILTER: Check if footprint is available in TileOccupancy
+          if (!TileOccupancy.isFootprintAvailable(x, y, buildingType.footprint.width, buildingType.footprint.height)) {
+            continue;
+          }
+          
+          // FULL VALIDATION: Check all placement rules
+          if (this.isValidPlacement(grid, buildingType, x, y, placedBuildings, width, height)) {
+            const tile = TileGridGenerator.getTile(grid, x, y);
+            const score = this.scoreCandidate(x, y, buildingType, placedBuildings, width, height);
+            candidates.push({ x, y, tile, score });
+          }
+        }
+        
+        // Sort by score
+        candidates.sort((a, b) => b.score - a.score);
+        
+        return candidates;
+      },
+      
+      // Check if placement is valid using TileOccupancy
+      isValidPlacement(grid, buildingType, x, y, placedBuildings, width, height) {
+        // Check bounds
+        if (x < 0 || y < 0) return false;
+        if (x + buildingType.footprint.width > width || y + buildingType.footprint.height > height) {
+          return false;
+        }
+        
+        // PRIMARY CHECK: Use TileOccupancy to verify ALL tiles are grass and unoccupied
+        if (!TileOccupancy.isFootprintAvailable(x, y, buildingType.footprint.width, buildingType.footprint.height)) {
+          return false;
+        }
+        
+        // ROAD ADJACENCY CHECK: At least one footprint tile must be adjacent to a road
+        if (!TileOccupancy.isFootprintAdjacentToRoad(x, y, buildingType.footprint.width, buildingType.footprint.height)) {
+          return false;
+        }
+        
+        // BIOME CHECK: Verify biome rules for this building type
+        for (let dy = 0; dy < buildingType.footprint.height; dy++) {
+          for (let dx = 0; dx < buildingType.footprint.width; dx++) {
+            const tile = TileGridGenerator.getTile(grid, x + dx, y + dy);
+            if (!tile) return false;
+            
+            // Check specific biome rules for this building type
+            if (buildingType.forbiddenBiomes && buildingType.forbiddenBiomes.includes(tile.biome)) return false;
+            if (buildingType.allowedBiomes && buildingType.allowedBiomes.length > 0 && !buildingType.allowedBiomes.includes(tile.biome)) return false;
+          }
+        }
+        
+        // Check minimum spacing for same type
+        for (const existing of placedBuildings) {
+          if (existing.typeId === buildingType.id) {
+            const distance = Math.sqrt(Math.pow(x - existing.x, 2) + Math.pow(y - existing.y, 2));
+            if (distance < buildingType.minSpacing) {
+              return false;
+            }
+          }
+          
+          // Minimum spacing between ANY buildings (prevent clustering)
+          const minAnySpacing = 2;
+          const distance = Math.sqrt(Math.pow(x - existing.x, 2) + Math.pow(y - existing.y, 2));
+          if (distance < minAnySpacing) {
+            return false;
+          }
+        }
+        
+        return true;
+      },
+      
+      // Check if two footprints overlap
+      checkOverlap(x1, y1, footprint1, x2, y2, footprint2) {
+        return !(x1 + footprint1.width <= x2 ||
+                 x2 + footprint2.width <= x1 ||
+                 y1 + footprint1.height <= y2 ||
+                 y2 + footprint2.height <= y1);
+      },
+      
+      // Score candidate position
+      scoreCandidate(x, y, buildingType, placedBuildings, width, height) {
+        let score = 100;
+        
+        // Prefer center of map
+        const centerX = width / 2;
+        const centerY = height / 2;
+        const distanceFromCenter = Math.sqrt(Math.pow(x - centerX, 2) + Math.pow(y - centerY, 2));
+        const maxDistance = Math.sqrt(Math.pow(centerX, 2) + Math.pow(centerY, 2));
+        const centrality = 1 - (distanceFromCenter / maxDistance);
+        score += centrality * 20;
+        
+        // Penalty for crowding
+        for (const existing of placedBuildings) {
+          const distance = Math.sqrt(Math.pow(x - existing.x, 2) + Math.pow(y - existing.y, 2));
+          if (distance < 5) {
+            score -= (5 - distance) * 10;
+          }
+        }
+        
+        return score;
+      }
+    };
+    
+    // Building Interaction System
+    const InteractiveBuildings = {
+      
+      // 2.5D Building Visual Configuration
+      // Buildings sized to fit within 30px tile grid
+      BUILDING_VISUALS: {
+        // Tile size reference (must match RENDER_CONFIG.TILE_SIZE_PX)
+        TILE_SIZE: 30,
+        
+        // Height tiers (in pixels) - proportional to tile size
+        HEIGHT_TIERS: {
+          small: 18,    // Fits in ~1 tile height
+          medium: 26,   // Fits in ~1.5 tiles
+          large: 36     // Fits in ~2 tiles (casino)
+        },
+        
+        // Building type to height tier mapping
+        TYPE_HEIGHT: {
+          gun_shop: 'small',
+          chop_shop: 'medium',
+          casino: 'large',
+          nightclub: 'medium',
+          safehouse: 'small'
+        },
+        
+        // Building colors (roof, front wall, side wall)
+        TYPE_COLORS: {
+          gun_shop: {
+            roof: '#4a4a4a',
+            front: '#3a3a3a',
+            side: '#2a2a2a',
+            accent: '#f28b82',  // Red accent
+            windowColor: '#fdd663'
+          },
+          chop_shop: {
+            roof: '#5a5a6a',
+            front: '#4a4a5a',
+            side: '#3a3a4a',
+            accent: '#8ab4f8',  // Blue accent
+            windowColor: '#81c995'
+          },
+          casino: {
+            roof: '#6a5a7a',
+            front: '#5a4a6a',
+            side: '#4a3a5a',
+            accent: '#fdd663',  // Gold accent
+            windowColor: '#f28b82'
+          },
+          nightclub: {
+            roof: '#5a4a6a',
+            front: '#4a3a5a',
+            side: '#3a2a4a',
+            accent: '#ba82f5',  // Purple accent
+            windowColor: '#8ab4f8'
+          },
+          safehouse: {
+            roof: '#5a6a5a',
+            front: '#4a5a4a',
+            side: '#3a4a3a',
+            accent: '#81c995',  // Green accent
+            windowColor: '#fdd663'
+          }
+        },
+        
+        // Shadow settings (smaller for mobile)
+        SHADOW_OFFSET_X: 2,
+        SHADOW_OFFSET_Y: 3,
+        SHADOW_BLUR: 4,
+        SHADOW_COLOR: 'rgba(0, 0, 0, 0.35)'
+      },
+      
+      // Create 2.5D building SVG element - sized to fit tile grid
+      createBuildingSVG(building) {
+        const config = this.BUILDING_VISUALS;
+        const tileSize = config.TILE_SIZE;
+        const typeId = building.typeId;
+        const heightTier = config.TYPE_HEIGHT[typeId] || 'small';
+        const height = config.HEIGHT_TIERS[heightTier];
+        const colors = config.TYPE_COLORS[typeId] || config.TYPE_COLORS.gun_shop;
+        
+        // Building dimensions based on footprint (in tiles)
+        const footprint = building.footprint || { width: 1, height: 1 };
+        
+        // Base dimensions fit within tile(s) with small margin
+        const margin = 2;
+        const baseWidth = (tileSize * footprint.width) - (margin * 2);
+        const baseDepth = 8; // Isometric depth (fixed, small)
+        
+        // SVG dimensions
+        const isoOffsetX = 4; // Small isometric offset
+        const svgWidth = baseWidth + isoOffsetX + config.SHADOW_OFFSET_X + config.SHADOW_BLUR;
+        const svgHeight = height + baseDepth + config.SHADOW_OFFSET_Y + config.SHADOW_BLUR + 4;
+        
+        // Create SVG element
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('width', svgWidth);
+        svg.setAttribute('height', svgHeight);
+        svg.setAttribute('viewBox', `0 0 ${svgWidth} ${svgHeight}`);
+        svg.style.overflow = 'visible';
+        
+        // Define filter for shadow
+        const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+        const filter = document.createElementNS('http://www.w3.org/2000/svg', 'filter');
+        filter.setAttribute('id', `shadow-${building.id}`);
+        filter.setAttribute('x', '-50%');
+        filter.setAttribute('y', '-50%');
+        filter.setAttribute('width', '200%');
+        filter.setAttribute('height', '200%');
+        
+        const feDropShadow = document.createElementNS('http://www.w3.org/2000/svg', 'feDropShadow');
+        feDropShadow.setAttribute('dx', config.SHADOW_OFFSET_X);
+        feDropShadow.setAttribute('dy', config.SHADOW_OFFSET_Y);
+        feDropShadow.setAttribute('stdDeviation', config.SHADOW_BLUR / 2);
+        feDropShadow.setAttribute('flood-color', config.SHADOW_COLOR);
+        filter.appendChild(feDropShadow);
+        defs.appendChild(filter);
+        svg.appendChild(defs);
+        
+        // Building group with shadow filter
+        const buildingGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        buildingGroup.setAttribute('filter', `url(#shadow-${building.id})`);
+        
+        // Starting position
+        const startX = 1;
+        const startY = 4;
+        
+        // 1. SIDE WALL (right side - creates depth illusion)
+        const sideWall = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+        const sidePoints = [
+          `${startX + baseWidth},${startY}`,
+          `${startX + baseWidth + isoOffsetX},${startY - 3}`,
+          `${startX + baseWidth + isoOffsetX},${startY + height + baseDepth - 3}`,
+          `${startX + baseWidth},${startY + height + baseDepth}`
+        ].join(' ');
+        sideWall.setAttribute('points', sidePoints);
+        sideWall.setAttribute('fill', colors.side);
+        buildingGroup.appendChild(sideWall);
+        
+        // 2. FRONT WALL (main face)
+        const frontWall = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        frontWall.setAttribute('x', startX);
+        frontWall.setAttribute('y', startY);
+        frontWall.setAttribute('width', baseWidth);
+        frontWall.setAttribute('height', height + baseDepth);
+        frontWall.setAttribute('fill', colors.front);
+        frontWall.setAttribute('rx', '1');
+        buildingGroup.appendChild(frontWall);
+        
+        // 3. ROOF (top face - angled for depth)
+        const roof = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+        const roofPoints = [
+          `${startX},${startY}`,
+          `${startX + baseWidth},${startY}`,
+          `${startX + baseWidth + isoOffsetX},${startY - 3}`,
+          `${startX + isoOffsetX},${startY - 3}`
+        ].join(' ');
+        roof.setAttribute('points', roofPoints);
+        roof.setAttribute('fill', colors.roof);
+        buildingGroup.appendChild(roof);
+        
+        // 4. ACCENT STRIPE (building identity - at top)
+        const accentStripe = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        accentStripe.setAttribute('x', startX);
+        accentStripe.setAttribute('y', startY + 2);
+        accentStripe.setAttribute('width', baseWidth);
+        accentStripe.setAttribute('height', 3);
+        accentStripe.setAttribute('fill', colors.accent);
+        buildingGroup.appendChild(accentStripe);
+        
+        // 5. WINDOWS (scale with building size)
+        const windowRows = heightTier === 'large' ? 2 : 1;
+        const windowCols = Math.max(1, Math.floor(baseWidth / 12));
+        const windowWidth = 3;
+        const windowHeight = 4;
+        const windowSpacingX = (baseWidth - windowCols * windowWidth) / (windowCols + 1);
+        const windowStartY = startY + 8;
+        const windowSpacingY = heightTier === 'large' ? 8 : 0;
+        
+        for (let row = 0; row < windowRows; row++) {
+          for (let col = 0; col < windowCols; col++) {
+            const windowEl = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            const wx = startX + windowSpacingX + col * (windowWidth + windowSpacingX);
+            const wy = windowStartY + row * (windowHeight + windowSpacingY);
+            
+            windowEl.setAttribute('x', wx);
+            windowEl.setAttribute('y', wy);
+            windowEl.setAttribute('width', windowWidth);
+            windowEl.setAttribute('height', windowHeight);
+            windowEl.setAttribute('fill', colors.windowColor);
+            windowEl.setAttribute('opacity', '0.8');
+            windowEl.setAttribute('rx', '0.5');
+            buildingGroup.appendChild(windowEl);
+          }
+        }
+        
+        // 6. DOOR (at bottom center)
+        const doorWidth = Math.min(6, baseWidth * 0.3);
+        const doorHeight = Math.min(8, height * 0.4);
+        const door = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        door.setAttribute('x', startX + (baseWidth - doorWidth) / 2);
+        door.setAttribute('y', startY + height + baseDepth - doorHeight);
+        door.setAttribute('width', doorWidth);
+        door.setAttribute('height', doorHeight);
+        door.setAttribute('fill', '#1a1a1a');
+        door.setAttribute('rx', '0.5');
+        buildingGroup.appendChild(door);
+        
+        // 7. ICON BADGE (small circle with icon in corner) - for identification
+        const badgeSize = 10;
+        const badgeX = startX + baseWidth - badgeSize / 2 + 2;
+        const badgeY = startY - 2;
+        
+        // Badge background
+        const badge = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        badge.setAttribute('cx', badgeX);
+        badge.setAttribute('cy', badgeY);
+        badge.setAttribute('r', badgeSize / 2);
+        badge.setAttribute('fill', colors.accent);
+        badge.setAttribute('stroke', '#1a1a1a');
+        badge.setAttribute('stroke-width', '1');
+        buildingGroup.appendChild(badge);
+        
+        // Badge icon
+        const iconText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        iconText.setAttribute('x', badgeX);
+        iconText.setAttribute('y', badgeY + 3);
+        iconText.setAttribute('font-size', '7');
+        iconText.setAttribute('text-anchor', 'middle');
+        iconText.textContent = building.icon;
+        buildingGroup.appendChild(iconText);
+        
+        svg.appendChild(buildingGroup);
+        
+        return svg;
+      },
+      
+      // Render all buildings inside the SVG map layer
+      renderBuildings() {
+        const buildings = GameState.map.buildings;
+        if (!buildings || buildings.length === 0) {
+          console.log('🏗️ No buildings to render');
+          return;
+        }
+        
+        // Find or create the buildings container inside map-icons
+        const iconsContainer = document.getElementById('map-icons');
+        if (!iconsContainer) {
+          console.warn('Icons container not found for building rendering');
+          return;
+        }
+        
+        // Get tile size from RENDER_CONFIG
+        const tileSize = RENDER_CONFIG.TILE_SIZE_PX; // 30px
+        const gridWidth = GameState.map.width;
+        const gridHeight = GameState.map.height;
+        
+        // Remove existing building elements
+        iconsContainer.querySelectorAll('.building-icon').forEach(el => el.remove());
+        
+        // Sort buildings by Y position for proper layering (back to front)
+        const sortedBuildings = [...buildings].sort((a, b) => a.y - b.y);
+        
+        // Render each building as a 2.5D element
+        sortedBuildings.forEach((building, index) => {
+          const buildingEl = document.createElement('div');
+          buildingEl.className = 'building-icon building-3d';
+          buildingEl.dataset.buildingId = building.id;
+          buildingEl.dataset.type = building.typeId;
+          
+          // === TILE-SNAPPED POSITIONING ===
+          // Building tile coordinates (x, y) represent top-left of footprint
+          const col = building.x;
+          const row = building.y;
+          const footprintW = building.footprint.width;
+          const footprintH = building.footprint.height;
+          
+          // Calculate center of the footprint in tile coordinates
+          // For a 1x1 building at tile (5,5): center is (5.5, 5.5)
+          // For a 2x2 building at tile (5,5): center is (6, 6)
+          const centerCol = col + (footprintW / 2);
+          const centerRow = row + (footprintH / 2);
+          
+          // Convert to pixel coordinates (snap to tile grid)
+          const centerX = centerCol * tileSize;
+          const centerY = centerRow * tileSize;
+          
+          // Position element at the center of the footprint
+          buildingEl.style.left = `${centerX}px`;
+          buildingEl.style.top = `${centerY}px`;
+          buildingEl.style.position = 'absolute';
+          
+          // Transform to anchor the visual at bottom-center of the building sprite
+          // -50% centers horizontally, -100% puts bottom of sprite at the position
+          buildingEl.style.transform = 'translate(-50%, -100%)';
+          buildingEl.style.cursor = 'pointer';
+          buildingEl.style.zIndex = `${10 + row}`; // Layer by row for proper depth
+          buildingEl.style.transition = 'transform 0.12s ease, filter 0.12s ease';
+          
+          // Create 2.5D SVG building
+          const buildingSVG = this.createBuildingSVG(building);
+          buildingEl.appendChild(buildingSVG);
+          
+          // Add tooltip-style label
+          buildingEl.title = building.name;
+          
+          // Touch-friendly: larger hit area
+          buildingEl.style.padding = '4px';
+          buildingEl.style.margin = '-4px';
+          
+          // Add hover/touch effect
+          buildingEl.addEventListener('mouseenter', () => {
+            buildingEl.style.transform = 'translate(-50%, -100%) scale(1.1)';
+            buildingEl.style.zIndex = '100';
+          });
+          
+          buildingEl.addEventListener('mouseleave', () => {
+            buildingEl.style.transform = 'translate(-50%, -100%) scale(1)';
+            buildingEl.style.zIndex = `${10 + row}`;
+          });
+          
+          // Touch events for mobile
+          buildingEl.addEventListener('touchstart', (e) => {
+            buildingEl.style.transform = 'translate(-50%, -100%) scale(1.1)';
+            buildingEl.style.zIndex = '100';
+          }, { passive: true });
+          
+          buildingEl.addEventListener('touchend', () => {
+            setTimeout(() => {
+              buildingEl.style.transform = 'translate(-50%, -100%) scale(1)';
+              buildingEl.style.zIndex = `${10 + row}`;
+            }, 150);
+          }, { passive: true });
+          
+          // Click handler to show building menu
+          buildingEl.addEventListener('click', (e) => {
+            e.stopPropagation();
+            console.log(`Building clicked: ${building.name} (${building.id})`);
+            this.showBuildingMenu(building);
+          });
+          
+          iconsContainer.appendChild(buildingEl);
+          
+          // Debug log for verification
+          console.log(`🏗️ Rendered ${building.name} at tile (${col},${row}) -> pixel (${centerX},${centerY})`);
+        });
+        
+        console.log(`🏗️ Rendered ${buildings.length} 2.5D buildings on map`);
+      },
+      
+      showBuildingMenu(building) {
+        const modal = document.createElement('div');
+        modal.className = 'event-modal';
+        modal.id = 'building-modal';
+        
+        const interactionsHTML = building.interactions.map(interaction => `
+          <button class="choice-btn" data-action="${interaction.action}">
+            <span class="choice-icon">${interaction.label.split(' ')[0]}</span>
+            <span class="choice-text">${interaction.label.substring(2)}</span>
+          </button>
+        `).join('');
+        
+        modal.innerHTML = `
+          <div class="event-modal-content">
+            <div class="event-modal-icon">${building.icon}</div>
+            <div class="event-modal-title">${building.name}</div>
+            <div class="event-modal-description">Interact with this building</div>
+            
+            <div class="event-choices">
+              ${interactionsHTML}
+            </div>
+            
+            <button class="outcome-btn" id="close-building-modal" style="margin-top: 12px;">
+              ✕ Leave
+            </button>
+          </div>
+        `;
+        
+        document.getElementById('app').appendChild(modal);
+        
+        // Action handlers
+        modal.querySelectorAll('.choice-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const action = btn.dataset.action;
+            this.handleBuildingAction(action, building, modal);
+          });
+        });
+        
+        // Close handler
+        document.getElementById('close-building-modal')?.addEventListener('click', () => {
+          modal.remove();
+        });
+      },
+      
+      handleBuildingAction(action, building, modal) {
+        // Placeholder for future implementation
+        modal.remove();
+        
+        const notification = document.createElement('div');
+        notification.className = 'xp-notification';
+        notification.innerHTML = '<span class="xp-positive">🚧 Coming Soon!</span>';
+        document.getElementById('app').appendChild(notification);
+        setTimeout(() => notification.remove(), 2000);
+      }
+    };
+    
+    // ========================================
     // PHASE 7.5: ROADS & BUILDINGS
     // ========================================
 
@@ -6793,13 +7915,13 @@
         const height = grid.length;
         const roads = [];
         
-        // 1. Connect landmarks with main roads
-        const mainRoads = this.connectLandmarks(grid, landmarks, random);
-        roads.push(...mainRoads);
-        
-        // 2. Add grid roads in urban areas
-        const gridRoads = this.generateUrbanGrid(grid, random);
+        // 1. Generate modular grid system (avoids water)
+        const gridRoads = this.generateModularGrid(grid, width, height);
         roads.push(...gridRoads);
+        
+        // 2. Connect landmarks with arterial roads (avoids water)
+        const arterialRoads = this.connectLandmarks(grid, landmarks, random);
+        roads.push(...arterialRoads);
         
         // 3. Mark road tiles in grid
         this.markRoadTiles(grid, roads);
@@ -6811,7 +7933,70 @@
         return roads;
       },
       
-      // Connect landmarks with roads
+      // Generate modular grid system (avoids water, uses golden ratio)
+      generateModularGrid(grid, width, height) {
+        const roads = [];
+        
+        // Use golden ratio for main arterial spacing (φ ≈ 1.618)
+        const goldenRatio = 1.618;
+        const baseSpacing = 5; // Base grid spacing
+        const majorSpacing = Math.round(baseSpacing * goldenRatio); // ~8 tiles
+        
+        // Vertical arterial roads (major roads)
+        for (let x = 0; x < width; x += majorSpacing) {
+          for (let y = 0; y < height; y++) {
+            const tile = grid[y][x];
+            // Skip if coastal/water biome
+            if (tile && tile.biome !== 'coastal') {
+              roads.push({ x, y, type: 'arterial' });
+            }
+          }
+        }
+        
+        // Horizontal arterial roads (major roads)
+        for (let y = 0; y < height; y += majorSpacing) {
+          for (let x = 0; x < width; x++) {
+            const tile = grid[y][x];
+            // Skip if coastal/water biome
+            if (tile && tile.biome !== 'coastal') {
+              roads.push({ x, y, type: 'arterial' });
+            }
+          }
+        }
+        
+        // Secondary grid roads (smaller streets) - only in urban/suburban
+        for (let x = baseSpacing; x < width; x += baseSpacing) {
+          for (let y = 0; y < height; y++) {
+            const tile = grid[y][x];
+            // Only place in urban/suburban, skip water
+            if (tile && (tile.biome === 'urban' || tile.biome === 'suburban') && tile.biome !== 'coastal') {
+              // Skip if already an arterial road
+              const isArterial = (x % majorSpacing === 0);
+              if (!isArterial) {
+                roads.push({ x, y, type: 'street' });
+              }
+            }
+          }
+        }
+        
+        for (let y = baseSpacing; y < height; y += baseSpacing) {
+          for (let x = 0; x < width; x++) {
+            const tile = grid[y][x];
+            // Only place in urban/suburban, skip water
+            if (tile && (tile.biome === 'urban' || tile.biome === 'suburban') && tile.biome !== 'coastal') {
+              // Skip if already an arterial road
+              const isArterial = (y % majorSpacing === 0);
+              if (!isArterial) {
+                roads.push({ x, y, type: 'street' });
+              }
+            }
+          }
+        }
+        
+        return roads;
+      },
+      
+      // Connect landmarks with roads (avoids water)
       connectLandmarks(grid, landmarks, random) {
         const roads = [];
         const width = grid[0].length;
@@ -6824,63 +8009,43 @@
           l.type.id === 'hospital'
         );
         
-        // Connect each landmark to nearest neighbor
+        // Connect each landmark to nearest neighbor (avoid water)
         for (let i = 0; i < priorityLandmarks.length - 1; i++) {
           const from = priorityLandmarks[i];
           const to = priorityLandmarks[i + 1];
           
-          // Create road path (simple L-shape connection)
-          const path = this.createLShapedRoad(from.x, from.y, to.x, to.y);
+          // Create road path avoiding water
+          const path = this.createPathAvoidingWater(grid, from.x, from.y, to.x, to.y);
           roads.push(...path);
         }
         
         return roads;
       },
       
-      // Create L-shaped road between two points
-      createLShapedRoad(x1, y1, x2, y2) {
+      // Create path between two points (avoids water)
+      createPathAvoidingWater(grid, x1, y1, x2, y2) {
         const roads = [];
         
+        // Simple L-shaped path with water avoidance
         // Horizontal segment
         const minX = Math.min(x1, x2);
         const maxX = Math.max(x1, x2);
         for (let x = minX; x <= maxX; x++) {
-          roads.push({ x, y: y1, type: 'main' });
+          const tile = grid[y1] && grid[y1][x];
+          // Skip water tiles
+          if (tile && tile.biome !== 'coastal') {
+            roads.push({ x, y: y1, type: 'connector' });
+          }
         }
         
         // Vertical segment
         const minY = Math.min(y1, y2);
         const maxY = Math.max(y1, y2);
         for (let y = minY; y <= maxY; y++) {
-          roads.push({ x: x2, y, type: 'main' });
-        }
-        
-        return roads;
-      },
-      
-      // Generate grid pattern in urban zones
-      generateUrbanGrid(grid, random) {
-        const roads = [];
-        const width = grid[0].length;
-        const height = grid.length;
-        
-        // Add vertical roads every 5 tiles in urban areas
-        for (let x = 5; x < width; x += 5) {
-          for (let y = 0; y < height; y++) {
-            const tile = grid[y][x];
-            if (tile.biome === 'urban') {
-              roads.push({ x, y, type: 'side' });
-            }
-          }
-        }
-        
-        // Add horizontal roads every 5 tiles in urban areas
-        for (let y = 5; y < height; y += 5) {
-          for (let x = 0; x < width; x++) {
-            const tile = grid[y][x];
-            if (tile.biome === 'urban') {
-              roads.push({ x, y, type: 'side' });
-            }
+          const tile = grid[y] && grid[y][x2];
+          // Skip water tiles
+          if (tile && tile.biome !== 'coastal') {
+            roads.push({ x: x2, y, type: 'connector' });
           }
         }
         
@@ -7151,41 +8316,78 @@
         return;
       }
       
-      // Check if already generated
+      // Check if roads already generated
       const firstTile = GameState.map.grid[0][0];
-      if (firstTile.metadata.isRoad !== undefined) {
-        console.log('Roads and buildings already generated');
-        return;
+      const roadsAlreadyGenerated = firstTile.metadata.isRoad !== undefined;
+      
+      if (roadsAlreadyGenerated) {
+        console.log('Roads already generated');
+        // Still need to mark roads in occupancy grid
+        TileOccupancy.markRoads(GameState.map.grid);
+      } else {
+        // Get seeded random
+        const random = MapSeedManager.createMapRandom();
+        
+        // Generate roads
+        if (ROAD_CONFIG.ENABLE_ROADS) {
+          const roads = RoadGenerator.generateRoadNetwork(
+            GameState.map.grid,
+            GameState.mapIcons.map((icon, i) => ({
+              x: Math.floor((icon.x / 100) * GameState.map.width),
+              y: Math.floor((icon.y / 100) * GameState.map.height),
+              type: { id: icon.type }
+            })),
+            random
+          );
+        }
+        
+        // Mark roads in occupancy grid after generation
+        TileOccupancy.markRoads(GameState.map.grid);
+        
+        // Generate building density
+        BuildingGenerator.generateBuildingDensity(GameState.map.grid, random);
       }
       
-      // Get seeded random
-      const random = MapSeedManager.createMapRandom();
-      
-      // Generate roads
-      if (ROAD_CONFIG.ENABLE_ROADS) {
-        const roads = RoadGenerator.generateRoadNetwork(
-          GameState.map.grid,
-          GameState.mapIcons.map((icon, i) => ({
-            x: Math.floor((icon.x / 100) * GameState.map.width),
-            y: Math.floor((icon.y / 100) * GameState.map.height),
-            type: { id: icon.type }
-          })),
-          random
-        );
-      }
-      
-      // Generate building density
-      BuildingGenerator.generateBuildingDensity(GameState.map.grid, random);
+      // ALWAYS try to place interactive buildings (handles migration from old saves)
+      initInteractiveBuildings();
       
       // Save
       Storage.save();
       
       console.log('===================================');
     }
+    
+    // Initialize interactive buildings on the map
+    function initInteractiveBuildings() {
+      console.log('=== Initializing Interactive Buildings ===');
+      
+      // Check if buildings already placed
+      if (GameState.map.buildings && GameState.map.buildings.length > 0) {
+        console.log(`Buildings already placed: ${GameState.map.buildings.length}`);
+        return;
+      }
+      
+      if (!GameState.map.grid) {
+        console.error('Cannot place buildings - map grid not generated');
+        return;
+      }
+      
+      // Use seeded random for deterministic placement
+      const random = MapSeedManager.createMapRandom();
+      
+      // Place buildings
+      const placedBuildings = BuildingPlacer.placeBuildings(GameState.map.grid, random);
+      
+      // Store in GameState
+      GameState.map.buildings = placedBuildings;
+      
+      console.log(`Stored ${placedBuildings.length} buildings in GameState`);
+      console.log('==========================================');
+    }
 
     // Extend ProceduralMapRenderer to show roads and buildings
     const RoadBuildingRenderer = {
-      // Render roads on tiles
+      // Render roads on tiles with realistic asphalt texture
       renderRoads(container) {
         if (!ROAD_CONFIG.ENABLE_ROADS) return;
         
@@ -7194,36 +8396,133 @@
         const height = GameState.map.height;
         const tileSize = RENDER_CONFIG.TILE_SIZE_PX;
         
-        let roadCount = 0;
+        // Create single unified road layer
+        const roadLayer = document.createElement('div');
+        roadLayer.style.position = 'absolute';
+        roadLayer.style.top = '0';
+        roadLayer.style.left = '0';
+        roadLayer.style.width = (width * tileSize) + 'px';
+        roadLayer.style.height = (height * tileSize) + 'px';
+        roadLayer.style.zIndex = '1';
+        roadLayer.style.pointerEvents = 'none';
+        
+        // Unified asphalt texture across entire layer
+        roadLayer.style.background = `
+          radial-gradient(circle at 25% 30%, rgba(40, 44, 48, 0.3) 0%, transparent 50%),
+          radial-gradient(circle at 75% 70%, rgba(35, 39, 42, 0.2) 0%, transparent 50%),
+          radial-gradient(circle at 50% 50%, rgba(45, 48, 51, 0.2) 0%, transparent 50%),
+          #2a2e30
+        `;
+        roadLayer.style.boxShadow = 'inset 0 0 2px rgba(0, 0, 0, 0.4)';
+        roadLayer.style.opacity = '0.9';
+        
+        // Use CSS clip-path to create road shapes
+        let roadPaths = [];
         
         for (let y = 0; y < height; y++) {
           for (let x = 0; x < width; x++) {
             const tile = grid[y][x];
             
             if (tile.metadata.isRoad) {
-              const roadDiv = document.createElement('div');
-              roadDiv.className = 'road-tile';
-              roadDiv.style.position = 'absolute';
-              roadDiv.style.left = (x * tileSize) + 'px';
-              roadDiv.style.top = (y * tileSize) + 'px';
-              roadDiv.style.width = tileSize + 'px';
-              roadDiv.style.height = tileSize + 'px';
-              roadDiv.style.backgroundColor = ROAD_CONFIG.ROAD_COLOR;
-              roadDiv.style.opacity = ROAD_CONFIG.ROAD_OPACITY;
-              roadDiv.style.zIndex = '1';
-              roadDiv.style.pointerEvents = 'none';
+              // Add rectangular path for this tile
+              const left = x * tileSize;
+              const top = y * tileSize;
+              const right = left + tileSize;
+              const bottom = top + tileSize;
               
-              container.appendChild(roadDiv);
-              roadCount++;
+              roadPaths.push(`
+                polygon(
+                  ${left}px ${top}px,
+                  ${right}px ${top}px,
+                  ${right}px ${bottom}px,
+                  ${left}px ${bottom}px
+                )
+              `);
             }
           }
         }
         
-        console.log(`Rendered ${roadCount} road tiles`);
+        // Create mask using SVG for perfect seamless roads
+        const svgNS = "http://www.w3.org/2000/svg";
+        const svg = document.createElementNS(svgNS, "svg");
+        svg.setAttribute("width", width * tileSize);
+        svg.setAttribute("height", height * tileSize);
+        svg.style.position = 'absolute';
+        svg.style.top = '0';
+        svg.style.left = '0';
+        svg.style.pointerEvents = 'none';
+        
+        const mask = document.createElementNS(svgNS, "mask");
+        mask.setAttribute("id", "road-mask");
+        
+        // White rectangles for road tiles (visible areas)
+        for (let y = 0; y < height; y++) {
+          for (let x = 0; x < width; x++) {
+            const tile = grid[y][x];
+            
+            if (tile.metadata.isRoad) {
+              const rect = document.createElementNS(svgNS, "rect");
+              rect.setAttribute("x", x * tileSize);
+              rect.setAttribute("y", y * tileSize);
+              rect.setAttribute("width", tileSize);
+              rect.setAttribute("height", tileSize);
+              rect.setAttribute("fill", "white");
+              mask.appendChild(rect);
+            }
+          }
+        }
+        
+        svg.appendChild(mask);
+        
+        // Create road surface with mask
+        const roadSurface = document.createElementNS(svgNS, "rect");
+        roadSurface.setAttribute("width", "100%");
+        roadSurface.setAttribute("height", "100%");
+        roadSurface.setAttribute("fill", "#2a2e30");
+        roadSurface.setAttribute("mask", "url(#road-mask)");
+        
+        svg.appendChild(roadSurface);
+        
+        // Add subtle texture overlay
+        const pattern = document.createElementNS(svgNS, "pattern");
+        pattern.setAttribute("id", "asphalt-texture");
+        pattern.setAttribute("width", "4");
+        pattern.setAttribute("height", "4");
+        pattern.setAttribute("patternUnits", "userSpaceOnUse");
+        
+        for (let i = 0; i < 3; i++) {
+          const circle = document.createElementNS(svgNS, "circle");
+          circle.setAttribute("cx", Math.random() * 4);
+          circle.setAttribute("cy", Math.random() * 4);
+          circle.setAttribute("r", "0.5");
+          circle.setAttribute("fill", `rgba(40, 44, 48, ${0.2 + Math.random() * 0.2})`);
+          pattern.appendChild(circle);
+        }
+        
+        svg.appendChild(pattern);
+        
+        const textureOverlay = document.createElementNS(svgNS, "rect");
+        textureOverlay.setAttribute("width", "100%");
+        textureOverlay.setAttribute("height", "100%");
+        textureOverlay.setAttribute("fill", "url(#asphalt-texture)");
+        textureOverlay.setAttribute("mask", "url(#road-mask)");
+        textureOverlay.setAttribute("opacity", "0.3");
+        
+        svg.appendChild(textureOverlay);
+        
+        container.appendChild(svg);
+        
+        console.log(`Rendered seamless road surface with ${roadPaths.length} tiles`);
       },
       
       // Render building density indicators
       renderBuildings(container) {
+        // DISABLED: Building grid icons removed for Phase 1
+        // Interactive buildings will be added separately
+        console.log('🏗️ Building grid disabled - using interactive buildings instead');
+        return;
+        
+        /* OLD CODE - REMOVED
         const grid = GameState.map.grid;
         const width = GameState.map.width;
         const height = GameState.map.height;
@@ -7233,33 +8532,38 @@
           for (let x = 0; x < width; x++) {
             const tile = grid[y][x];
             const density = tile.metadata.buildingDensity;
+            const biome = tile.biome;
             
-            if (density && density !== 'none' && !tile.metadata.isRoad) {
-              const buildingDiv = document.createElement('div');
-              buildingDiv.className = 'building-indicator';
-              buildingDiv.style.position = 'absolute';
-              buildingDiv.style.left = (x * tileSize) + 'px';
-              buildingDiv.style.top = (y * tileSize) + 'px';
-              buildingDiv.style.width = tileSize + 'px';
-              buildingDiv.style.height = tileSize + 'px';
-              buildingDiv.style.pointerEvents = 'none';
-              buildingDiv.style.display = 'flex';
-              buildingDiv.style.alignItems = 'center';
-              buildingDiv.style.justifyContent = 'center';
-              buildingDiv.style.fontSize = '8px';
-              buildingDiv.style.opacity = '0.4';
-              buildingDiv.style.zIndex = '2';
-              
-              // Show icon based on density
-              const densityConfig = BUILDING_CONFIG.DENSITY_LEVELS[density];
-              if (densityConfig && densityConfig.icon) {
-                buildingDiv.textContent = densityConfig.icon;
-              }
-              
-              container.appendChild(buildingDiv);
+            // Skip if: no density, on road, or on coastal/water biome
+            if (!density || density === 'none' || tile.metadata.isRoad || biome === 'coastal') {
+              continue;
             }
+            
+            const buildingDiv = document.createElement('div');
+            buildingDiv.className = 'building-indicator';
+            buildingDiv.style.position = 'absolute';
+            buildingDiv.style.left = (x * tileSize) + 'px';
+            buildingDiv.style.top = (y * tileSize) + 'px';
+            buildingDiv.style.width = tileSize + 'px';
+            buildingDiv.style.height = tileSize + 'px';
+            buildingDiv.style.pointerEvents = 'none';
+            buildingDiv.style.display = 'flex';
+            buildingDiv.style.alignItems = 'center';
+            buildingDiv.style.justifyContent = 'center';
+            buildingDiv.style.fontSize = '20px';
+            buildingDiv.style.opacity = '0.7';
+            buildingDiv.style.zIndex = '2';
+            
+            // Show icon based on density
+            const densityConfig = BUILDING_CONFIG.DENSITY_LEVELS[density];
+            if (densityConfig && densityConfig.icon) {
+              buildingDiv.textContent = densityConfig.icon;
+            }
+            
+            container.appendChild(buildingDiv);
           }
         }
+        */
       }
     };
 
@@ -7284,6 +8588,73 @@
       ROAD_CONFIG.ENABLE_ROADS = enabled;
       ProceduralMapRenderer.forceRender();
       console.log('Road rendering:', enabled ? 'ENABLED' : 'DISABLED');
+    };
+
+    // Building debug utilities
+    window.showBuildingInfo = function() {
+      console.log('=== Interactive Buildings ===');
+      const buildings = GameState.map.buildings || [];
+      console.log('Total buildings:', buildings.length);
+      buildings.forEach(b => {
+        console.log(`  ${b.icon} ${b.name} (${b.id})`);
+        console.log(`    Tile: (${b.x}, ${b.y}) → ${b.xPercent.toFixed(1)}%, ${b.yPercent.toFixed(1)}%`);
+        console.log(`    Biome: ${b.biome}`);
+      });
+      console.log('============================');
+    };
+
+    window.resetBuildings = function() {
+      console.log('Resetting buildings...');
+      GameState.map.buildings = [];
+      initInteractiveBuildings();
+      TurfTab.render();
+      Storage.save();
+      console.log('Buildings reset and re-placed.');
+    };
+
+    window.forceRenderBuildings = function() {
+      InteractiveBuildings.renderBuildings();
+    };
+    
+    window.debugMap = function() {
+      console.log('=== MAP DEBUG INFO ===');
+      console.log('GameState.map.seed:', GameState.map.seed);
+      console.log('GameState.map.grid exists:', GameState.map.grid !== null);
+      console.log('GameState.map.width:', GameState.map.width);
+      console.log('GameState.map.height:', GameState.map.height);
+      console.log('GameState.map.buildings:', GameState.map.buildings ? GameState.map.buildings.length : 'null/undefined');
+      console.log('ProceduralMapRenderer.rendered:', ProceduralMapRenderer.rendered);
+      
+      const mapContainer = document.getElementById('city-map');
+      console.log('city-map element exists:', mapContainer !== null);
+      
+      if (mapContainer) {
+        const tileLayer = mapContainer.querySelector('#tile-layer');
+        const unifiedLayer = mapContainer.querySelector('#unified-biome-layer');
+        console.log('tile-layer exists:', tileLayer !== null);
+        console.log('unified-biome-layer exists:', unifiedLayer !== null);
+        console.log('city-map children:', mapContainer.children.length);
+        Array.from(mapContainer.children).forEach((child, i) => {
+          console.log(`  [${i}] ${child.tagName}#${child.id || '(no id)'}`);
+        });
+      }
+      console.log('======================');
+    };
+    
+    window.forceMapRender = function() {
+      console.log('Forcing map render...');
+      ProceduralMapRenderer.rendered = false;
+      ProceduralMapRenderer.renderMap();
+      InteractiveBuildings.renderBuildings();
+    };
+    
+    window.placeBuildingsNow = function() {
+      console.log('Manually placing buildings...');
+      GameState.map.buildings = []; // Clear existing
+      initInteractiveBuildings();
+      InteractiveBuildings.renderBuildings();
+      Storage.save();
+      console.log('Buildings placed:', GameState.map.buildings.length);
     };
 
     // ========================================
@@ -7458,6 +8829,14 @@
             // Sort by enhanced score
             validCandidates.sort((a, b) => b.score - a.score);
             const best = validCandidates[0];
+            
+            // Reserve tile in occupancy grid BEFORE creating landmark
+            const reserved = TileOccupancy.reserveLandmark(best.x, best.y, landmarkId);
+            
+            if (!reserved) {
+              console.warn(`Failed to reserve tile for enhanced landmark ${landmarkId}`);
+              continue;
+            }
             
             // Create landmark
             const landmark = {
@@ -11652,6 +13031,14 @@
           });
         }
         
+        // Initialize map refresh button
+        const refreshBtn = document.getElementById('map-refresh-btn');
+        if (refreshBtn) {
+          refreshBtn.addEventListener('click', () => {
+            this.regenerateMap();
+          });
+        }
+        
         // Start heat decay system
         this.startHeatDecay();
         
@@ -11760,6 +13147,76 @@
         }
         
         console.log('Free roam stopped');
+      },
+      
+      regenerateMap() {
+        console.log('=== REGENERATING MAP ===');
+        
+        // Show spinning animation
+        const refreshBtn = document.getElementById('map-refresh-btn');
+        if (refreshBtn) {
+          refreshBtn.classList.add('spinning');
+          setTimeout(() => refreshBtn.classList.remove('spinning'), 500);
+        }
+        
+        // Stop free roam if active
+        if (GameState.character.freeRoam) {
+          this.stopFreeRoam();
+          GameState.character.freeRoam = false;
+          this.updateRoamButton();
+        }
+        
+        // Generate a new random seed
+        GameState.map.seed = Date.now() + Math.floor(Math.random() * 1000000);
+        console.log('New map seed:', GameState.map.seed);
+        
+        // Clear existing map data
+        GameState.map.grid = null;
+        GameState.map.buildings = [];
+        GameState.map.biomeCenters = null;
+        GameState.mapIcons = [];
+        
+        // Clear tile occupancy grid
+        TileOccupancy.clear();
+        
+        // Reset the renderer flag
+        ProceduralMapRenderer.rendered = false;
+        
+        // Re-initialize procedural map (this also initializes TileOccupancy)
+        initProceduralMap();
+        
+        // Re-initialize landmarks
+        initProceduralLandmarks();
+        
+        // Re-initialize roads and buildings
+        initRoadsAndBuildings();
+        
+        // Apply enhanced landmark placement
+        initEnhancedProceduralLandmarks();
+        
+        // Re-render the map
+        ProceduralMapRenderer.renderMap();
+        
+        // Re-render map icons
+        this.renderIcons();
+        
+        // Re-render buildings
+        InteractiveBuildings.renderBuildings();
+        
+        // Reset character to safe house position
+        const safeHouse = GameState.mapIcons.find(i => i.type === 'safeHouse');
+        if (safeHouse) {
+          GameState.character.position = { x: safeHouse.x, y: safeHouse.y };
+        }
+        this.renderCharacter();
+        
+        // Save the new map
+        Storage.save();
+        
+        // Show notification
+        this.showTemporaryNotification('🗺️ Map regenerated!');
+        
+        console.log('=== MAP REGENERATION COMPLETE ===');
       },
       
       moveCharacter() {
@@ -13219,7 +14676,7 @@
         // Clear existing icons
         iconsContainer.innerHTML = '';
         
-        // Render each map icon
+        // Render each map icon (landmarks)
         GameState.mapIcons.forEach((iconData, index) => {
           const iconEl = document.createElement('div');
           iconEl.className = `map-icon ${iconData.state}`;
@@ -13241,6 +14698,9 @@
         });
         
         console.log(`Rendered ${GameState.mapIcons.length} icons`);
+        
+        // PHASE 1: Render interactive buildings
+        InteractiveBuildings.renderBuildings();
         
         // Update risk-based brightness
         this.updateIconRiskLevels();
@@ -13309,8 +14769,17 @@
         console.log("Map hotspots:", GameState.mapMemory.hotspots.length);
         console.log("RNG Memory - Events:", GameState.player.rngMemory.eventOutcomes.length, "recent outcomes");
         console.log("RNG Memory - Raids:", GameState.player.rngMemory.raidOutcomes.length, "recent outcomes");
+        console.log("Map grid exists:", GameState.map.grid !== null);
+        console.log("Buildings count:", GameState.map.buildings ? GameState.map.buildings.length : 0);
         
         // PHASE 7.4D: Render procedural map tiles
+        // Reset render flag if SVG is missing (handles tab switching issues)
+        const mapContainer = document.getElementById('city-map');
+        if (mapContainer && !mapContainer.querySelector('#unified-biome-layer')) {
+          console.log("🗺️ SVG missing - resetting render flag");
+          ProceduralMapRenderer.rendered = false;
+        }
+        
         ProceduralMapRenderer.renderMap();
         
         this.renderMap();
@@ -14689,6 +16158,7 @@
       console.log("Fatigue Consecutive Actions:", GameState.player.fatigue.consecutiveActions);
       console.log("Map Memory System Active");
       console.log("Active Hotspots:", GameState.mapMemory.hotspots.length);
+      console.log("Interactive Buildings:", GameState.map.buildings ? GameState.map.buildings.length : 0);
       console.log("Failure Continuation System Active");
       console.log("Player History Events:", GameState.player.history.length);
       console.log("Crimes System Active");
