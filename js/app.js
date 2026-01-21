@@ -17699,9 +17699,9 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
 
             // feet walk + body idle + feet idle frames 0..11
             for (let i=0;i<12;i++){
-              const fk = `top_down_survivor/feet/walk/survivor-walk_${i}.png`;
-              const bk = `top_down_survivor/handgun/idle/survivor-idle_handgun_${i}.png`;
-              const ik = `top_down_survivor/feet/idle/survivor-idle_${i}.png`;
+              const fk = `sprites/top_down_survivor/feet/walk/survivor-walk_${i}.png`;
+              const bk = `sprites/top_down_survivor/handgun/idle/survivor-idle_handgun_${i}.png`;
+              const ik = `sprites/top_down_survivor/feet/idle/survivor-idle_${i}.png`;
               if (lowerMap.has(fk)) feetWalk.push(await toUrl(lowerMap.get(fk)));
               if (lowerMap.has(bk)) bodyIdle.push(await toUrl(lowerMap.get(bk)));
               if (lowerMap.has(ik)) feetIdle.push(await toUrl(lowerMap.get(ik)));
