@@ -6478,6 +6478,9 @@ const CartoonSpriteGenerator = {
           // Update damage numbers
           updateDamageNumbers(dt);
 
+          // Update loot pickups
+          updateLootPickups(dt);
+
           // Check wave completion (all enemies dead)
           const aliveEnemies = defense.enemies.filter(e => e.state !== 'dead');
           if (aliveEnemies.length === 0 && defense.enemies.length > 0) {
@@ -6567,6 +6570,9 @@ const CartoonSpriteGenerator = {
       defense.enemies.forEach(enemy => {
         TurfDefenseRenderer.drawEnemy(ctx, enemy);
       });
+
+      // Render loot drops
+      TurfDefenseRenderer.drawLoot(ctx, defense);
 
       // Render player
       TurfDefenseRenderer.drawPlayer(ctx, defense);
@@ -6809,6 +6815,164 @@ const CartoonSpriteGenerator = {
     }
 
     // ========================================
+    // TURF DEFENSE: LOOT DROP SYSTEM
+    // ========================================
+
+    /**
+     * Loot drop configuration
+     */
+    const LootConfig = {
+      // Loot types and their properties
+      types: {
+        money: {
+          minValue: 50,
+          maxValue: 200,
+          probability: 0.6, // 60% chance
+          color: '#4CAF50', // Green
+          icon: '$',
+          reward: 'cash'
+        },
+        xpBubble: {
+          minValue: 10,
+          maxValue: 50,
+          probability: 0.5, // 50% chance
+          color: '#2196F3', // Blue
+          icon: 'XP',
+          reward: 'xp'
+        },
+        gunParts: {
+          minValue: 1,
+          maxValue: 3,
+          probability: 0.3, // 30% chance
+          color: '#FF9800', // Orange
+          icon: '🔧',
+          reward: 'parts'
+        },
+        rareWeapon: {
+          minValue: 1,
+          maxValue: 1,
+          probability: 0.05, // 5% chance (rare)
+          color: '#9C27B0', // Purple
+          icon: '⚔️',
+          reward: 'weapon'
+        }
+      },
+      pickupRadius: 40, // pixels - how close player must be to pick up
+      dropOffsetRadius: 20 // pixels - random offset from enemy position
+    };
+
+    /**
+     * Spawn loot drops when an enemy dies
+     * @param {number} x - Enemy X position
+     * @param {number} y - Enemy Y position
+     */
+    function spawnLoot(x, y) {
+      const defense = GameState.turfDefense;
+      if (!defense.active) return;
+
+      // Roll for each loot type
+      Object.keys(LootConfig.types).forEach(lootType => {
+        const config = LootConfig.types[lootType];
+
+        // Check probability
+        if (Math.random() <= config.probability) {
+          // Calculate random offset from enemy position
+          const angle = Math.random() * Math.PI * 2;
+          const distance = Math.random() * LootConfig.dropOffsetRadius;
+          const offsetX = Math.cos(angle) * distance;
+          const offsetY = Math.sin(angle) * distance;
+
+          // Calculate loot value
+          const value = Math.floor(
+            Math.random() * (config.maxValue - config.minValue + 1) + config.minValue
+          );
+
+          // Create loot drop
+          const loot = {
+            id: `loot_${Date.now()}_${Math.random()}`,
+            type: lootType,
+            x: x + offsetX,
+            y: y + offsetY,
+            value: value,
+            spawnTime: Date.now()
+          };
+
+          defense.lootDrops.push(loot);
+          console.log(`💰 [Loot] Spawned ${lootType} (${value}) at (${loot.x.toFixed(0)}, ${loot.y.toFixed(0)})`);
+        }
+      });
+    }
+
+    /**
+     * Check for loot pickups near player
+     * Called each frame in update loop
+     * @param {number} dt - Delta time in seconds
+     */
+    function updateLootPickups(dt) {
+      const defense = GameState.turfDefense;
+      if (!defense.active) return;
+
+      const playerX = defense.playerX || TurfDefenseConfig.PLAYER_START_X;
+      const playerY = defense.playerY || TurfDefenseConfig.PLAYER_START_Y;
+
+      // Check each loot drop for pickup
+      defense.lootDrops = defense.lootDrops.filter(loot => {
+        const dx = loot.x - playerX;
+        const dy = loot.y - playerY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        // Check if player is close enough to pick up
+        if (distance <= LootConfig.pickupRadius) {
+          // Pick up the loot
+          pickupLoot(loot);
+          return false; // Remove from array
+        }
+
+        return true; // Keep in array
+      });
+    }
+
+    /**
+     * Apply loot rewards to player and show feedback
+     * @param {object} loot - The loot object being picked up
+     */
+    function pickupLoot(loot) {
+      const config = LootConfig.types[loot.type];
+
+      // Apply rewards based on loot type
+      switch (config.reward) {
+        case 'cash':
+          GameState.player.cash += loot.value;
+          spawnDamageNumber(loot.x, loot.y - 10, `+$${loot.value}`, 'pickup');
+          console.log(`💰 [Loot] Picked up $${loot.value} cash`);
+          break;
+
+        case 'xp':
+          GameState.player.xp += loot.value;
+          spawnDamageNumber(loot.x, loot.y - 10, `+${loot.value} XP`, 'pickup');
+          console.log(`⭐ [Loot] Picked up ${loot.value} XP`);
+          break;
+
+        case 'parts':
+          if (!GameState.player.gunParts) GameState.player.gunParts = 0;
+          GameState.player.gunParts += loot.value;
+          spawnDamageNumber(loot.x, loot.y - 10, `+${loot.value} Parts`, 'pickup');
+          console.log(`🔧 [Loot] Picked up ${loot.value} gun parts`);
+          break;
+
+        case 'weapon':
+          // For rare weapon, add to inventory (placeholder - just show feedback for now)
+          spawnDamageNumber(loot.x, loot.y - 10, 'Rare Weapon!', 'pickup');
+          console.log(`⚔️ [Loot] Picked up rare weapon!`);
+          // TODO: Add weapon to inventory when system exists
+          break;
+      }
+
+      // Placeholder for sound effect hook
+      // playSound('pickup'); // Could be implemented later
+    }
+
+    // ========================================
     // TURF DEFENSE: COMBAT FUNCTIONS
     // ========================================
 
@@ -6932,6 +7096,9 @@ const CartoonSpriteGenerator = {
           defense.totalScore += 100;
 
           console.log(`💀 [Enemy ${hitEnemy.id}] Killed! Total kills: ${defense.enemiesKilled}`);
+
+          // Spawn loot drops at enemy position
+          spawnLoot(hitEnemy.x, hitEnemy.y);
 
           // Remove dead enemy after short delay
           setTimeout(() => {
@@ -7190,6 +7357,47 @@ const CartoonSpriteGenerator = {
       },
 
       /**
+       * Draw loot drops (placeholder shapes)
+       */
+      drawLoot(ctx, defense) {
+        defense.lootDrops.forEach(loot => {
+          const config = LootConfig.types[loot.type];
+          if (!config) return;
+
+          // Add gentle bobbing animation
+          const timeSinceSpawn = Date.now() - loot.spawnTime;
+          const bobOffset = Math.sin(timeSinceSpawn / 300) * 3;
+
+          // Draw loot circle
+          ctx.beginPath();
+          ctx.arc(loot.x, loot.y + bobOffset, 12, 0, Math.PI * 2);
+          ctx.fillStyle = config.color;
+          ctx.fill();
+
+          // Loot outline
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+
+          // Draw icon/text
+          ctx.fillStyle = '#fff';
+          ctx.font = 'bold 12px monospace';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(config.icon, loot.x, loot.y + bobOffset);
+
+          // Draw pickup radius indicator (subtle)
+          ctx.beginPath();
+          ctx.arc(loot.x, loot.y + bobOffset, LootConfig.pickupRadius, 0, Math.PI * 2);
+          ctx.strokeStyle = config.color;
+          ctx.lineWidth = 1;
+          ctx.globalAlpha = 0.2;
+          ctx.stroke();
+          ctx.globalAlpha = 1.0;
+        });
+      },
+
+      /**
        * Draw floating damage numbers
        */
       drawDamageNumbers(ctx, defense) {
@@ -7213,6 +7421,9 @@ const CartoonSpriteGenerator = {
             ctx.strokeStyle = '#000';
           } else if (dmg.type === 'crit') {
             ctx.fillStyle = '#FFD700'; // Gold for crits
+            ctx.strokeStyle = '#000';
+          } else if (dmg.type === 'pickup') {
+            ctx.fillStyle = '#FFD700'; // Gold for pickups
             ctx.strokeStyle = '#000';
           }
 
