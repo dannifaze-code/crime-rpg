@@ -6083,6 +6083,10 @@ const CartoonSpriteGenerator = {
         playerX: 400,               // Player X position
         playerY: 300,               // Player Y position
         magazineCount: 5,           // Available magazines for reloading
+        currentAmmo: 10,            // Current ammo in weapon
+        maxAmmo: 10,                // Maximum ammo per magazine
+        isReloading: false,         // Is player currently reloading
+        reloadStartTime: 0,         // Timestamp when reload started
         lastSpawnTime: 0,           // Timestamp of last enemy spawn
         waveState: 'inactive',      // 'inactive' | 'preparing' | 'active' | 'complete' | 'failed'
         waveStartTime: 0,           // When current wave started
@@ -6356,6 +6360,10 @@ const CartoonSpriteGenerator = {
         mainBase: 1000
       };
       GameState.turfDefense.magazineCount = 5;
+      GameState.turfDefense.currentAmmo = 10;
+      GameState.turfDefense.maxAmmo = 10;
+      GameState.turfDefense.isReloading = false;
+      GameState.turfDefense.reloadStartTime = 0;
       GameState.turfDefense.lastSpawnTime = Date.now();
       GameState.turfDefense.waveState = 'preparing';
       GameState.turfDefense.waveStartTime = Date.now();
@@ -6620,6 +6628,10 @@ const CartoonSpriteGenerator = {
       PLAYER_START_Y: 300,
       PLAYER_SPEED: 100, // pixels per second
       PLAYER_SHOOT_RANGE: 200,
+
+      // Weapon & Ammo system
+      WEAPON_AMMO_CAPACITY: 10, // Bullets per magazine
+      WEAPON_RELOAD_TIME: 2000, // ms - time to reload
 
       // Building positions (main base at center)
       BUILDINGS: [
@@ -7042,6 +7054,19 @@ const CartoonSpriteGenerator = {
       const defense = GameState.turfDefense;
       if (!defense.active) return;
 
+      // Check if reloading
+      if (defense.isReloading) {
+        console.log('🔄 [Shoot] Cannot shoot while reloading');
+        return;
+      }
+
+      // Check if out of ammo
+      if (defense.currentAmmo <= 0) {
+        console.log('🔫 [Shoot] Out of ammo! Reloading...');
+        startReload();
+        return;
+      }
+
       const playerX = defense.playerX || TurfDefenseConfig.PLAYER_START_X;
       const playerY = defense.playerY || TurfDefenseConfig.PLAYER_START_Y;
 
@@ -7054,6 +7079,10 @@ const CartoonSpriteGenerator = {
         console.log('🎯 [Shoot] Out of range');
         return;
       }
+
+      // Consume ammo
+      defense.currentAmmo--;
+      console.log(`🔫 [Shoot] Ammo: ${defense.currentAmmo}/${defense.maxAmmo}`);
 
       // Check if any enemy is hit (simple radius check)
       let hitEnemy = null;
@@ -7109,6 +7138,54 @@ const CartoonSpriteGenerator = {
           }, 500);
         }
       }
+
+      // Auto-reload if ammo is empty
+      if (defense.currentAmmo <= 0) {
+        console.log('🔫 [Shoot] Magazine empty! Auto-reloading...');
+        startReload();
+      }
+    }
+
+    /**
+     * Start reloading weapon
+     */
+    function startReload() {
+      const defense = GameState.turfDefense;
+      if (!defense.active) return;
+
+      // Already reloading
+      if (defense.isReloading) {
+        console.log('🔄 [Reload] Already reloading');
+        return;
+      }
+
+      // Check if we have magazines left
+      if (defense.magazineCount <= 0) {
+        console.log('❌ [Reload] No magazines left!');
+        return;
+      }
+
+      // Check if magazine is already full
+      if (defense.currentAmmo >= defense.maxAmmo) {
+        console.log('✅ [Reload] Magazine already full');
+        return;
+      }
+
+      // Start reload
+      defense.isReloading = true;
+      defense.reloadStartTime = Date.now();
+      defense.magazineCount--;
+
+      console.log(`🔄 [Reload] Reloading... (${defense.magazineCount} magazines remaining)`);
+
+      // Complete reload after reload time
+      setTimeout(() => {
+        if (defense.active && defense.isReloading) {
+          defense.currentAmmo = defense.maxAmmo;
+          defense.isReloading = false;
+          console.log('✅ [Reload] Reload complete!');
+        }
+      }, TurfDefenseConfig.WEAPON_RELOAD_TIME);
     }
 
     // ========================================
@@ -7354,6 +7431,69 @@ const CartoonSpriteGenerator = {
         ctx.font = '10px monospace';
         ctx.textAlign = 'center';
         ctx.fillText('YOU', playerX, playerY + 5);
+
+        // Display ammo count next to player (right side)
+        ctx.fillStyle = '#FFD700'; // Gold color
+        ctx.font = 'bold 14px monospace';
+        ctx.textAlign = 'left';
+        ctx.fillText(`X${defense.currentAmmo}`, playerX + 28, playerY + 5);
+
+        // Reload animation overlay
+        if (defense.isReloading) {
+          const elapsed = Date.now() - defense.reloadStartTime;
+          const progress = Math.min(1, elapsed / TurfDefenseConfig.WEAPON_RELOAD_TIME);
+
+          // Spinning reload icon above player
+          const iconY = playerY - 50;
+          const angle = (Date.now() / 100) % (Math.PI * 2); // Spin animation
+
+          ctx.save();
+          ctx.translate(playerX, iconY);
+          ctx.rotate(angle);
+
+          // Draw reload icon (circular arrows)
+          ctx.strokeStyle = '#FFA500'; // Orange
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(0, 0, 10, 0, Math.PI * 1.5);
+          ctx.stroke();
+
+          // Arrow head
+          ctx.beginPath();
+          ctx.moveTo(0, -10);
+          ctx.lineTo(-3, -13);
+          ctx.lineTo(3, -10);
+          ctx.closePath();
+          ctx.fillStyle = '#FFA500';
+          ctx.fill();
+
+          ctx.restore();
+
+          // Progress bar
+          const barWidth = 40;
+          const barHeight = 4;
+          const barX = playerX - barWidth / 2;
+          const barY = iconY + 15;
+
+          // Background
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+          ctx.fillRect(barX, barY, barWidth, barHeight);
+
+          // Progress fill
+          ctx.fillStyle = '#FFA500';
+          ctx.fillRect(barX, barY, barWidth * progress, barHeight);
+
+          // Border
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(barX, barY, barWidth, barHeight);
+
+          // Reload text
+          ctx.fillStyle = '#FFA500';
+          ctx.font = 'bold 10px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText('RELOADING', playerX, barY - 5);
+        }
       },
 
       /**
