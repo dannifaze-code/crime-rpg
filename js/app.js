@@ -6353,6 +6353,9 @@ const CartoonSpriteGenerator = {
 
       console.log('✅ [TurfDefense] Mode started - Wave', GameState.turfDefense.wave, 'State:', GameState.turfDefense.waveState);
 
+      // Initialize touch controls for mobile
+      TouchControls.init();
+
       // TODO: Switch to defense UI
       // TODO: Show wave prep screen
 
@@ -6377,6 +6380,9 @@ const CartoonSpriteGenerator = {
       const finalScore = GameState.turfDefense.totalScore;
       const finalWave = GameState.turfDefense.wave;
       const enemiesKilled = GameState.turfDefense.enemiesKilled;
+
+      // Cleanup touch controls
+      TouchControls.destroy();
 
       // Mark as inactive
       GameState.turfDefense.active = false;
@@ -6504,6 +6510,432 @@ const CartoonSpriteGenerator = {
         console.log('[TurfDefense] Rendering - Wave:', defense.wave, 'Enemies:', defense.enemies.length);
       }
     }
+
+    // ========================================
+    // TURF DEFENSE: MOBILE TOUCH CONTROLS
+    // ========================================
+
+    /**
+     * Touch Controls for Turf Defense Mode
+     * Handles virtual joystick and action buttons for mobile devices
+     */
+    const TouchControls = {
+      // DOM elements
+      container: null,
+      joystickContainer: null,
+      joystickKnob: null,
+      shootButton: null,
+      sprayButton: null,
+      ultimateButton: null,
+
+      // Joystick state
+      joystick: {
+        active: false,
+        startX: 0,
+        startY: 0,
+        currentX: 0,
+        currentY: 0,
+        touchId: null,
+        maxDistance: 50 // pixels
+      },
+
+      // Player movement vector (normalized)
+      movement: {
+        x: 0,
+        y: 0
+      },
+
+      /**
+       * Initialize and inject touch controls into DOM
+       */
+      init() {
+        console.log('🎮 [TouchControls] Initializing mobile controls...');
+
+        // Create main container
+        this.container = document.createElement('div');
+        this.container.id = 'turf-defense-controls';
+        this.container.style.cssText = `
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100vw;
+          height: 100vh;
+          pointer-events: none;
+          z-index: 9999;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        `;
+
+        // Create virtual joystick (left side)
+        this.createJoystick();
+
+        // Create action buttons (right side)
+        this.createActionButtons();
+
+        // Append to body
+        document.body.appendChild(this.container);
+
+        console.log('✅ [TouchControls] Controls initialized');
+      },
+
+      /**
+       * Create virtual joystick on left side
+       */
+      createJoystick() {
+        // Joystick container (larger hit area)
+        this.joystickContainer = document.createElement('div');
+        this.joystickContainer.id = 'joystick-container';
+        this.joystickContainer.style.cssText = `
+          position: absolute;
+          bottom: 20px;
+          left: 20px;
+          width: 140px;
+          height: 140px;
+          background: rgba(0, 0, 0, 0.3);
+          border: 3px solid rgba(255, 255, 255, 0.4);
+          border-radius: 50%;
+          pointer-events: auto;
+          touch-action: none;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        `;
+
+        // Joystick knob (moves within container)
+        this.joystickKnob = document.createElement('div');
+        this.joystickKnob.id = 'joystick-knob';
+        this.joystickKnob.style.cssText = `
+          width: 60px;
+          height: 60px;
+          background: rgba(255, 255, 255, 0.8);
+          border: 3px solid rgba(255, 255, 255, 1);
+          border-radius: 50%;
+          transition: transform 0.05s ease-out;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+        `;
+
+        this.joystickContainer.appendChild(this.joystickKnob);
+        this.container.appendChild(this.joystickContainer);
+
+        // Bind joystick events
+        this.bindJoystickEvents();
+      },
+
+      /**
+       * Create action buttons on right side
+       */
+      createActionButtons() {
+        const buttonContainer = document.createElement('div');
+        buttonContainer.id = 'action-buttons-container';
+        buttonContainer.style.cssText = `
+          position: absolute;
+          bottom: 20px;
+          right: 20px;
+          display: flex;
+          flex-direction: column;
+          gap: 15px;
+          align-items: flex-end;
+        `;
+
+        // Shoot button (primary action)
+        this.shootButton = this.createButton('shoot', '🔫', 'rgba(220, 50, 50, 0.9)');
+
+        // Spray button (secondary action)
+        this.sprayButton = this.createButton('spray', '💨', 'rgba(100, 150, 220, 0.9)');
+
+        // Ultimate button (special action)
+        this.ultimateButton = this.createButton('ultimate', '⚡', 'rgba(255, 200, 50, 0.9)');
+
+        buttonContainer.appendChild(this.shootButton);
+        buttonContainer.appendChild(this.sprayButton);
+        buttonContainer.appendChild(this.ultimateButton);
+        this.container.appendChild(buttonContainer);
+      },
+
+      /**
+       * Create a single action button
+       */
+      createButton(id, icon, color) {
+        const button = document.createElement('button');
+        button.id = `action-${id}`;
+        button.innerHTML = `<span style="font-size: 32px;">${icon}</span>`;
+        button.style.cssText = `
+          width: 80px;
+          height: 80px;
+          background: ${color};
+          border: 3px solid rgba(255, 255, 255, 0.6);
+          border-radius: 50%;
+          color: white;
+          font-size: 24px;
+          font-weight: bold;
+          cursor: pointer;
+          pointer-events: auto;
+          touch-action: manipulation;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+          transition: transform 0.1s, box-shadow 0.1s;
+          user-select: none;
+          -webkit-tap-highlight-color: transparent;
+        `;
+
+        // Touch feedback
+        button.addEventListener('touchstart', (e) => {
+          e.preventDefault();
+          button.style.transform = 'scale(0.9)';
+          button.style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.4)';
+
+          // Call appropriate handler
+          if (id === 'shoot') this.onShoot();
+          else if (id === 'spray') this.onSpray();
+          else if (id === 'ultimate') this.onUltimate();
+        });
+
+        button.addEventListener('touchend', (e) => {
+          e.preventDefault();
+          button.style.transform = 'scale(1)';
+          button.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.4)';
+        });
+
+        // Mouse events for desktop testing
+        button.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          button.style.transform = 'scale(0.9)';
+
+          if (id === 'shoot') this.onShoot();
+          else if (id === 'spray') this.onSpray();
+          else if (id === 'ultimate') this.onUltimate();
+        });
+
+        button.addEventListener('mouseup', (e) => {
+          e.preventDefault();
+          button.style.transform = 'scale(1)';
+        });
+
+        return button;
+      },
+
+      /**
+       * Bind joystick touch events
+       */
+      bindJoystickEvents() {
+        // Touch start
+        this.joystickContainer.addEventListener('touchstart', (e) => {
+          e.preventDefault();
+          const touch = e.touches[0];
+          this.joystick.active = true;
+          this.joystick.touchId = touch.identifier;
+
+          const rect = this.joystickContainer.getBoundingClientRect();
+          this.joystick.startX = rect.left + rect.width / 2;
+          this.joystick.startY = rect.top + rect.height / 2;
+
+          this.updateJoystick(touch.clientX, touch.clientY);
+        });
+
+        // Touch move
+        document.addEventListener('touchmove', (e) => {
+          if (!this.joystick.active) return;
+
+          for (let i = 0; i < e.touches.length; i++) {
+            const touch = e.touches[i];
+            if (touch.identifier === this.joystick.touchId) {
+              e.preventDefault();
+              this.updateJoystick(touch.clientX, touch.clientY);
+              break;
+            }
+          }
+        }, { passive: false });
+
+        // Touch end
+        document.addEventListener('touchend', (e) => {
+          if (!this.joystick.active) return;
+
+          for (let i = 0; i < e.changedTouches.length; i++) {
+            const touch = e.changedTouches[i];
+            if (touch.identifier === this.joystick.touchId) {
+              this.joystick.active = false;
+              this.joystick.touchId = null;
+              this.resetJoystick();
+              break;
+            }
+          }
+        });
+
+        // Mouse events for desktop testing
+        this.joystickContainer.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          this.joystick.active = true;
+
+          const rect = this.joystickContainer.getBoundingClientRect();
+          this.joystick.startX = rect.left + rect.width / 2;
+          this.joystick.startY = rect.top + rect.height / 2;
+
+          this.updateJoystick(e.clientX, e.clientY);
+        });
+
+        document.addEventListener('mousemove', (e) => {
+          if (!this.joystick.active) return;
+          this.updateJoystick(e.clientX, e.clientY);
+        });
+
+        document.addEventListener('mouseup', () => {
+          if (this.joystick.active) {
+            this.joystick.active = false;
+            this.resetJoystick();
+          }
+        });
+      },
+
+      /**
+       * Update joystick position and movement vector
+       */
+      updateJoystick(clientX, clientY) {
+        const deltaX = clientX - this.joystick.startX;
+        const deltaY = clientY - this.joystick.startY;
+        const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+        // Clamp to max distance
+        let finalX = deltaX;
+        let finalY = deltaY;
+
+        if (distance > this.joystick.maxDistance) {
+          const angle = Math.atan2(deltaY, deltaX);
+          finalX = Math.cos(angle) * this.joystick.maxDistance;
+          finalY = Math.sin(angle) * this.joystick.maxDistance;
+        }
+
+        // Update knob position
+        this.joystickKnob.style.transform = `translate(${finalX}px, ${finalY}px)`;
+
+        // Update movement vector (normalized -1 to 1)
+        this.movement.x = finalX / this.joystick.maxDistance;
+        this.movement.y = finalY / this.joystick.maxDistance;
+
+        // Debug log (throttled)
+        if (Math.random() < 0.05) {
+          console.log('[TouchControls] Movement:',
+            'X:', this.movement.x.toFixed(2),
+            'Y:', this.movement.y.toFixed(2)
+          );
+        }
+      },
+
+      /**
+       * Reset joystick to center
+       */
+      resetJoystick() {
+        this.joystickKnob.style.transform = 'translate(0, 0)';
+        this.movement.x = 0;
+        this.movement.y = 0;
+      },
+
+      /**
+       * Get current movement vector
+       */
+      getMovement() {
+        return {
+          x: this.movement.x,
+          y: this.movement.y
+        };
+      },
+
+      // ========================================
+      // ACTION BUTTON HANDLERS (STUBS)
+      // ========================================
+
+      /**
+       * Shoot action handler
+       */
+      onShoot() {
+        console.log('🔫 [TouchControls] SHOOT!');
+
+        // TODO: Implement shooting logic
+        // - Fire weapon at enemies
+        // - Consume ammo
+        // - Apply recoil
+        // - Check magazine count
+        // - Play sound effects
+
+        // Visual feedback
+        if (this.shootButton) {
+          this.shootButton.style.background = 'rgba(255, 100, 100, 0.9)';
+          setTimeout(() => {
+            this.shootButton.style.background = 'rgba(220, 50, 50, 0.9)';
+          }, 100);
+        }
+      },
+
+      /**
+       * Spray action handler
+       */
+      onSpray() {
+        console.log('💨 [TouchControls] SPRAY ATTACK!');
+
+        // TODO: Implement spray attack logic
+        // - Area-of-effect damage
+        // - Slow enemies
+        // - Limited uses/cooldown
+        // - Play particle effects
+
+        // Visual feedback
+        if (this.sprayButton) {
+          this.sprayButton.style.background = 'rgba(150, 200, 255, 0.9)';
+          setTimeout(() => {
+            this.sprayButton.style.background = 'rgba(100, 150, 220, 0.9)';
+          }, 100);
+        }
+      },
+
+      /**
+       * Ultimate action handler
+       */
+      onUltimate() {
+        console.log('⚡ [TouchControls] ULTIMATE ABILITY!');
+
+        // TODO: Implement ultimate ability
+        // - Check if charged
+        // - Screen-clearing attack
+        // - Temporary buffs
+        // - Cooldown timer
+        // - Epic visual effects
+
+        // Visual feedback
+        if (this.ultimateButton) {
+          this.ultimateButton.style.background = 'rgba(255, 255, 100, 0.9)';
+          setTimeout(() => {
+            this.ultimateButton.style.background = 'rgba(255, 200, 50, 0.9)';
+          }, 100);
+        }
+      },
+
+      /**
+       * Cleanup and remove all touch controls
+       */
+      destroy() {
+        console.log('🗑️ [TouchControls] Removing controls...');
+
+        if (this.container && this.container.parentNode) {
+          this.container.parentNode.removeChild(this.container);
+        }
+
+        // Reset references
+        this.container = null;
+        this.joystickContainer = null;
+        this.joystickKnob = null;
+        this.shootButton = null;
+        this.sprayButton = null;
+        this.ultimateButton = null;
+
+        // Reset state
+        this.joystick.active = false;
+        this.joystick.touchId = null;
+        this.movement.x = 0;
+        this.movement.y = 0;
+
+        console.log('✅ [TouchControls] Controls removed');
+      }
+    };
 
     // ========================================
     // CORE: Seed Generation Utilities
