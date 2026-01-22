@@ -6076,6 +6076,8 @@ const CartoonSpriteGenerator = {
           walls: []                 // Array of wall HP values
         },
         playerHP: 100,              // Player HP during defense mode
+        playerX: 400,               // Player X position
+        playerY: 300,               // Player Y position
         magazineCount: 5,           // Available magazines for reloading
         lastSpawnTime: 0,           // Timestamp of last enemy spawn
         waveState: 'inactive',      // 'inactive' | 'preparing' | 'active' | 'complete' | 'failed'
@@ -6351,7 +6353,14 @@ const CartoonSpriteGenerator = {
       GameState.turfDefense.enemiesKilled = 0;
       GameState.turfDefense.totalScore = 0;
 
+      // Initialize player position
+      GameState.turfDefense.playerX = TurfDefenseConfig.PLAYER_START_X;
+      GameState.turfDefense.playerY = TurfDefenseConfig.PLAYER_START_Y;
+
       console.log('✅ [TurfDefense] Mode started - Wave', GameState.turfDefense.wave, 'State:', GameState.turfDefense.waveState);
+
+      // Initialize renderer canvas
+      TurfDefenseRenderer.init();
 
       // Initialize touch controls for mobile
       TouchControls.init();
@@ -6380,6 +6389,9 @@ const CartoonSpriteGenerator = {
       const finalScore = GameState.turfDefense.totalScore;
       const finalWave = GameState.turfDefense.wave;
       const enemiesKilled = GameState.turfDefense.enemiesKilled;
+
+      // Cleanup renderer
+      TurfDefenseRenderer.destroy();
 
       // Cleanup touch controls
       TouchControls.destroy();
@@ -6420,29 +6432,43 @@ const CartoonSpriteGenerator = {
         case 'active':
           // Active wave - spawn enemies, update combat, check win conditions
 
-          // TODO: Enemy spawning logic
-          // const timeSinceLastSpawn = now - defense.lastSpawnTime;
-          // if (timeSinceLastSpawn > SPAWN_INTERVAL) {
-          //   spawnEnemy();
-          //   defense.lastSpawnTime = now;
-          // }
+          // Spawn enemies at start of wave (if not already spawned)
+          if (defense.enemies.length === 0 && now - defense.waveStartTime < 100) {
+            spawnWaveEnemies();
+          }
 
-          // TODO: Update enemy positions and AI
-          // defense.enemies.forEach(enemy => {
-          //   updateEnemyMovement(enemy, dt);
-          //   updateEnemyAttack(enemy, dt);
-          // });
+          // Update player movement from joystick
+          const movement = TouchControls.getMovement();
+          if (!defense.playerX) defense.playerX = TurfDefenseConfig.PLAYER_START_X;
+          if (!defense.playerY) defense.playerY = TurfDefenseConfig.PLAYER_START_Y;
 
-          // TODO: Check wave completion
-          // if (defense.enemies.length === 0 && allEnemiesSpawned) {
-          //   defense.waveState = 'complete';
-          // }
+          defense.playerX += movement.x * TurfDefenseConfig.PLAYER_SPEED * dt;
+          defense.playerY += movement.y * TurfDefenseConfig.PLAYER_SPEED * dt;
 
-          // TODO: Check failure conditions
-          // if (defense.buildingHP.mainBase <= 0) {
-          //   defense.waveState = 'failed';
-          //   endTurfDefense('base_destroyed');
-          // }
+          // Clamp player to canvas bounds
+          defense.playerX = Math.max(20, Math.min(780, defense.playerX));
+          defense.playerY = Math.max(20, Math.min(580, defense.playerY));
+
+          // Update all enemies
+          defense.enemies.forEach(enemy => {
+            updateEnemyAI(enemy, dt, defense);
+          });
+
+          // Check wave completion (all enemies dead)
+          const aliveEnemies = defense.enemies.filter(e => e.state !== 'dead');
+          if (aliveEnemies.length === 0 && defense.enemies.length > 0) {
+            defense.waveState = 'complete';
+            console.log('✅ [TurfDefense] All enemies eliminated!');
+          }
+
+          // Check failure conditions
+          if (defense.buildingHP.mainBase <= 0) {
+            defense.waveState = 'failed';
+            endTurfDefense('base_destroyed');
+          } else if (defense.playerHP <= 0) {
+            defense.waveState = 'failed';
+            endTurfDefense('player_died');
+          }
 
           break;
 
@@ -6495,21 +6521,570 @@ const CartoonSpriteGenerator = {
       if (!GameState.turfDefense.active) return;
 
       const defense = GameState.turfDefense;
+      const canvas = TurfDefenseRenderer.canvas;
+      const ctx = TurfDefenseRenderer.ctx;
 
-      // TODO: Render defense arena/map
-      // TODO: Render player
-      // TODO: Render enemies
-      // TODO: Render loot drops
-      // TODO: Render building health bars
-      // TODO: Render wave HUD (wave number, enemy count, score)
-      // TODO: Render player stats (HP, ammo, magazines)
+      if (!canvas || !ctx) return;
 
-      // Stub: Just log that we're in defense mode (for debugging)
-      // This will be replaced with actual rendering code
-      if (Math.floor(Date.now() / 1000) % 5 === 0 && Date.now() % 1000 < 16) {
-        console.log('[TurfDefense] Rendering - Wave:', defense.wave, 'Enemies:', defense.enemies.length);
+      // Clear canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Render arena background
+      ctx.fillStyle = '#2a2a2a';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Render grid
+      TurfDefenseRenderer.drawGrid(ctx, canvas.width, canvas.height);
+
+      // Render buildings
+      TurfDefenseRenderer.drawBuildings(ctx, defense);
+
+      // Render enemies
+      defense.enemies.forEach(enemy => {
+        TurfDefenseRenderer.drawEnemy(ctx, enemy);
+      });
+
+      // Render player
+      TurfDefenseRenderer.drawPlayer(ctx, defense);
+
+      // Render HUD
+      TurfDefenseRenderer.drawHUD(ctx, defense, canvas.width, canvas.height);
+    }
+
+    // ========================================
+    // TURF DEFENSE: ENEMY SYSTEM
+    // ========================================
+
+    /**
+     * Enemy System Constants
+     */
+    const TurfDefenseConfig = {
+      // Wave enemy counts
+      WAVE_ENEMIES: {
+        1: 2,
+        2: 4,
+        3: 6,
+        4: 8,
+        5: 10
+      },
+
+      // Enemy stats
+      ENEMY_HP: 100,
+      ENEMY_SPEED: 50, // pixels per second
+      ENEMY_DAMAGE: 10,
+      ENEMY_ATTACK_RANGE: 80, // pixels
+      ENEMY_ATTACK_COOLDOWN: 1500, // ms
+      ENEMY_AGGRO_RADIUS: 150, // pixels - if player gets this close, enemy aggros
+
+      // Player stats
+      PLAYER_START_X: 400,
+      PLAYER_START_Y: 300,
+      PLAYER_SPEED: 100, // pixels per second
+      PLAYER_SHOOT_RANGE: 200,
+
+      // Building positions (main base at center)
+      BUILDINGS: [
+        { id: 'mainBase', x: 400, y: 300, width: 80, height: 80, maxHP: 1000 }
+      ],
+
+      // Spawn positions (around edges of arena)
+      SPAWN_POSITIONS: [
+        { x: 50, y: 50 },
+        { x: 750, y: 50 },
+        { x: 50, y: 550 },
+        { x: 750, y: 550 },
+        { x: 400, y: 50 },
+        { x: 400, y: 550 },
+        { x: 50, y: 300 },
+        { x: 750, y: 300 }
+      ]
+    };
+
+    /**
+     * Create a new enemy entity
+     */
+    function createEnemy(id, spawnPos) {
+      return {
+        id: id,
+        x: spawnPos.x,
+        y: spawnPos.y,
+        hp: TurfDefenseConfig.ENEMY_HP,
+        maxHP: TurfDefenseConfig.ENEMY_HP,
+        state: 'moving', // 'moving' | 'attackingBuilding' | 'attackingPlayer' | 'dead'
+        targetBuildingId: 'mainBase', // Default target
+        aggroed: false,
+        lastAttackTime: 0,
+        velocity: { x: 0, y: 0 }
+      };
+    }
+
+    /**
+     * Spawn enemies for current wave
+     */
+    function spawnWaveEnemies() {
+      const defense = GameState.turfDefense;
+      const wave = defense.wave;
+      const enemyCount = TurfDefenseConfig.WAVE_ENEMIES[wave] || 10;
+
+      console.log(`🌊 [TurfDefense] Spawning ${enemyCount} enemies for wave ${wave}`);
+
+      const spawnPositions = TurfDefenseConfig.SPAWN_POSITIONS;
+
+      for (let i = 0; i < enemyCount; i++) {
+        const spawnPos = spawnPositions[i % spawnPositions.length];
+        const enemy = createEnemy(`enemy_${wave}_${i}`, spawnPos);
+        defense.enemies.push(enemy);
+      }
+
+      defense.lastSpawnTime = Date.now();
+    }
+
+    /**
+     * Update enemy AI and behavior
+     */
+    function updateEnemyAI(enemy, dt, defense) {
+      if (enemy.state === 'dead') return;
+
+      const playerX = defense.playerX || TurfDefenseConfig.PLAYER_START_X;
+      const playerY = defense.playerY || TurfDefenseConfig.PLAYER_START_Y;
+
+      // Check for proximity aggro (if player gets too close)
+      if (!enemy.aggroed) {
+        const distToPlayer = Math.sqrt(
+          Math.pow(enemy.x - playerX, 2) + Math.pow(enemy.y - playerY, 2)
+        );
+
+        if (distToPlayer < TurfDefenseConfig.ENEMY_AGGRO_RADIUS) {
+          enemy.aggroed = true;
+          console.log(`⚠️ [Enemy ${enemy.id}] Aggroed by proximity!`);
+        }
+      }
+
+      // Determine target based on aggro state
+      let targetX, targetY, targetType;
+
+      if (enemy.aggroed) {
+        // Aggroed: target player
+        targetX = playerX;
+        targetY = playerY;
+        targetType = 'player';
+      } else {
+        // Not aggroed: target building
+        const building = TurfDefenseConfig.BUILDINGS.find(b => b.id === enemy.targetBuildingId);
+        if (building) {
+          targetX = building.x;
+          targetY = building.y;
+          targetType = 'building';
+        }
+      }
+
+      // Calculate distance to target
+      const dx = targetX - enemy.x;
+      const dy = targetY - enemy.y;
+      const distToTarget = Math.sqrt(dx * dx + dy * dy);
+
+      // Check if in attack range
+      if (distToTarget < TurfDefenseConfig.ENEMY_ATTACK_RANGE) {
+        // In range - attack
+        enemy.velocity.x = 0;
+        enemy.velocity.y = 0;
+
+        if (targetType === 'player') {
+          enemy.state = 'attackingPlayer';
+          tryEnemyAttackPlayer(enemy, defense);
+        } else {
+          enemy.state = 'attackingBuilding';
+          tryEnemyAttackBuilding(enemy, defense);
+        }
+      } else {
+        // Out of range - move toward target
+        enemy.state = 'moving';
+
+        // Normalize direction and apply speed
+        const dirX = dx / distToTarget;
+        const dirY = dy / distToTarget;
+
+        enemy.velocity.x = dirX * TurfDefenseConfig.ENEMY_SPEED;
+        enemy.velocity.y = dirY * TurfDefenseConfig.ENEMY_SPEED;
+
+        // Update position
+        enemy.x += enemy.velocity.x * dt;
+        enemy.y += enemy.velocity.y * dt;
       }
     }
+
+    /**
+     * Enemy attacks player
+     */
+    function tryEnemyAttackPlayer(enemy, defense) {
+      const now = Date.now();
+
+      if (now - enemy.lastAttackTime >= TurfDefenseConfig.ENEMY_ATTACK_COOLDOWN) {
+        // Deal damage to player
+        defense.playerHP -= TurfDefenseConfig.ENEMY_DAMAGE;
+        enemy.lastAttackTime = now;
+
+        console.log(`💥 [Enemy ${enemy.id}] Hit player! Player HP: ${defense.playerHP}`);
+
+        // Check if player died
+        if (defense.playerHP <= 0) {
+          defense.waveState = 'failed';
+          console.log('💀 [TurfDefense] Player died!');
+        }
+      }
+    }
+
+    /**
+     * Enemy attacks building
+     */
+    function tryEnemyAttackBuilding(enemy, defense) {
+      const now = Date.now();
+
+      if (now - enemy.lastAttackTime >= TurfDefenseConfig.ENEMY_ATTACK_COOLDOWN) {
+        // Deal damage to building
+        const targetId = enemy.targetBuildingId;
+
+        if (targetId === 'mainBase') {
+          defense.buildingHP.mainBase -= TurfDefenseConfig.ENEMY_DAMAGE;
+          enemy.lastAttackTime = now;
+
+          console.log(`🏚️ [Enemy ${enemy.id}] Hit main base! Base HP: ${defense.buildingHP.mainBase}`);
+
+          // Check if base destroyed
+          if (defense.buildingHP.mainBase <= 0) {
+            defense.waveState = 'failed';
+            console.log('💥 [TurfDefense] Main base destroyed!');
+          }
+        }
+      }
+    }
+
+    /**
+     * Player shoots at position - check for enemy hits
+     */
+    function playerShootAtPosition(x, y) {
+      const defense = GameState.turfDefense;
+      if (!defense.active) return;
+
+      const playerX = defense.playerX || TurfDefenseConfig.PLAYER_START_X;
+      const playerY = defense.playerY || TurfDefenseConfig.PLAYER_START_Y;
+
+      // Check distance from player (shooting range limit)
+      const shootDist = Math.sqrt(
+        Math.pow(x - playerX, 2) + Math.pow(y - playerY, 2)
+      );
+
+      if (shootDist > TurfDefenseConfig.PLAYER_SHOOT_RANGE) {
+        console.log('🎯 [Shoot] Out of range');
+        return;
+      }
+
+      // Check if any enemy is hit (simple radius check)
+      let hitEnemy = null;
+      let closestDist = 30; // Hit radius
+
+      defense.enemies.forEach(enemy => {
+        if (enemy.state === 'dead') return;
+
+        const distToEnemy = Math.sqrt(
+          Math.pow(enemy.x - x, 2) + Math.pow(enemy.y - y, 2)
+        );
+
+        if (distToEnemy < closestDist) {
+          closestDist = distToEnemy;
+          hitEnemy = enemy;
+        }
+      });
+
+      if (hitEnemy) {
+        // Deal damage
+        hitEnemy.hp -= 25; // Damage per shot
+
+        console.log(`🔫 [Shoot] Hit enemy ${hitEnemy.id}! HP: ${hitEnemy.hp}/${hitEnemy.maxHP}`);
+
+        // Aggro enemy when shot
+        if (!hitEnemy.aggroed) {
+          hitEnemy.aggroed = true;
+          console.log(`😡 [Enemy ${hitEnemy.id}] Aggroed by gunfire!`);
+        }
+
+        // Check if enemy died
+        if (hitEnemy.hp <= 0) {
+          hitEnemy.state = 'dead';
+          defense.enemiesKilled++;
+          defense.totalScore += 100;
+
+          console.log(`💀 [Enemy ${hitEnemy.id}] Killed! Total kills: ${defense.enemiesKilled}`);
+
+          // Remove dead enemy after short delay
+          setTimeout(() => {
+            const index = defense.enemies.indexOf(hitEnemy);
+            if (index > -1) {
+              defense.enemies.splice(index, 1);
+            }
+          }, 500);
+        }
+      }
+    }
+
+    // ========================================
+    // TURF DEFENSE: RENDERER (PLACEHOLDER GRAPHICS)
+    // ========================================
+
+    /**
+     * Renderer for Turf Defense mode using placeholder graphics
+     */
+    const TurfDefenseRenderer = {
+      canvas: null,
+      ctx: null,
+
+      /**
+       * Initialize renderer canvas
+       */
+      init() {
+        // Create canvas if not exists
+        if (!this.canvas) {
+          this.canvas = document.createElement('canvas');
+          this.canvas.id = 'turf-defense-canvas';
+          this.canvas.width = 800;
+          this.canvas.height = 600;
+          this.canvas.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            border: 3px solid #00ff00;
+            background: #1a1a1a;
+            z-index: 1000;
+          `;
+          document.body.appendChild(this.canvas);
+          this.ctx = this.canvas.getContext('2d');
+
+          // Add click handler for desktop shooting
+          this.canvas.addEventListener('click', (e) => {
+            const rect = this.canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            console.log(`🖱️ [Canvas] Click at (${x.toFixed(0)}, ${y.toFixed(0)})`);
+            playerShootAtPosition(x, y);
+          });
+
+          console.log('🎨 [TurfDefenseRenderer] Canvas initialized');
+        }
+      },
+
+      /**
+       * Destroy renderer canvas
+       */
+      destroy() {
+        if (this.canvas && this.canvas.parentNode) {
+          this.canvas.parentNode.removeChild(this.canvas);
+          this.canvas = null;
+          this.ctx = null;
+          console.log('🎨 [TurfDefenseRenderer] Canvas destroyed');
+        }
+      },
+
+      /**
+       * Draw grid background
+       */
+      drawGrid(ctx, width, height) {
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 1;
+
+        // Vertical lines
+        for (let x = 0; x < width; x += 50) {
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, height);
+          ctx.stroke();
+        }
+
+        // Horizontal lines
+        for (let y = 0; y < height; y += 50) {
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(width, y);
+          ctx.stroke();
+        }
+      },
+
+      /**
+       * Draw buildings (placeholder rectangles)
+       */
+      drawBuildings(ctx, defense) {
+        TurfDefenseConfig.BUILDINGS.forEach(building => {
+          const hp = defense.buildingHP[building.id] || 0;
+          const hpPercent = hp / building.maxHP;
+
+          // Building body
+          ctx.fillStyle = hpPercent > 0.5 ? '#4CAF50' : hpPercent > 0.25 ? '#FFC107' : '#F44336';
+          ctx.fillRect(
+            building.x - building.width / 2,
+            building.y - building.height / 2,
+            building.width,
+            building.height
+          );
+
+          // Building outline
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(
+            building.x - building.width / 2,
+            building.y - building.height / 2,
+            building.width,
+            building.height
+          );
+
+          // HP bar
+          const barWidth = building.width;
+          const barHeight = 6;
+          const barX = building.x - barWidth / 2;
+          const barY = building.y - building.height / 2 - 15;
+
+          // HP bar background
+          ctx.fillStyle = '#333';
+          ctx.fillRect(barX, barY, barWidth, barHeight);
+
+          // HP bar fill
+          ctx.fillStyle = '#4CAF50';
+          ctx.fillRect(barX, barY, barWidth * hpPercent, barHeight);
+
+          // Label
+          ctx.fillStyle = '#fff';
+          ctx.font = '12px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText('MAIN BASE', building.x, building.y + 5);
+        });
+      },
+
+      /**
+       * Draw enemies (placeholder circles)
+       */
+      drawEnemy(ctx, enemy) {
+        if (enemy.state === 'dead') return;
+
+        const hpPercent = enemy.hp / enemy.maxHP;
+
+        // Enemy body (circle)
+        ctx.beginPath();
+        ctx.arc(enemy.x, enemy.y, 15, 0, Math.PI * 2);
+
+        // Color based on state
+        if (enemy.state === 'attackingPlayer') {
+          ctx.fillStyle = '#FF5722'; // Red when attacking player
+        } else if (enemy.state === 'attackingBuilding') {
+          ctx.fillStyle = '#FF9800'; // Orange when attacking building
+        } else if (enemy.aggroed) {
+          ctx.fillStyle = '#F44336'; // Red when aggroed but moving
+        } else {
+          ctx.fillStyle = '#9C27B0'; // Purple when not aggroed
+        }
+
+        ctx.fill();
+
+        // Enemy outline
+        ctx.strokeStyle = enemy.aggroed ? '#fff' : '#666';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // HP bar
+        const barWidth = 30;
+        const barHeight = 4;
+        const barX = enemy.x - barWidth / 2;
+        const barY = enemy.y - 25;
+
+        // HP bar background
+        ctx.fillStyle = '#333';
+        ctx.fillRect(barX, barY, barWidth, barHeight);
+
+        // HP bar fill
+        ctx.fillStyle = hpPercent > 0.5 ? '#4CAF50' : hpPercent > 0.25 ? '#FFC107' : '#F44336';
+        ctx.fillRect(barX, barY, barWidth * hpPercent, barHeight);
+
+        // Aggro indicator
+        if (enemy.aggroed) {
+          ctx.fillStyle = '#FF0000';
+          ctx.font = '16px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText('!', enemy.x, enemy.y - 30);
+        }
+      },
+
+      /**
+       * Draw player (placeholder circle)
+       */
+      drawPlayer(ctx, defense) {
+        const playerX = defense.playerX || TurfDefenseConfig.PLAYER_START_X;
+        const playerY = defense.playerY || TurfDefenseConfig.PLAYER_START_Y;
+
+        // Player body
+        ctx.beginPath();
+        ctx.arc(playerX, playerY, 20, 0, Math.PI * 2);
+        ctx.fillStyle = '#2196F3'; // Blue
+        ctx.fill();
+
+        // Player outline
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        // HP bar
+        const hpPercent = defense.playerHP / 100;
+        const barWidth = 40;
+        const barHeight = 6;
+        const barX = playerX - barWidth / 2;
+        const barY = playerY - 35;
+
+        // HP bar background
+        ctx.fillStyle = '#333';
+        ctx.fillRect(barX, barY, barWidth, barHeight);
+
+        // HP bar fill
+        ctx.fillStyle = '#4CAF50';
+        ctx.fillRect(barX, barY, barWidth * hpPercent, barHeight);
+
+        // Label
+        ctx.fillStyle = '#fff';
+        ctx.font = '10px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('YOU', playerX, playerY + 5);
+      },
+
+      /**
+       * Draw HUD (wave info, stats)
+       */
+      drawHUD(ctx, defense, width, height) {
+        ctx.fillStyle = '#fff';
+        ctx.font = '16px monospace';
+        ctx.textAlign = 'left';
+
+        // Top-left: Wave info
+        ctx.fillText(`Wave: ${defense.wave}`, 10, 25);
+        ctx.fillText(`Enemies: ${defense.enemies.length}`, 10, 45);
+        ctx.fillText(`Kills: ${defense.enemiesKilled}`, 10, 65);
+        ctx.fillText(`Score: ${defense.totalScore}`, 10, 85);
+
+        // Top-right: Player stats
+        ctx.textAlign = 'right';
+        ctx.fillText(`HP: ${defense.playerHP}/100`, width - 10, 25);
+        ctx.fillText(`Magazines: ${defense.magazineCount}`, width - 10, 45);
+
+        // Center: Wave state message
+        if (defense.waveState === 'preparing') {
+          ctx.font = 'bold 24px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillStyle = '#FFD700';
+          ctx.fillText(`WAVE ${defense.wave} INCOMING...`, width / 2, height / 2 - 50);
+        } else if (defense.waveState === 'complete') {
+          ctx.font = 'bold 24px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillStyle = '#4CAF50';
+          ctx.fillText('WAVE COMPLETE!', width / 2, height / 2 - 50);
+        }
+      }
+    };
 
     // ========================================
     // TURF DEFENSE: MOBILE TOUCH CONTROLS
@@ -6848,14 +7423,36 @@ const CartoonSpriteGenerator = {
        * Shoot action handler
        */
       onShoot() {
-        console.log('🔫 [TouchControls] SHOOT!');
+        const defense = GameState.turfDefense;
+        if (!defense.active) return;
 
-        // TODO: Implement shooting logic
-        // - Fire weapon at enemies
-        // - Consume ammo
-        // - Apply recoil
-        // - Check magazine count
-        // - Play sound effects
+        // Find nearest enemy within shooting range
+        const playerX = defense.playerX || TurfDefenseConfig.PLAYER_START_X;
+        const playerY = defense.playerY || TurfDefenseConfig.PLAYER_START_Y;
+
+        let nearestEnemy = null;
+        let nearestDist = TurfDefenseConfig.PLAYER_SHOOT_RANGE;
+
+        defense.enemies.forEach(enemy => {
+          if (enemy.state === 'dead') return;
+
+          const dist = Math.sqrt(
+            Math.pow(enemy.x - playerX, 2) + Math.pow(enemy.y - playerY, 2)
+          );
+
+          if (dist < nearestDist) {
+            nearestDist = dist;
+            nearestEnemy = enemy;
+          }
+        });
+
+        if (nearestEnemy) {
+          // Shoot at nearest enemy
+          playerShootAtPosition(nearestEnemy.x, nearestEnemy.y);
+          console.log('🔫 [TouchControls] SHOOT at enemy', nearestEnemy.id);
+        } else {
+          console.log('🔫 [TouchControls] No enemies in range');
+        }
 
         // Visual feedback
         if (this.shootButton) {
