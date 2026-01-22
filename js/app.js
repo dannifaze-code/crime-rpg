@@ -6062,7 +6062,27 @@ const CartoonSpriteGenerator = {
         { id: "crimson_syndicate", name: "Crimson Syndicate", flag: "🔴", memberCount: 12, vault: 5000, health: 100 },
         { id: "shadow_collective", name: "Shadow Collective", flag: "⚫", memberCount: 8, vault: 3500, health: 100 },
         { id: "iron_brotherhood", name: "Iron Brotherhood", flag: "⚙️", memberCount: 15, vault: 7500, health: 100 }
-      ]
+      ],
+
+      // TURF DEFENSE MODE (Phase 8)
+      turfDefense: {
+        active: false,              // Is Turf Defense mode currently active
+        wave: 0,                    // Current wave number (0 = not started)
+        enemies: [],                // Active enemies [{id, x, y, hp, type, ...}]
+        lootDrops: [],              // Dropped loot [{x, y, type, value}]
+        buildingHP: {               // HP of defensive structures
+          mainBase: 1000,           // Main base HP
+          turrets: [],              // Array of turret HP values
+          walls: []                 // Array of wall HP values
+        },
+        playerHP: 100,              // Player HP during defense mode
+        magazineCount: 5,           // Available magazines for reloading
+        lastSpawnTime: 0,           // Timestamp of last enemy spawn
+        waveState: 'inactive',      // 'inactive' | 'preparing' | 'active' | 'complete' | 'failed'
+        waveStartTime: 0,           // When current wave started
+        enemiesKilled: 0,           // Enemies killed in current session
+        totalScore: 0               // Total score accumulated
+      }
     };
 
     // Deep clone to prevent mutation of default
@@ -6300,6 +6320,189 @@ const CartoonSpriteGenerator = {
       });
       ensureGameStateSchema();
       console.log('✅ GameState reset complete - Cash:', GameState.player.cash, 'Level:', GameState.player.level);
+    }
+
+    // ========================================
+    // TURF DEFENSE MODE
+    // ========================================
+
+    /**
+     * Start Turf Defense mode
+     * Initializes the defense session and prepares for wave 1
+     */
+    function startTurfDefense() {
+      console.log('🛡️ [TurfDefense] Starting Turf Defense mode...');
+
+      // Reset turf defense state
+      GameState.turfDefense.active = true;
+      GameState.turfDefense.wave = 0;
+      GameState.turfDefense.enemies = [];
+      GameState.turfDefense.lootDrops = [];
+      GameState.turfDefense.buildingHP = {
+        mainBase: 1000,
+        turrets: [],
+        walls: []
+      };
+      GameState.turfDefense.playerHP = 100;
+      GameState.turfDefense.magazineCount = 5;
+      GameState.turfDefense.lastSpawnTime = Date.now();
+      GameState.turfDefense.waveState = 'preparing';
+      GameState.turfDefense.waveStartTime = Date.now();
+      GameState.turfDefense.enemiesKilled = 0;
+      GameState.turfDefense.totalScore = 0;
+
+      console.log('✅ [TurfDefense] Mode started - Wave', GameState.turfDefense.wave, 'State:', GameState.turfDefense.waveState);
+
+      // TODO: Switch to defense UI
+      // TODO: Show wave prep screen
+
+      // Start wave 1 after 3 seconds
+      setTimeout(() => {
+        if (GameState.turfDefense.active && GameState.turfDefense.waveState === 'preparing') {
+          GameState.turfDefense.wave = 1;
+          GameState.turfDefense.waveState = 'active';
+          GameState.turfDefense.waveStartTime = Date.now();
+          console.log('🌊 [TurfDefense] Wave 1 started!');
+        }
+      }, 3000);
+    }
+
+    /**
+     * End Turf Defense mode
+     * Cleans up the session and returns to normal gameplay
+     */
+    function endTurfDefense(reason = 'manual') {
+      console.log('🛑 [TurfDefense] Ending Turf Defense mode - Reason:', reason);
+
+      const finalScore = GameState.turfDefense.totalScore;
+      const finalWave = GameState.turfDefense.wave;
+      const enemiesKilled = GameState.turfDefense.enemiesKilled;
+
+      // Mark as inactive
+      GameState.turfDefense.active = false;
+      GameState.turfDefense.waveState = 'inactive';
+
+      // Clear enemies and loot
+      GameState.turfDefense.enemies = [];
+      GameState.turfDefense.lootDrops = [];
+
+      console.log('📊 [TurfDefense] Session ended - Wave:', finalWave, 'Score:', finalScore, 'Kills:', enemiesKilled);
+
+      // TODO: Award rewards based on performance
+      // TODO: Show end screen with stats
+      // TODO: Return to normal UI
+    }
+
+    /**
+     * Update Turf Defense mode logic
+     * Called each frame when defense mode is active
+     * @param {number} dt - Delta time in seconds since last update
+     */
+    function updateTurfDefense(dt) {
+      if (!GameState.turfDefense.active) return;
+
+      const defense = GameState.turfDefense;
+      const now = Date.now();
+
+      // Update based on wave state
+      switch (defense.waveState) {
+        case 'preparing':
+          // Preparation phase - countdown to wave start
+          // TODO: Show countdown timer
+          break;
+
+        case 'active':
+          // Active wave - spawn enemies, update combat, check win conditions
+
+          // TODO: Enemy spawning logic
+          // const timeSinceLastSpawn = now - defense.lastSpawnTime;
+          // if (timeSinceLastSpawn > SPAWN_INTERVAL) {
+          //   spawnEnemy();
+          //   defense.lastSpawnTime = now;
+          // }
+
+          // TODO: Update enemy positions and AI
+          // defense.enemies.forEach(enemy => {
+          //   updateEnemyMovement(enemy, dt);
+          //   updateEnemyAttack(enemy, dt);
+          // });
+
+          // TODO: Check wave completion
+          // if (defense.enemies.length === 0 && allEnemiesSpawned) {
+          //   defense.waveState = 'complete';
+          // }
+
+          // TODO: Check failure conditions
+          // if (defense.buildingHP.mainBase <= 0) {
+          //   defense.waveState = 'failed';
+          //   endTurfDefense('base_destroyed');
+          // }
+
+          break;
+
+        case 'complete':
+          // Wave completed - prepare for next wave
+          console.log('✅ [TurfDefense] Wave', defense.wave, 'complete!');
+
+          // TODO: Show wave complete screen
+          // TODO: Award wave rewards
+
+          // Prepare next wave after delay
+          setTimeout(() => {
+            if (defense.active && defense.waveState === 'complete') {
+              defense.wave++;
+              defense.waveState = 'preparing';
+              defense.waveStartTime = now;
+              console.log('🌊 [TurfDefense] Starting wave', defense.wave);
+
+              // Auto-start next wave after prep time
+              setTimeout(() => {
+                if (defense.active && defense.waveState === 'preparing') {
+                  defense.waveState = 'active';
+                  defense.waveStartTime = now;
+                }
+              }, 3000);
+            }
+          }, 2000);
+
+          defense.waveState = 'inactive'; // Prevent multiple triggers
+          break;
+
+        case 'failed':
+          // Wave failed - end session
+          console.log('❌ [TurfDefense] Defense failed on wave', defense.wave);
+          endTurfDefense('failed');
+          break;
+      }
+
+      // Debug logging (remove in production)
+      if (Math.floor(now / 1000) % 10 === 0 && now % 1000 < 16) {
+        console.log('[TurfDefense] Active -', 'Wave:', defense.wave, 'State:', defense.waveState, 'Enemies:', defense.enemies.length);
+      }
+    }
+
+    /**
+     * Draw/render Turf Defense mode
+     * Handles rendering of defense-specific UI and entities
+     */
+    function drawTurfDefense() {
+      if (!GameState.turfDefense.active) return;
+
+      const defense = GameState.turfDefense;
+
+      // TODO: Render defense arena/map
+      // TODO: Render player
+      // TODO: Render enemies
+      // TODO: Render loot drops
+      // TODO: Render building health bars
+      // TODO: Render wave HUD (wave number, enemy count, score)
+      // TODO: Render player stats (HP, ammo, magazines)
+
+      // Stub: Just log that we're in defense mode (for debugging)
+      // This will be replaced with actual rendering code
+      if (Math.floor(Date.now() / 1000) % 5 === 0 && Date.now() % 1000 < 16) {
+        console.log('[TurfDefense] Rendering - Wave:', defense.wave, 'Enemies:', defense.enemies.length);
+      }
     }
 
     // ========================================
@@ -22690,7 +22893,25 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       
       // Initialize cheat buttons
       initCheatButtons();
-      
+
+      // ========================================
+      // GAME LOOP: Turf Defense Update
+      // ========================================
+      let lastUpdateTime = Date.now();
+      const gameLoopInterval = setInterval(() => {
+        const now = Date.now();
+        const dt = (now - lastUpdateTime) / 1000; // Delta time in seconds
+        lastUpdateTime = now;
+
+        // Update Turf Defense mode if active
+        if (GameState.turfDefense && GameState.turfDefense.active) {
+          updateTurfDefense(dt);
+          drawTurfDefense();
+        }
+      }, 1000 / 60); // 60 FPS target
+
+      console.log('🎮 [GameLoop] Game loop initialized for Turf Defense');
+
       console.log('=== [DEBUG] initializeGame() COMPLETE ===');
       console.log('==========================================');
     }
@@ -23327,6 +23548,34 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
         bindUI();
       });
     })();
+
+    // ========================================
+    // DEBUG: Turf Defense Trigger (Ctrl+Shift+D)
+    // ========================================
+    document.addEventListener('keydown', (e) => {
+      // Debug trigger: Ctrl+Shift+D to start Turf Defense
+      if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+        e.preventDefault();
+        console.log('🎮 [DEBUG] Turf Defense trigger activated!');
+
+        if (!GameState.turfDefense.active) {
+          startTurfDefense();
+        } else {
+          console.log('⚠️ [DEBUG] Turf Defense already active');
+          // Option to end if already active
+          if (confirm('Turf Defense is already active. End it?')) {
+            endTurfDefense('debug_manual');
+          }
+        }
+      }
+
+      // Debug trigger: Escape to end Turf Defense
+      if (e.key === 'Escape' && GameState.turfDefense.active) {
+        console.log('🎮 [DEBUG] Escape pressed - ending Turf Defense');
+        endTurfDefense('debug_escape');
+      }
+    });
+
 document.addEventListener('DOMContentLoaded', init);
     } else {
       init();
