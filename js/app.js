@@ -6075,7 +6075,11 @@ const CartoonSpriteGenerator = {
           turrets: [],              // Array of turret HP values
           walls: []                 // Array of wall HP values
         },
+        buildingVisualHP: {         // Visual HP for smooth animations
+          mainBase: 1000
+        },
         playerHP: 100,              // Player HP during defense mode
+        playerVisualHP: 100,        // Visual HP for smooth animations
         playerX: 400,               // Player X position
         playerY: 300,               // Player Y position
         magazineCount: 5,           // Available magazines for reloading
@@ -6083,7 +6087,8 @@ const CartoonSpriteGenerator = {
         waveState: 'inactive',      // 'inactive' | 'preparing' | 'active' | 'complete' | 'failed'
         waveStartTime: 0,           // When current wave started
         enemiesKilled: 0,           // Enemies killed in current session
-        totalScore: 0               // Total score accumulated
+        totalScore: 0,              // Total score accumulated
+        damageNumbers: []           // Floating damage numbers [{x, y, value, time, ...}]
       }
     };
 
@@ -6346,12 +6351,17 @@ const CartoonSpriteGenerator = {
         walls: []
       };
       GameState.turfDefense.playerHP = 100;
+      GameState.turfDefense.playerVisualHP = 100;
+      GameState.turfDefense.buildingVisualHP = {
+        mainBase: 1000
+      };
       GameState.turfDefense.magazineCount = 5;
       GameState.turfDefense.lastSpawnTime = Date.now();
       GameState.turfDefense.waveState = 'preparing';
       GameState.turfDefense.waveStartTime = Date.now();
       GameState.turfDefense.enemiesKilled = 0;
       GameState.turfDefense.totalScore = 0;
+      GameState.turfDefense.damageNumbers = [];
 
       // Initialize player position
       GameState.turfDefense.playerX = TurfDefenseConfig.PLAYER_START_X;
@@ -6452,7 +6462,21 @@ const CartoonSpriteGenerator = {
           // Update all enemies
           defense.enemies.forEach(enemy => {
             updateEnemyAI(enemy, dt, defense);
+
+            // Lerp enemy visual HP toward actual HP
+            const lerpSpeed = TurfDefenseConfig.HP_BAR_LERP_SPEED;
+            enemy.visualHP += (enemy.hp - enemy.visualHP) * lerpSpeed;
           });
+
+          // Lerp player visual HP toward actual HP
+          const lerpSpeed = TurfDefenseConfig.HP_BAR_LERP_SPEED;
+          defense.playerVisualHP += (defense.playerHP - defense.playerVisualHP) * lerpSpeed;
+
+          // Lerp building visual HP toward actual HP
+          defense.buildingVisualHP.mainBase += (defense.buildingHP.mainBase - defense.buildingVisualHP.mainBase) * lerpSpeed;
+
+          // Update damage numbers
+          updateDamageNumbers(dt);
 
           // Check wave completion (all enemies dead)
           const aliveEnemies = defense.enemies.filter(e => e.state !== 'dead');
@@ -6547,6 +6571,9 @@ const CartoonSpriteGenerator = {
       // Render player
       TurfDefenseRenderer.drawPlayer(ctx, defense);
 
+      // Render floating damage numbers
+      TurfDefenseRenderer.drawDamageNumbers(ctx, defense);
+
       // Render HUD
       TurfDefenseRenderer.drawHUD(ctx, defense, canvas.width, canvas.height);
     }
@@ -6572,6 +6599,12 @@ const CartoonSpriteGenerator = {
       ENEMY_HP: 100,
       ENEMY_SPEED: 50, // pixels per second
       ENEMY_DAMAGE: 10,
+
+      // Animation settings
+      HP_BAR_LERP_SPEED: 0.1, // How fast HP bars animate (0-1, higher = faster)
+      DAMAGE_NUMBER_DURATION: 1000, // ms - how long damage numbers float
+      DAMAGE_NUMBER_RISE_SPEED: 30, // pixels per second
+      MAX_DAMAGE_NUMBERS: 50, // Max simultaneous damage numbers for performance
       ENEMY_ATTACK_RANGE: 80, // pixels
       ENEMY_ATTACK_COOLDOWN: 1500, // ms
       ENEMY_AGGRO_RADIUS: 150, // pixels - if player gets this close, enemy aggros
@@ -6610,6 +6643,7 @@ const CartoonSpriteGenerator = {
         y: spawnPos.y,
         hp: TurfDefenseConfig.ENEMY_HP,
         maxHP: TurfDefenseConfig.ENEMY_HP,
+        visualHP: TurfDefenseConfig.ENEMY_HP, // For smooth HP bar animation
         state: 'moving', // 'moving' | 'attackingBuilding' | 'attackingPlayer' | 'dead'
         targetBuildingId: 'mainBase', // Default target
         aggroed: false,
@@ -6713,6 +6747,71 @@ const CartoonSpriteGenerator = {
       }
     }
 
+    // ========================================
+    // TURF DEFENSE: DAMAGE NUMBER SYSTEM
+    // ========================================
+
+    /**
+     * Spawn a floating damage number
+     * @param {number} x - X position
+     * @param {number} y - Y position
+     * @param {number} value - Damage value
+     * @param {string} type - 'damage' | 'heal' | 'crit'
+     */
+    function spawnDamageNumber(x, y, value, type = 'damage') {
+      const defense = GameState.turfDefense;
+      if (!defense.active) return;
+
+      // Limit max damage numbers for performance
+      if (defense.damageNumbers.length >= TurfDefenseConfig.MAX_DAMAGE_NUMBERS) {
+        defense.damageNumbers.shift(); // Remove oldest
+      }
+
+      // Create damage number
+      const damageNumber = {
+        x: x,
+        y: y,
+        startY: y,
+        value: value,
+        type: type,
+        startTime: Date.now(),
+        alpha: 1.0
+      };
+
+      defense.damageNumbers.push(damageNumber);
+    }
+
+    /**
+     * Update all damage numbers (called each frame)
+     * @param {number} dt - Delta time in seconds
+     */
+    function updateDamageNumbers(dt) {
+      const defense = GameState.turfDefense;
+      const now = Date.now();
+
+      // Update and remove expired damage numbers
+      defense.damageNumbers = defense.damageNumbers.filter(dmg => {
+        const elapsed = now - dmg.startTime;
+        const progress = elapsed / TurfDefenseConfig.DAMAGE_NUMBER_DURATION;
+
+        if (progress >= 1.0) {
+          return false; // Remove expired
+        }
+
+        // Float upward
+        dmg.y = dmg.startY - (progress * TurfDefenseConfig.DAMAGE_NUMBER_RISE_SPEED);
+
+        // Fade out
+        dmg.alpha = 1.0 - progress;
+
+        return true; // Keep
+      });
+    }
+
+    // ========================================
+    // TURF DEFENSE: COMBAT FUNCTIONS
+    // ========================================
+
     /**
      * Enemy attacks player
      */
@@ -6720,9 +6819,16 @@ const CartoonSpriteGenerator = {
       const now = Date.now();
 
       if (now - enemy.lastAttackTime >= TurfDefenseConfig.ENEMY_ATTACK_COOLDOWN) {
+        const damage = TurfDefenseConfig.ENEMY_DAMAGE;
+
         // Deal damage to player
-        defense.playerHP -= TurfDefenseConfig.ENEMY_DAMAGE;
+        defense.playerHP -= damage;
         enemy.lastAttackTime = now;
+
+        // Spawn damage number at player position
+        const playerX = defense.playerX || TurfDefenseConfig.PLAYER_START_X;
+        const playerY = defense.playerY || TurfDefenseConfig.PLAYER_START_Y;
+        spawnDamageNumber(playerX, playerY - 30, damage, 'damage');
 
         console.log(`💥 [Enemy ${enemy.id}] Hit player! Player HP: ${defense.playerHP}`);
 
@@ -6741,12 +6847,18 @@ const CartoonSpriteGenerator = {
       const now = Date.now();
 
       if (now - enemy.lastAttackTime >= TurfDefenseConfig.ENEMY_ATTACK_COOLDOWN) {
-        // Deal damage to building
+        const damage = TurfDefenseConfig.ENEMY_DAMAGE;
         const targetId = enemy.targetBuildingId;
 
         if (targetId === 'mainBase') {
-          defense.buildingHP.mainBase -= TurfDefenseConfig.ENEMY_DAMAGE;
+          defense.buildingHP.mainBase -= damage;
           enemy.lastAttackTime = now;
+
+          // Spawn damage number at building position
+          const building = TurfDefenseConfig.BUILDINGS.find(b => b.id === targetId);
+          if (building) {
+            spawnDamageNumber(building.x, building.y - 50, damage, 'damage');
+          }
 
           console.log(`🏚️ [Enemy ${enemy.id}] Hit main base! Base HP: ${defense.buildingHP.mainBase}`);
 
@@ -6797,8 +6909,13 @@ const CartoonSpriteGenerator = {
       });
 
       if (hitEnemy) {
+        const damage = 25; // Damage per shot
+
         // Deal damage
-        hitEnemy.hp -= 25; // Damage per shot
+        hitEnemy.hp -= damage;
+
+        // Spawn damage number at enemy position
+        spawnDamageNumber(hitEnemy.x, hitEnemy.y - 20, damage, 'damage');
 
         console.log(`🔫 [Shoot] Hit enemy ${hitEnemy.id}! HP: ${hitEnemy.hp}/${hitEnemy.maxHP}`);
 
@@ -6915,8 +7032,9 @@ const CartoonSpriteGenerator = {
        */
       drawBuildings(ctx, defense) {
         TurfDefenseConfig.BUILDINGS.forEach(building => {
-          const hp = defense.buildingHP[building.id] || 0;
-          const hpPercent = hp / building.maxHP;
+          // Use visualHP for smooth animation
+          const visualHP = defense.buildingVisualHP[building.id] || defense.buildingHP[building.id] || 0;
+          const hpPercent = visualHP / building.maxHP;
 
           // Building body
           ctx.fillStyle = hpPercent > 0.5 ? '#4CAF50' : hpPercent > 0.25 ? '#FFC107' : '#F44336';
@@ -6937,19 +7055,25 @@ const CartoonSpriteGenerator = {
             building.height
           );
 
-          // HP bar
+          // Animated HP bar
           const barWidth = building.width;
-          const barHeight = 6;
+          const barHeight = 8;
           const barX = building.x - barWidth / 2;
-          const barY = building.y - building.height / 2 - 15;
+          const barY = building.y - building.height / 2 - 18;
 
           // HP bar background
           ctx.fillStyle = '#333';
           ctx.fillRect(barX, barY, barWidth, barHeight);
 
-          // HP bar fill
-          ctx.fillStyle = '#4CAF50';
-          ctx.fillRect(barX, barY, barWidth * hpPercent, barHeight);
+          // HP bar fill (animated)
+          const fillWidth = barWidth * Math.max(0, Math.min(1, hpPercent));
+          ctx.fillStyle = hpPercent > 0.5 ? '#4CAF50' : hpPercent > 0.25 ? '#FFC107' : '#F44336';
+          ctx.fillRect(barX, barY, fillWidth, barHeight);
+
+          // HP bar border
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(barX, barY, barWidth, barHeight);
 
           // Label
           ctx.fillStyle = '#fff';
@@ -6965,7 +7089,8 @@ const CartoonSpriteGenerator = {
       drawEnemy(ctx, enemy) {
         if (enemy.state === 'dead') return;
 
-        const hpPercent = enemy.hp / enemy.maxHP;
+        // Use visualHP for smooth animation
+        const hpPercent = enemy.visualHP / enemy.maxHP;
 
         // Enemy body (circle)
         ctx.beginPath();
@@ -6989,26 +7114,32 @@ const CartoonSpriteGenerator = {
         ctx.lineWidth = 2;
         ctx.stroke();
 
-        // HP bar
-        const barWidth = 30;
-        const barHeight = 4;
+        // Animated HP bar
+        const barWidth = 34;
+        const barHeight = 5;
         const barX = enemy.x - barWidth / 2;
-        const barY = enemy.y - 25;
+        const barY = enemy.y - 28;
 
         // HP bar background
-        ctx.fillStyle = '#333';
+        ctx.fillStyle = '#000';
         ctx.fillRect(barX, barY, barWidth, barHeight);
 
-        // HP bar fill
+        // HP bar fill (animated)
+        const fillWidth = barWidth * Math.max(0, Math.min(1, hpPercent));
         ctx.fillStyle = hpPercent > 0.5 ? '#4CAF50' : hpPercent > 0.25 ? '#FFC107' : '#F44336';
-        ctx.fillRect(barX, barY, barWidth * hpPercent, barHeight);
+        ctx.fillRect(barX, barY, fillWidth, barHeight);
+
+        // HP bar border
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(barX, barY, barWidth, barHeight);
 
         // Aggro indicator
         if (enemy.aggroed) {
           ctx.fillStyle = '#FF0000';
           ctx.font = '16px monospace';
           ctx.textAlign = 'center';
-          ctx.fillText('!', enemy.x, enemy.y - 30);
+          ctx.fillText('!', enemy.x, enemy.y - 35);
         }
       },
 
@@ -7030,26 +7161,68 @@ const CartoonSpriteGenerator = {
         ctx.lineWidth = 3;
         ctx.stroke();
 
-        // HP bar
-        const hpPercent = defense.playerHP / 100;
-        const barWidth = 40;
-        const barHeight = 6;
+        // Animated HP bar
+        const hpPercent = defense.playerVisualHP / 100;
+        const barWidth = 44;
+        const barHeight = 7;
         const barX = playerX - barWidth / 2;
-        const barY = playerY - 35;
+        const barY = playerY - 38;
 
         // HP bar background
-        ctx.fillStyle = '#333';
+        ctx.fillStyle = '#000';
         ctx.fillRect(barX, barY, barWidth, barHeight);
 
-        // HP bar fill
-        ctx.fillStyle = '#4CAF50';
-        ctx.fillRect(barX, barY, barWidth * hpPercent, barHeight);
+        // HP bar fill (animated)
+        const fillWidth = barWidth * Math.max(0, Math.min(1, hpPercent));
+        ctx.fillStyle = hpPercent > 0.5 ? '#4CAF50' : hpPercent > 0.25 ? '#FFC107' : '#F44336';
+        ctx.fillRect(barX, barY, fillWidth, barHeight);
+
+        // HP bar border
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(barX, barY, barWidth, barHeight);
 
         // Label
         ctx.fillStyle = '#fff';
         ctx.font = '10px monospace';
         ctx.textAlign = 'center';
         ctx.fillText('YOU', playerX, playerY + 5);
+      },
+
+      /**
+       * Draw floating damage numbers
+       */
+      drawDamageNumbers(ctx, defense) {
+        defense.damageNumbers.forEach(dmg => {
+          ctx.save();
+
+          // Set alpha for fade out
+          ctx.globalAlpha = dmg.alpha;
+
+          // Draw damage number
+          ctx.font = 'bold 20px monospace';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+
+          // Color based on type
+          if (dmg.type === 'damage') {
+            ctx.fillStyle = '#FF5722'; // Red for damage
+            ctx.strokeStyle = '#000';
+          } else if (dmg.type === 'heal') {
+            ctx.fillStyle = '#4CAF50'; // Green for healing
+            ctx.strokeStyle = '#000';
+          } else if (dmg.type === 'crit') {
+            ctx.fillStyle = '#FFD700'; // Gold for crits
+            ctx.strokeStyle = '#000';
+          }
+
+          // Draw text with outline
+          ctx.lineWidth = 3;
+          ctx.strokeText(dmg.value.toString(), dmg.x, dmg.y);
+          ctx.fillText(dmg.value.toString(), dmg.x, dmg.y);
+
+          ctx.restore();
+        });
       },
 
       /**
