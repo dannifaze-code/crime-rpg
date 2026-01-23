@@ -2907,7 +2907,11 @@ Then tighten the rules later.`);
           clearInterval(TurfTab.moneyDrainInterval);
           TurfTab.moneyDrainInterval = null;
         }
-        
+        if (TurfTab.turfDefenseUpdateInterval) {
+          clearInterval(TurfTab.turfDefenseUpdateInterval);
+          TurfTab.turfDefenseUpdateInterval = null;
+        }
+
         // Stop GangTab intervals
         if (GangTab.propertyIncomeInterval) {
           clearInterval(GangTab.propertyIncomeInterval);
@@ -6081,35 +6085,19 @@ const CartoonSpriteGenerator = {
         { id: "iron_brotherhood", name: "Iron Brotherhood", flag: "⚙️", memberCount: 15, vault: 7500, health: 100 }
       ],
 
-      // TURF DEFENSE MODE (Phase 8)
+      // TURF DEFENSE MODE (Phase 8 - Scaffolding)
       turfDefense: {
         active: false,              // Is Turf Defense mode currently active
-        wave: 0,                    // Current wave number (0 = not started)
-        enemies: [],                // Active enemies [{id, x, y, hp, type, ...}]
-        lootDrops: [],              // Dropped loot [{x, y, type, value}]
-        buildingHP: {               // HP of defensive structures
-          mainBase: 1000,           // Main base HP
-          turrets: [],              // Array of turret HP values
-          walls: []                 // Array of wall HP values
-        },
-        buildingVisualHP: {         // Visual HP for smooth animations
-          mainBase: 1000
-        },
+        wave: 1,                    // Current wave number
+        waveState: 'idle',          // 'idle' | 'spawning' | 'active' | 'complete' | 'failed'
+        enemies: [],                // Active enemies (scaffolding - no enemies yet)
+        loot: [],                   // Dropped loot (scaffolding - no loot yet)
+        buildingHP: {},             // HP of turf buildings (snapshot of all turf buildings)
         playerHP: 100,              // Player HP during defense mode
-        playerVisualHP: 100,        // Visual HP for smooth animations
-        playerX: 400,               // Player X position
-        playerY: 300,               // Player Y position
-        magazineCount: 5,           // Available magazines for reloading
-        currentAmmo: 10,            // Current ammo in weapon
-        maxAmmo: 10,                // Maximum ammo per magazine
-        isReloading: false,         // Is player currently reloading
-        reloadStartTime: 0,         // Timestamp when reload started
+        playerHPMax: 100,           // Maximum player HP
+        magazineCount: 100,         // Available magazines/ammo
         lastSpawnTime: 0,           // Timestamp of last enemy spawn
-        waveState: 'inactive',      // 'inactive' | 'preparing' | 'active' | 'complete' | 'failed'
-        waveStartTime: 0,           // When current wave started
-        enemiesKilled: 0,           // Enemies killed in current session
-        totalScore: 0,              // Total score accumulated
-        damageNumbers: []           // Floating damage numbers [{x, y, value, time, ...}]
+        timeActiveMs: 0             // Total time defense mode has been active
       }
     };
 
@@ -6304,36 +6292,26 @@ const CartoonSpriteGenerator = {
         if (typeof GameState.cityState.worldTick !== 'number' || !isFinite(GameState.cityState.worldTick)) GameState.cityState.worldTick = 0;
         if (typeof GameState.cityState.riskLevel !== 'number' || !isFinite(GameState.cityState.riskLevel)) GameState.cityState.riskLevel = 0;
 
-        // Turf Defense state (Phase 8)
+        // Turf Defense state (Phase 8 - Scaffolding)
         if (!GameState.turfDefense || typeof GameState.turfDefense !== 'object') {
           GameState.turfDefense = JSON.parse(JSON.stringify(DEFAULT_STATE.turfDefense || {}));
         }
         // Ensure all turfDefense arrays exist
         if (!Array.isArray(GameState.turfDefense.enemies)) GameState.turfDefense.enemies = [];
-        if (!Array.isArray(GameState.turfDefense.lootDrops)) GameState.turfDefense.lootDrops = [];
-        if (!Array.isArray(GameState.turfDefense.damageNumbers)) GameState.turfDefense.damageNumbers = [];
+        if (!Array.isArray(GameState.turfDefense.loot)) GameState.turfDefense.loot = [];
         // Ensure turfDefense objects exist
         if (!GameState.turfDefense.buildingHP || typeof GameState.turfDefense.buildingHP !== 'object') {
-          GameState.turfDefense.buildingHP = {
-            mainBase: 1000,
-            turrets: [],
-            walls: []
-          };
-        }
-        if (!Array.isArray(GameState.turfDefense.buildingHP.turrets)) GameState.turfDefense.buildingHP.turrets = [];
-        if (!Array.isArray(GameState.turfDefense.buildingHP.walls)) GameState.turfDefense.buildingHP.walls = [];
-        if (!GameState.turfDefense.buildingVisualHP || typeof GameState.turfDefense.buildingVisualHP !== 'object') {
-          GameState.turfDefense.buildingVisualHP = { mainBase: 1000 };
+          GameState.turfDefense.buildingHP = {};
         }
         // Ensure turfDefense primitives exist
         if (typeof GameState.turfDefense.active !== 'boolean') GameState.turfDefense.active = false;
-        if (typeof GameState.turfDefense.wave !== 'number' || !isFinite(GameState.turfDefense.wave)) GameState.turfDefense.wave = 0;
+        if (typeof GameState.turfDefense.wave !== 'number' || !isFinite(GameState.turfDefense.wave)) GameState.turfDefense.wave = 1;
+        if (typeof GameState.turfDefense.waveState !== 'string') GameState.turfDefense.waveState = 'idle';
         if (typeof GameState.turfDefense.playerHP !== 'number' || !isFinite(GameState.turfDefense.playerHP)) GameState.turfDefense.playerHP = 100;
-        if (typeof GameState.turfDefense.playerVisualHP !== 'number' || !isFinite(GameState.turfDefense.playerVisualHP)) GameState.turfDefense.playerVisualHP = 100;
-        if (typeof GameState.turfDefense.magazineCount !== 'number' || !isFinite(GameState.turfDefense.magazineCount)) GameState.turfDefense.magazineCount = 5;
-        if (typeof GameState.turfDefense.currentAmmo !== 'number' || !isFinite(GameState.turfDefense.currentAmmo)) GameState.turfDefense.currentAmmo = 10;
-        if (typeof GameState.turfDefense.maxAmmo !== 'number' || !isFinite(GameState.turfDefense.maxAmmo)) GameState.turfDefense.maxAmmo = 10;
-        if (typeof GameState.turfDefense.isReloading !== 'boolean') GameState.turfDefense.isReloading = false;
+        if (typeof GameState.turfDefense.playerHPMax !== 'number' || !isFinite(GameState.turfDefense.playerHPMax)) GameState.turfDefense.playerHPMax = 100;
+        if (typeof GameState.turfDefense.magazineCount !== 'number' || !isFinite(GameState.turfDefense.magazineCount)) GameState.turfDefense.magazineCount = 100;
+        if (typeof GameState.turfDefense.lastSpawnTime !== 'number' || !isFinite(GameState.turfDefense.lastSpawnTime)) GameState.turfDefense.lastSpawnTime = 0;
+        if (typeof GameState.turfDefense.timeActiveMs !== 'number' || !isFinite(GameState.turfDefense.timeActiveMs)) GameState.turfDefense.timeActiveMs = 0;
 
       } catch (e) {
         console.warn('[SCHEMA] ensureGameStateSchema failed:', e);
@@ -17637,6 +17615,263 @@ const CartoonSpriteGenerator = {
       }
     };
 
+    // ========================================
+    // TURF DEFENSE SYSTEM (Phase 8 - Scaffolding)
+    // ========================================
+
+    /**
+     * Start Turf Defense mode
+     * Initializes defense state, snapshots building HP, and sets up player stats
+     */
+    function startTurfDefense() {
+      console.log('🎮 [TurfDefense] Starting Turf Defense mode...');
+
+      // Set active state
+      GameState.turfDefense.active = true;
+      GameState.turfDefense.wave = 1;
+      GameState.turfDefense.waveState = 'spawning';
+      GameState.turfDefense.timeActiveMs = 0;
+      GameState.turfDefense.lastSpawnTime = Date.now();
+
+      // Clear arrays
+      GameState.turfDefense.enemies = [];
+      GameState.turfDefense.loot = [];
+
+      // Snapshot building HP for all existing turf buildings
+      GameState.turfDefense.buildingHP = {};
+
+      // Snapshot all interactive buildings on the map
+      if (GameState.map && Array.isArray(GameState.map.buildings)) {
+        GameState.map.buildings.forEach((building, index) => {
+          const buildingId = building.id || `building_${index}`;
+          GameState.turfDefense.buildingHP[buildingId] = building.hp || 100;
+        });
+        console.log(`📊 [TurfDefense] Snapshotted ${Object.keys(GameState.turfDefense.buildingHP).length} buildings`);
+      }
+
+      // Snapshot property buildings
+      if (Array.isArray(GameState.propertyBuildings)) {
+        GameState.propertyBuildings.forEach((property, index) => {
+          const propertyId = property.id || `property_${index}`;
+          GameState.turfDefense.buildingHP[propertyId] = property.hp || 150;
+        });
+      }
+
+      // Initialize player HP
+      GameState.turfDefense.playerHP = 100;
+      GameState.turfDefense.playerHPMax = 100;
+
+      // Initialize magazine count from inventory/ammo system if available
+      // Check if player has magazines in weapon parts or inventory
+      if (GameState.weaponParts && typeof GameState.weaponParts.magazines === 'number') {
+        GameState.turfDefense.magazineCount = Math.max(GameState.weaponParts.magazines, 100);
+      } else {
+        GameState.turfDefense.magazineCount = 100; // Default
+      }
+
+      console.log(`🎮 [TurfDefense] Started - Wave ${GameState.turfDefense.wave}, Player HP: ${GameState.turfDefense.playerHP}/${GameState.turfDefense.playerHPMax}, Magazines: ${GameState.turfDefense.magazineCount}`);
+      console.log(`🏗️ [TurfDefense] Defending ${Object.keys(GameState.turfDefense.buildingHP).length} buildings`);
+
+      // Show notification
+      if (typeof TurfTab !== 'undefined' && typeof TurfTab.showTemporaryNotification === 'function') {
+        TurfTab.showTemporaryNotification('🎮 Turf Defense Started!');
+      }
+
+      // Start update interval if not already running
+      if (!TurfTab.turfDefenseUpdateInterval) {
+        TurfTab.turfDefenseUpdateInterval = setInterval(() => {
+          if (GameState.turfDefense.active) {
+            updateTurfDefense(100); // ~100ms updates
+          }
+        }, 100);
+      }
+
+      // Save state
+      if (typeof Storage !== 'undefined' && typeof Storage.save === 'function') {
+        Storage.save();
+      }
+    }
+
+    /**
+     * End Turf Defense mode
+     * Cleans up state and optionally awards results
+     * @param {string} reason - Reason for ending ('victory', 'defeat', 'restart', 'manual')
+     */
+    function endTurfDefense(reason = 'manual') {
+      console.log(`🛑 [TurfDefense] Ending Turf Defense mode - Reason: ${reason}`);
+
+      if (!GameState.turfDefense.active) {
+        console.warn('⚠️ [TurfDefense] Defense mode not active, nothing to end');
+        return;
+      }
+
+      // Calculate results
+      const results = {
+        wave: GameState.turfDefense.wave,
+        timeActiveMs: GameState.turfDefense.timeActiveMs,
+        timeActiveSec: Math.floor(GameState.turfDefense.timeActiveMs / 1000),
+        reason: reason
+      };
+
+      // Set inactive
+      GameState.turfDefense.active = false;
+
+      // Clear enemies and loot
+      GameState.turfDefense.enemies = [];
+      GameState.turfDefense.loot = [];
+
+      // Clear update interval
+      if (TurfTab.turfDefenseUpdateInterval) {
+        clearInterval(TurfTab.turfDefenseUpdateInterval);
+        TurfTab.turfDefenseUpdateInterval = null;
+      }
+
+      // Log results
+      console.log(`📊 [TurfDefense] Session Results:`, results);
+      console.log(`   - Wave Reached: ${results.wave}`);
+      console.log(`   - Time Active: ${results.timeActiveSec}s`);
+      console.log(`   - End Reason: ${results.reason}`);
+
+      // Show notification with results
+      let message = '';
+      if (reason === 'victory') {
+        message = `🎉 Victory! Survived ${results.wave} waves (${results.timeActiveSec}s)`;
+      } else if (reason === 'defeat') {
+        message = `💀 Defeated on wave ${results.wave} after ${results.timeActiveSec}s`;
+      } else if (reason === 'restart') {
+        message = '🔄 Turf Defense Restarting...';
+      } else {
+        message = `🛑 Turf Defense Ended - Wave ${results.wave}`;
+      }
+
+      if (typeof TurfTab !== 'undefined' && typeof TurfTab.showTemporaryNotification === 'function') {
+        TurfTab.showTemporaryNotification(message);
+      }
+
+      // Optional: Award placeholder rewards (console log for now)
+      if (reason === 'victory' || reason === 'defeat') {
+        console.log(`💰 [TurfDefense] Placeholder reward calculation:`);
+        console.log(`   - Base reward would be: ${results.wave * 100} cash`);
+        console.log(`   - Time bonus would be: ${Math.floor(results.timeActiveSec / 10)} XP`);
+      }
+
+      // Save state
+      if (typeof Storage !== 'undefined' && typeof Storage.save === 'function') {
+        Storage.save();
+      }
+    }
+
+    /**
+     * Update Turf Defense state
+     * Called every frame when defense mode is active
+     * @param {number} dt - Delta time in milliseconds
+     */
+    function updateTurfDefense(dt) {
+      if (!GameState.turfDefense.active) return;
+
+      // Update active time
+      GameState.turfDefense.timeActiveMs += dt;
+
+      // Update wave state machine (scaffolding - no enemies yet)
+      switch (GameState.turfDefense.waveState) {
+        case 'idle':
+          // Not actively in a wave
+          break;
+
+        case 'spawning':
+          // Would spawn enemies here (scaffolding - skip for now)
+          // Transition to active after a delay
+          if (Date.now() - GameState.turfDefense.lastSpawnTime > 2000) {
+            GameState.turfDefense.waveState = 'active';
+            console.log(`⚔️ [TurfDefense] Wave ${GameState.turfDefense.wave} active`);
+          }
+          break;
+
+        case 'active':
+          // Would update enemies, check collisions, etc. (scaffolding - skip for now)
+          // For scaffolding, just log periodically
+          if (GameState.turfDefense.timeActiveMs % 5000 < dt) {
+            console.log(`🎮 [TurfDefense] Wave ${GameState.turfDefense.wave} running - ${Math.floor(GameState.turfDefense.timeActiveMs / 1000)}s elapsed`);
+          }
+          break;
+
+        case 'complete':
+          // Wave completed successfully
+          console.log(`✅ [TurfDefense] Wave ${GameState.turfDefense.wave} complete!`);
+          GameState.turfDefense.wave++;
+          GameState.turfDefense.waveState = 'spawning';
+          GameState.turfDefense.lastSpawnTime = Date.now();
+          break;
+
+        case 'failed':
+          // Wave failed (player died or buildings destroyed)
+          console.log(`❌ [TurfDefense] Wave ${GameState.turfDefense.wave} failed`);
+          endTurfDefense('defeat');
+          break;
+      }
+
+      // Update enemies (scaffolding - no enemies yet)
+      // GameState.turfDefense.enemies.forEach(enemy => { ... });
+
+      // Update loot (scaffolding - no loot yet)
+      // GameState.turfDefense.loot.forEach(loot => { ... });
+    }
+
+    /**
+     * Draw Turf Defense UI and entities
+     * Called from TurfTab.render() when defense mode is active
+     */
+    function drawTurfDefense() {
+      if (!GameState.turfDefense.active) return;
+
+      // Get or create defense overlay container
+      let defenseOverlay = document.getElementById('turf-defense-overlay');
+      if (!defenseOverlay) {
+        defenseOverlay = document.createElement('div');
+        defenseOverlay.id = 'turf-defense-overlay';
+        defenseOverlay.style.cssText = `
+          position: absolute;
+          top: 10px;
+          left: 10px;
+          background: rgba(0, 0, 0, 0.7);
+          color: white;
+          padding: 10px;
+          border-radius: 8px;
+          font-family: monospace;
+          font-size: 14px;
+          z-index: 1000;
+          pointer-events: none;
+        `;
+
+        const mapContainer = document.getElementById('city-map');
+        if (mapContainer) {
+          mapContainer.appendChild(defenseOverlay);
+        }
+      }
+
+      // Update HUD content
+      const timeActiveSec = Math.floor(GameState.turfDefense.timeActiveMs / 1000);
+      const minutes = Math.floor(timeActiveSec / 60);
+      const seconds = timeActiveSec % 60;
+
+      defenseOverlay.innerHTML = `
+        <div style="font-weight: bold; margin-bottom: 8px; color: #ff6b6b;">🎮 TURF DEFENSE ACTIVE</div>
+        <div>Wave: ${GameState.turfDefense.wave}</div>
+        <div>State: ${GameState.turfDefense.waveState}</div>
+        <div>Time: ${minutes}:${seconds.toString().padStart(2, '0')}</div>
+        <div>Player HP: ${GameState.turfDefense.playerHP}/${GameState.turfDefense.playerHPMax}</div>
+        <div>Magazines: ${GameState.turfDefense.magazineCount}</div>
+        <div>Buildings: ${Object.keys(GameState.turfDefense.buildingHP).length}</div>
+        <div style="margin-top: 8px; font-size: 12px; color: #aaa;">Scaffolding: No enemies/UI yet</div>
+      `;
+
+      // Draw enemies (scaffolding - no enemies yet)
+      // GameState.turfDefense.enemies.forEach(enemy => { ... });
+
+      // Draw loot (scaffolding - no loot yet)
+      // GameState.turfDefense.loot.forEach(loot => { ... });
+    }
+
     const TurfTab = {
       roamInterval: null,
       eventInterval: null,
@@ -17652,6 +17887,7 @@ const CartoonSpriteGenerator = {
       worldTickInterval: null,
       moneyDrainInterval: null,
       cooldownHeatCheckInterval: null,
+      turfDefenseUpdateInterval: null,
       turfDefenseButtonInitialized: false,
 
       /**
@@ -22329,11 +22565,16 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
           this.startFreeRoam();
         }
 
+        // Draw Turf Defense overlay if active
+        if (GameState.turfDefense && GameState.turfDefense.active) {
+          drawTurfDefense();
+        }
+
         // Show death overlay if dead
         if (GameState.character.isDead && !document.getElementById('death-overlay')) {
           this.showDeathOverlay();
         }
-        
+
         // Show jail overlay if jailed
         if (GameState.player.jail.isJailed && !document.getElementById('jail-overlay')) {
           this.showJailOverlay();
