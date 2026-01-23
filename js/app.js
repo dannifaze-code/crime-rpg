@@ -6386,21 +6386,92 @@ const CartoonSpriteGenerator = {
     function startTurfDefense() {
       console.log('🛡️ [TurfDefense] Starting Turf Defense mode...');
 
+      // Get map dimensions
+      const mapWidth = (GameState.map && GameState.map.width) || 30;
+      const mapHeight = (GameState.map && GameState.map.height) || 30;
+      const tileSize = 30; // RENDER_CONFIG.TILE_SIZE_PX
+      const canvasWidth = mapWidth * tileSize;
+      const canvasHeight = mapHeight * tileSize;
+
+      // Initialize structures from real building data
+      const structures = [];
+      if (GameState.map && GameState.map.buildings && GameState.map.buildings.length > 0) {
+        // Find the safehouse as the main base
+        let mainBase = null;
+
+        GameState.map.buildings.forEach((building, index) => {
+          // Convert tile coordinates to pixel coordinates
+          const x = (building.x + building.footprint.width / 2) * tileSize;
+          const y = (building.y + building.footprint.height / 2) * tileSize;
+          const w = building.footprint.width * tileSize;
+          const h = building.footprint.height * tileSize;
+
+          // Mark safehouse as main base (critical structure)
+          const isCritical = building.typeId === 'safehouse';
+          if (isCritical && !mainBase) {
+            mainBase = {
+              id: building.id,
+              name: building.name || 'Main Base',
+              x: x,
+              y: y,
+              w: w,
+              h: h,
+              hp: 1000,
+              hpMax: 1000,
+              isCritical: true,
+              buildingRef: building
+            };
+            structures.push(mainBase);
+          } else {
+            // Other buildings as secondary structures
+            structures.push({
+              id: building.id,
+              name: building.name || 'Building',
+              x: x,
+              y: y,
+              w: w,
+              h: h,
+              hp: 500,
+              hpMax: 500,
+              isCritical: false,
+              buildingRef: building
+            });
+          }
+        });
+
+        // If no safehouse found, use the first building as main base
+        if (!mainBase && structures.length > 0) {
+          structures[0].isCritical = true;
+          structures[0].name = 'Main Base';
+          structures[0].hp = 1000;
+          structures[0].hpMax = 1000;
+        }
+      } else {
+        // Fallback: create a default main base in the center
+        structures.push({
+          id: 'default_base',
+          name: 'Main Base',
+          x: canvasWidth / 2,
+          y: canvasHeight / 2,
+          w: 80,
+          h: 80,
+          hp: 1000,
+          hpMax: 1000,
+          isCritical: true,
+          buildingRef: null
+        });
+      }
+
+      console.log(`📍 [TurfDefense] Initialized ${structures.length} structures (Main Base: ${structures.find(s => s.isCritical)?.name || 'none'})`);
+
       // Reset turf defense state
       GameState.turfDefense.active = true;
       GameState.turfDefense.wave = 0;
       GameState.turfDefense.enemies = [];
+      GameState.turfDefense.structures = structures;
       GameState.turfDefense.lootDrops = [];
-      GameState.turfDefense.buildingHP = {
-        mainBase: 1000,
-        turrets: [],
-        walls: []
-      };
       GameState.turfDefense.playerHP = 100;
       GameState.turfDefense.playerVisualHP = 100;
-      GameState.turfDefense.buildingVisualHP = {
-        mainBase: 1000
-      };
       GameState.turfDefense.magazineCount = 5;
       GameState.turfDefense.currentAmmo = 10;
       GameState.turfDefense.maxAmmo = 10;
@@ -6413,9 +6484,9 @@ const CartoonSpriteGenerator = {
       GameState.turfDefense.totalScore = 0;
       GameState.turfDefense.damageNumbers = [];
 
-      // Initialize player position
-      GameState.turfDefense.playerX = TurfDefenseConfig.PLAYER_START_X;
-      GameState.turfDefense.playerY = TurfDefenseConfig.PLAYER_START_Y;
+      // Initialize player position at center of map
+      GameState.turfDefense.playerX = canvasWidth / 2;
+      GameState.turfDefense.playerY = canvasHeight / 2;
 
       // Initialize input state
       GameState.turfDefense.input = {
@@ -6438,9 +6509,6 @@ const CartoonSpriteGenerator = {
       if (typeof TurfTab !== 'undefined' && typeof TurfTab.updateTurfDefenseButton === 'function') {
         TurfTab.updateTurfDefenseButton();
       }
-
-      // TODO: Switch to defense UI
-      // TODO: Show wave prep screen
 
       // Start wave 1 after 3 seconds
       setTimeout(() => {
@@ -6516,17 +6584,24 @@ const CartoonSpriteGenerator = {
             spawnWaveEnemies();
           }
 
+          // Get canvas dimensions for bounds checking
+          const mapWidth = (GameState.map && GameState.map.width) || 30;
+          const mapHeight = (GameState.map && GameState.map.height) || 30;
+          const tileSize = 30;
+          const canvasWidth = mapWidth * tileSize;
+          const canvasHeight = mapHeight * tileSize;
+
           // Update player movement from joystick
           const movement = TouchControls.getMovement();
-          if (!defense.playerX) defense.playerX = TurfDefenseConfig.PLAYER_START_X;
-          if (!defense.playerY) defense.playerY = TurfDefenseConfig.PLAYER_START_Y;
+          if (!defense.playerX) defense.playerX = canvasWidth / 2;
+          if (!defense.playerY) defense.playerY = canvasHeight / 2;
 
           defense.playerX += movement.x * TurfDefenseConfig.PLAYER_SPEED * dt;
           defense.playerY += movement.y * TurfDefenseConfig.PLAYER_SPEED * dt;
 
           // Clamp player to canvas bounds
-          defense.playerX = Math.max(20, Math.min(780, defense.playerX));
-          defense.playerY = Math.max(20, Math.min(580, defense.playerY));
+          defense.playerX = Math.max(20, Math.min(canvasWidth - 20, defense.playerX));
+          defense.playerY = Math.max(20, Math.min(canvasHeight - 20, defense.playerY));
 
           // Update all enemies
           defense.enemies.forEach(enemy => {
@@ -6540,9 +6615,6 @@ const CartoonSpriteGenerator = {
           // Lerp player visual HP toward actual HP
           const lerpSpeed = TurfDefenseConfig.HP_BAR_LERP_SPEED;
           defense.playerVisualHP += (defense.playerHP - defense.playerVisualHP) * lerpSpeed;
-
-          // Lerp building visual HP toward actual HP
-          defense.buildingVisualHP.mainBase += (defense.buildingHP.mainBase - defense.buildingVisualHP.mainBase) * lerpSpeed;
 
           // Update damage numbers
           updateDamageNumbers(dt);
@@ -6558,7 +6630,9 @@ const CartoonSpriteGenerator = {
           }
 
           // Check failure conditions
-          if (defense.buildingHP.mainBase <= 0) {
+          // 1. Check if main base (critical structure) is destroyed
+          const mainBase = defense.structures ? defense.structures.find(s => s.isCritical) : null;
+          if (mainBase && mainBase.hp <= 0) {
             defense.waveState = 'failed';
             endTurfDefense('base_destroyed');
           } else if (defense.playerHP <= 0) {
@@ -6572,8 +6646,13 @@ const CartoonSpriteGenerator = {
           // Wave completed - prepare for next wave
           console.log('✅ [TurfDefense] Wave', defense.wave, 'complete!');
 
-          // TODO: Show wave complete screen
-          // TODO: Award wave rewards
+          // Check for victory (wave 5 complete)
+          if (defense.wave >= 5) {
+            console.log('🎉 [TurfDefense] VICTORY! All waves completed!');
+            endTurfDefense('victory');
+            defense.waveState = 'inactive';
+            return;
+          }
 
           // Prepare next wave after delay
           setTimeout(() => {
@@ -6622,18 +6701,15 @@ const CartoonSpriteGenerator = {
 
       if (!canvas || !ctx) return;
 
-      // Clear canvas
+      // Clear canvas with transparency (so we can see the map below)
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Render arena background
-      ctx.fillStyle = '#2a2a2a';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      // Render grid
-      TurfDefenseRenderer.drawGrid(ctx, canvas.width, canvas.height);
-
-      // Render buildings
-      TurfDefenseRenderer.drawBuildings(ctx, defense);
+      // Render building HP bars (only during defense)
+      if (defense.structures) {
+        defense.structures.forEach(structure => {
+          TurfDefenseRenderer.drawStructureHP(ctx, structure);
+        });
+      }
 
       // Render enemies
       defense.enemies.forEach(enemy => {
@@ -6741,11 +6817,50 @@ const CartoonSpriteGenerator = {
 
       console.log(`🌊 [TurfDefense] Spawning ${enemyCount} enemies for wave ${wave}`);
 
-      const spawnPositions = TurfDefenseConfig.SPAWN_POSITIONS;
+      // Get map dimensions
+      const mapWidth = (GameState.map && GameState.map.width) || 30;
+      const mapHeight = (GameState.map && GameState.map.height) || 30;
+      const tileSize = 30;
+      const canvasWidth = mapWidth * tileSize;
+      const canvasHeight = mapHeight * tileSize;
+
+      // Generate spawn positions around edges of map
+      const spawnPositions = [];
+      const margin = 50;
+      const numSpawns = Math.max(8, enemyCount);
+
+      for (let i = 0; i < numSpawns; i++) {
+        const angle = (i / numSpawns) * Math.PI * 2;
+        const radius = Math.min(canvasWidth, canvasHeight) / 2 - margin;
+        const x = canvasWidth / 2 + Math.cos(angle) * radius;
+        const y = canvasHeight / 2 + Math.sin(angle) * radius;
+        spawnPositions.push({ x, y });
+      }
+
+      // Find main base and other structures
+      const mainBase = defense.structures ? defense.structures.find(s => s.isCritical) : null;
+      const structures = defense.structures || [];
 
       for (let i = 0; i < enemyCount; i++) {
         const spawnPos = spawnPositions[i % spawnPositions.length];
         const enemy = createEnemy(`enemy_${wave}_${i}`, spawnPos);
+
+        // Assign target structure (prefer main base, but distribute across structures)
+        if (mainBase && (i % 3 === 0 || structures.length === 1)) {
+          enemy.targetStructureId = mainBase.id;
+        } else if (structures.length > 1) {
+          // Target a random non-critical structure
+          const nonCritical = structures.filter(s => !s.isCritical && s.hp > 0);
+          if (nonCritical.length > 0) {
+            const target = nonCritical[i % nonCritical.length];
+            enemy.targetStructureId = target.id;
+          } else {
+            enemy.targetStructureId = mainBase ? mainBase.id : structures[0].id;
+          }
+        } else {
+          enemy.targetStructureId = mainBase ? mainBase.id : (structures[0] ? structures[0].id : null);
+        }
+
         defense.enemies.push(enemy);
       }
 
@@ -6758,8 +6873,8 @@ const CartoonSpriteGenerator = {
     function updateEnemyAI(enemy, dt, defense) {
       if (enemy.state === 'dead') return;
 
-      const playerX = defense.playerX || TurfDefenseConfig.PLAYER_START_X;
-      const playerY = defense.playerY || TurfDefenseConfig.PLAYER_START_Y;
+      const playerX = defense.playerX || (GameState.map ? (GameState.map.width * 15) : 450);
+      const playerY = defense.playerY || (GameState.map ? (GameState.map.height * 15) : 450);
 
       // Check for proximity aggro (if player gets too close)
       if (!enemy.aggroed) {
@@ -6782,14 +6897,38 @@ const CartoonSpriteGenerator = {
         targetY = playerY;
         targetType = 'player';
       } else {
-        // Not aggroed: target building
-        const building = TurfDefenseConfig.BUILDINGS.find(b => b.id === enemy.targetBuildingId);
-        if (building) {
-          targetX = building.x;
-          targetY = building.y;
-          targetType = 'building';
+        // Not aggroed: target assigned structure
+        const structure = defense.structures ? defense.structures.find(s => s.id === enemy.targetStructureId) : null;
+        if (structure && structure.hp > 0) {
+          targetX = structure.x;
+          targetY = structure.y;
+          targetType = 'structure';
+        } else {
+          // If target structure is destroyed, find nearest alive structure
+          const aliveStructures = defense.structures ? defense.structures.filter(s => s.hp > 0) : [];
+          if (aliveStructures.length > 0) {
+            // Find nearest structure
+            let nearestDist = Infinity;
+            let nearest = null;
+            aliveStructures.forEach(s => {
+              const dist = Math.sqrt(Math.pow(s.x - enemy.x, 2) + Math.pow(s.y - enemy.y, 2));
+              if (dist < nearestDist) {
+                nearestDist = dist;
+                nearest = s;
+              }
+            });
+            if (nearest) {
+              enemy.targetStructureId = nearest.id;
+              targetX = nearest.x;
+              targetY = nearest.y;
+              targetType = 'structure';
+            }
+          }
         }
       }
+
+      // If no valid target, do nothing
+      if (!targetX || !targetY) return;
 
       // Calculate distance to target
       const dx = targetX - enemy.x;
@@ -6807,7 +6946,7 @@ const CartoonSpriteGenerator = {
           tryEnemyAttackPlayer(enemy, defense);
         } else {
           enemy.state = 'attackingBuilding';
-          tryEnemyAttackBuilding(enemy, defense);
+          tryEnemyAttackStructure(enemy, defense);
         }
       } else {
         // Out of range - move toward target
@@ -7078,31 +7217,42 @@ const CartoonSpriteGenerator = {
     }
 
     /**
-     * Enemy attacks building
+     * Enemy attacks building (legacy - kept for backwards compatibility)
      */
     function tryEnemyAttackBuilding(enemy, defense) {
+      tryEnemyAttackStructure(enemy, defense);
+    }
+
+    /**
+     * Enemy attacks structure (new implementation)
+     */
+    function tryEnemyAttackStructure(enemy, defense) {
       const now = Date.now();
 
       if (now - enemy.lastAttackTime >= TurfDefenseConfig.ENEMY_ATTACK_COOLDOWN) {
         const damage = TurfDefenseConfig.ENEMY_DAMAGE;
-        const targetId = enemy.targetBuildingId;
+        const targetId = enemy.targetStructureId;
 
-        if (targetId === 'mainBase') {
-          defense.buildingHP.mainBase -= damage;
+        // Find target structure
+        const structure = defense.structures ? defense.structures.find(s => s.id === targetId) : null;
+        if (structure && structure.hp > 0) {
+          structure.hp -= damage;
           enemy.lastAttackTime = now;
 
-          // Spawn damage number at building position
-          const building = TurfDefenseConfig.BUILDINGS.find(b => b.id === targetId);
-          if (building) {
-            spawnDamageNumber(building.x, building.y - 50, damage, 'damage');
-          }
+          // Spawn damage number at structure position
+          spawnDamageNumber(structure.x, structure.y - 30, damage, 'damage');
 
-          console.log(`🏚️ [Enemy ${enemy.id}] Hit main base! Base HP: ${defense.buildingHP.mainBase}`);
+          console.log(`🏚️ [Enemy ${enemy.id}] Hit ${structure.name}! HP: ${structure.hp}/${structure.hpMax}`);
 
-          // Check if base destroyed
-          if (defense.buildingHP.mainBase <= 0) {
-            defense.waveState = 'failed';
-            console.log('💥 [TurfDefense] Main base destroyed!');
+          // Check if structure destroyed
+          if (structure.hp <= 0) {
+            console.log(`💥 [TurfDefense] ${structure.name} destroyed!`);
+
+            // If main base destroyed, end the game
+            if (structure.isCritical) {
+              defense.waveState = 'failed';
+              console.log('💥 [TurfDefense] Main base destroyed! Game over!');
+            }
           }
         }
       }
@@ -7266,33 +7416,47 @@ const CartoonSpriteGenerator = {
       init() {
         // Create canvas if not exists
         if (!this.canvas) {
+          const cityMap = document.getElementById('city-map');
+          if (!cityMap) {
+            console.error('❌ [TurfDefenseRenderer] city-map element not found!');
+            return;
+          }
+
+          // Get map dimensions from GameState or use defaults
+          const mapWidth = (GameState.map && GameState.map.width) || 30;
+          const mapHeight = (GameState.map && GameState.map.height) || 30;
+          const tileSize = 30; // RENDER_CONFIG.TILE_SIZE_PX
+          const canvasWidth = mapWidth * tileSize;
+          const canvasHeight = mapHeight * tileSize;
+
           this.canvas = document.createElement('canvas');
           this.canvas.id = 'turf-defense-canvas';
-          this.canvas.width = 800;
-          this.canvas.height = 600;
+          this.canvas.width = canvasWidth;
+          this.canvas.height = canvasHeight;
           this.canvas.style.cssText = `
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            border: 3px solid #00ff00;
-            background: #1a1a1a;
-            z-index: 1000;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: auto;
+            z-index: 100;
           `;
-          document.body.appendChild(this.canvas);
+
+          cityMap.appendChild(this.canvas);
           this.ctx = this.canvas.getContext('2d');
 
           // Add click handler for desktop shooting
           this.canvas.addEventListener('click', (e) => {
             const rect = this.canvas.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
+            const x = (e.clientX - rect.left) * (canvasWidth / rect.width);
+            const y = (e.clientY - rect.top) * (canvasHeight / rect.height);
 
             console.log(`🖱️ [Canvas] Click at (${x.toFixed(0)}, ${y.toFixed(0)})`);
             playerShootAtPosition(x, y);
           });
 
-          console.log('🎨 [TurfDefenseRenderer] Canvas initialized');
+          console.log(`🎨 [TurfDefenseRenderer] Canvas initialized (${canvasWidth}x${canvasHeight})`);
         }
       },
 
@@ -7333,59 +7497,40 @@ const CartoonSpriteGenerator = {
       },
 
       /**
-       * Draw buildings (placeholder rectangles)
+       * Draw HP bar above a structure (real building)
        */
-      drawBuildings(ctx, defense) {
-        TurfDefenseConfig.BUILDINGS.forEach(building => {
-          // Use visualHP for smooth animation
-          const visualHP = defense.buildingVisualHP[building.id] || defense.buildingHP[building.id] || 0;
-          const hpPercent = visualHP / building.maxHP;
+      drawStructureHP(ctx, structure) {
+        if (!structure || structure.hp <= 0) return;
 
-          // Building body
-          ctx.fillStyle = hpPercent > 0.5 ? '#4CAF50' : hpPercent > 0.25 ? '#FFC107' : '#F44336';
-          ctx.fillRect(
-            building.x - building.width / 2,
-            building.y - building.height / 2,
-            building.width,
-            building.height
-          );
+        const hpPercent = structure.hp / structure.hpMax;
 
-          // Building outline
-          ctx.strokeStyle = '#fff';
-          ctx.lineWidth = 2;
-          ctx.strokeRect(
-            building.x - building.width / 2,
-            building.y - building.height / 2,
-            building.width,
-            building.height
-          );
+        // HP bar dimensions
+        const barWidth = Math.max(60, structure.w);
+        const barHeight = 8;
+        const barX = structure.x - barWidth / 2;
+        const barY = structure.y - structure.h / 2 - 20;
 
-          // Animated HP bar
-          const barWidth = building.width;
-          const barHeight = 8;
-          const barX = building.x - barWidth / 2;
-          const barY = building.y - building.height / 2 - 18;
+        // HP bar background
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(barX, barY, barWidth, barHeight);
 
-          // HP bar background
-          ctx.fillStyle = '#333';
-          ctx.fillRect(barX, barY, barWidth, barHeight);
+        // HP bar fill
+        const fillWidth = barWidth * Math.max(0, Math.min(1, hpPercent));
+        ctx.fillStyle = hpPercent > 0.5 ? '#4CAF50' : hpPercent > 0.25 ? '#FFC107' : '#F44336';
+        ctx.fillRect(barX, barY, fillWidth, barHeight);
 
-          // HP bar fill (animated)
-          const fillWidth = barWidth * Math.max(0, Math.min(1, hpPercent));
-          ctx.fillStyle = hpPercent > 0.5 ? '#4CAF50' : hpPercent > 0.25 ? '#FFC107' : '#F44336';
-          ctx.fillRect(barX, barY, fillWidth, barHeight);
+        // HP bar border
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(barX, barY, barWidth, barHeight);
 
-          // HP bar border
-          ctx.strokeStyle = '#fff';
-          ctx.lineWidth = 1;
-          ctx.strokeRect(barX, barY, barWidth, barHeight);
-
-          // Label
-          ctx.fillStyle = '#fff';
-          ctx.font = '12px monospace';
+        // Label (show name for critical buildings)
+        if (structure.isCritical) {
+          ctx.fillStyle = '#FFD700';
+          ctx.font = 'bold 11px monospace';
           ctx.textAlign = 'center';
-          ctx.fillText('MAIN BASE', building.x, building.y + 5);
-        });
+          ctx.fillText(structure.name.toUpperCase(), structure.x, barY - 8);
+        }
       },
 
       /**
