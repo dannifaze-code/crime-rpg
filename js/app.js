@@ -17687,15 +17687,20 @@ const CartoonSpriteGenerator = {
               ensureGameStateSchema();
             }
 
-            if (!GameState.turfDefense || !GameState.turfDefense.active) {
-              console.log('🎮 [TEST] Starting Turf Defense from test button');
-              if (typeof startTurfDefense === 'function') {
-                startTurfDefense();
-              } else {
-                console.error('❌ [TurfDefense] startTurfDefense function not found!');
+            // If already active, end it first to allow restart
+            if (GameState.turfDefense && GameState.turfDefense.active) {
+              console.log('🔄 [TurfDefense] Already active, restarting...');
+              if (typeof endTurfDefense === 'function') {
+                endTurfDefense('restart');
               }
+            }
+
+            // Start fresh TurfDefense session
+            console.log('🎮 [TEST] Starting Turf Defense from test button');
+            if (typeof startTurfDefense === 'function') {
+              startTurfDefense();
             } else {
-              console.log('⚠️ [TurfDefense] Already active, ignoring activation');
+              console.error('❌ [TurfDefense] startTurfDefense function not found!');
             }
           } catch (error) {
             console.error('❌ [TurfDefense] Error in test button handler:', error);
