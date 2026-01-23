@@ -3709,7 +3709,14 @@ Then tighten the rules later.`);
                   <span>⟲</span>
                 </button>
               </div>
-              
+
+              <div class="test-controls" style="margin: 8px 16px;">
+                <button class="roam-btn" id="turf-defense-test-btn" style="width: 100%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: 2px solid rgba(255,255,255,0.2);">
+                  <span>🛡️</span>
+                  <span>Test Turf Defense</span>
+                </button>
+              </div>
+
               <div id="area-weather-info" style="margin: 8px 16px; padding: 6px 10px; background: rgba(0,0,0,0.3); border-radius: 4px; font-size: 11px; display: flex; justify-content: space-between; align-items: center;">
                 <span id="current-area-display" style="opacity: 0.8;">📍 Area: Unknown</span>
                 <span id="current-weather-display" style="opacity: 0.8;">🌤️ Weather: Clear</span>
@@ -7748,6 +7755,56 @@ const CartoonSpriteGenerator = {
         buttonContainer.appendChild(this.sprayButton);
         buttonContainer.appendChild(this.ultimateButton);
         this.container.appendChild(buttonContainer);
+
+        // Close button (top-right corner)
+        const closeButton = document.createElement('button');
+        closeButton.id = 'turf-defense-close-btn';
+        closeButton.innerHTML = `<span style="font-size: 24px;">✕</span>`;
+        closeButton.style.cssText = `
+          position: absolute;
+          top: 20px;
+          right: 20px;
+          width: 50px;
+          height: 50px;
+          background: rgba(200, 50, 50, 0.9);
+          border: 3px solid rgba(255, 255, 255, 0.6);
+          border-radius: 50%;
+          color: white;
+          font-size: 24px;
+          font-weight: bold;
+          cursor: pointer;
+          pointer-events: auto;
+          touch-action: manipulation;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+          transition: transform 0.1s, box-shadow 0.1s;
+          user-select: none;
+          -webkit-tap-highlight-color: transparent;
+        `;
+
+        // Touch feedback
+        closeButton.addEventListener('touchstart', (e) => {
+          e.preventDefault();
+          closeButton.style.transform = 'scale(0.9)';
+        });
+
+        closeButton.addEventListener('touchend', (e) => {
+          e.preventDefault();
+          closeButton.style.transform = 'scale(1)';
+          console.log('🚪 [TouchControls] Close button pressed');
+          endTurfDefense('user_close');
+        });
+
+        // Mouse support for desktop testing
+        closeButton.addEventListener('click', (e) => {
+          e.preventDefault();
+          console.log('🚪 [TouchControls] Close button clicked');
+          endTurfDefense('user_close');
+        });
+
+        this.container.appendChild(closeButton);
       },
 
       /**
@@ -17587,7 +17644,18 @@ const CartoonSpriteGenerator = {
             this.toggleFreeRoam();
           });
         }
-        
+
+        // Initialize turf defense test button
+        const turfDefenseTestBtn = document.getElementById('turf-defense-test-btn');
+        if (turfDefenseTestBtn) {
+          turfDefenseTestBtn.addEventListener('click', () => {
+            if (!GameState.turfDefense.active) {
+              console.log('🎮 [TEST] Starting Turf Defense from test button');
+              startTurfDefense();
+            }
+          });
+        }
+
         // Initialize zoom controls
         this.initZoomControls();
         
