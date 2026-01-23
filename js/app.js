@@ -6294,6 +6294,37 @@ const CartoonSpriteGenerator = {
         if (typeof GameState.cityState.worldTick !== 'number' || !isFinite(GameState.cityState.worldTick)) GameState.cityState.worldTick = 0;
         if (typeof GameState.cityState.riskLevel !== 'number' || !isFinite(GameState.cityState.riskLevel)) GameState.cityState.riskLevel = 0;
 
+        // Turf Defense state (Phase 8)
+        if (!GameState.turfDefense || typeof GameState.turfDefense !== 'object') {
+          GameState.turfDefense = JSON.parse(JSON.stringify(DEFAULT_STATE.turfDefense || {}));
+        }
+        // Ensure all turfDefense arrays exist
+        if (!Array.isArray(GameState.turfDefense.enemies)) GameState.turfDefense.enemies = [];
+        if (!Array.isArray(GameState.turfDefense.lootDrops)) GameState.turfDefense.lootDrops = [];
+        if (!Array.isArray(GameState.turfDefense.damageNumbers)) GameState.turfDefense.damageNumbers = [];
+        // Ensure turfDefense objects exist
+        if (!GameState.turfDefense.buildingHP || typeof GameState.turfDefense.buildingHP !== 'object') {
+          GameState.turfDefense.buildingHP = {
+            mainBase: 1000,
+            turrets: [],
+            walls: []
+          };
+        }
+        if (!Array.isArray(GameState.turfDefense.buildingHP.turrets)) GameState.turfDefense.buildingHP.turrets = [];
+        if (!Array.isArray(GameState.turfDefense.buildingHP.walls)) GameState.turfDefense.buildingHP.walls = [];
+        if (!GameState.turfDefense.buildingVisualHP || typeof GameState.turfDefense.buildingVisualHP !== 'object') {
+          GameState.turfDefense.buildingVisualHP = { mainBase: 1000 };
+        }
+        // Ensure turfDefense primitives exist
+        if (typeof GameState.turfDefense.active !== 'boolean') GameState.turfDefense.active = false;
+        if (typeof GameState.turfDefense.wave !== 'number' || !isFinite(GameState.turfDefense.wave)) GameState.turfDefense.wave = 0;
+        if (typeof GameState.turfDefense.playerHP !== 'number' || !isFinite(GameState.turfDefense.playerHP)) GameState.turfDefense.playerHP = 100;
+        if (typeof GameState.turfDefense.playerVisualHP !== 'number' || !isFinite(GameState.turfDefense.playerVisualHP)) GameState.turfDefense.playerVisualHP = 100;
+        if (typeof GameState.turfDefense.magazineCount !== 'number' || !isFinite(GameState.turfDefense.magazineCount)) GameState.turfDefense.magazineCount = 5;
+        if (typeof GameState.turfDefense.currentAmmo !== 'number' || !isFinite(GameState.turfDefense.currentAmmo)) GameState.turfDefense.currentAmmo = 10;
+        if (typeof GameState.turfDefense.maxAmmo !== 'number' || !isFinite(GameState.turfDefense.maxAmmo)) GameState.turfDefense.maxAmmo = 10;
+        if (typeof GameState.turfDefense.isReloading !== 'boolean') GameState.turfDefense.isReloading = false;
+
       } catch (e) {
         console.warn('[SCHEMA] ensureGameStateSchema failed:', e);
       }
