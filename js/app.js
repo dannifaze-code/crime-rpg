@@ -6483,6 +6483,8 @@ const CartoonSpriteGenerator = {
       GameState.turfDefense.enemiesKilled = 0;
       GameState.turfDefense.totalScore = 0;
       GameState.turfDefense.damageNumbers = [];
+      GameState.turfDefense.lastShootTime = 0;
+      GameState.turfDefense.lastSprayTime = 0;
 
       // Initialize player position at center of map
       GameState.turfDefense.playerX = canvasWidth / 2;
@@ -6603,6 +6605,82 @@ const CartoonSpriteGenerator = {
           defense.playerX = Math.max(20, Math.min(canvasWidth - 20, defense.playerX));
           defense.playerY = Math.max(20, Math.min(canvasHeight - 20, defense.playerY));
 
+          // Handle player shooting input (continuous)
+          if (defense.input.shooting && now - defense.lastShootTime >= TurfDefenseConfig.PLAYER_SHOOT_FIRE_RATE) {
+            // Find nearest enemy and shoot
+            let nearestEnemy = null;
+            let nearestDist = TurfDefenseConfig.PLAYER_SHOOT_RANGE;
+
+            defense.enemies.forEach(enemy => {
+              if (enemy.state === 'dead') return;
+
+              const dist = Math.sqrt(
+                Math.pow(enemy.x - defense.playerX, 2) + Math.pow(enemy.y - defense.playerY, 2)
+              );
+
+              if (dist < nearestDist) {
+                nearestDist = dist;
+                nearestEnemy = enemy;
+              }
+            });
+
+            if (nearestEnemy) {
+              playerShootAtPosition(nearestEnemy.x, nearestEnemy.y);
+              defense.lastShootTime = now;
+            }
+          }
+
+          // Handle player spraying input (continuous)
+          if (defense.input.spraying && now - defense.lastSprayTime >= TurfDefenseConfig.PLAYER_SPRAY_FIRE_RATE) {
+            // Spray damages all enemies in range (area damage)
+            let hitCount = 0;
+
+            defense.enemies.forEach(enemy => {
+              if (enemy.state === 'dead') return;
+
+              const dist = Math.sqrt(
+                Math.pow(enemy.x - defense.playerX, 2) + Math.pow(enemy.y - defense.playerY, 2)
+              );
+
+              // Spray has shorter range than shooting
+              if (dist < TurfDefenseConfig.PLAYER_SHOOT_RANGE * 0.7) {
+                const damage = TurfDefenseConfig.PLAYER_SPRAY_DAMAGE;
+                enemy.hp -= damage;
+
+                // Spawn damage number
+                spawnDamageNumber(enemy.x, enemy.y - 20, damage, 'damage');
+
+                // Aggro enemy when sprayed
+                if (!enemy.aggroed) {
+                  enemy.aggroed = true;
+                  console.log(`😡 [Enemy ${enemy.id}] Aggroed by spray!`);
+                }
+
+                // Check if enemy died
+                if (enemy.hp <= 0) {
+                  enemy.state = 'dead';
+                  defense.enemiesKilled++;
+                  defense.totalScore += 100;
+                  console.log(`💀 [Enemy ${enemy.id}] Killed by spray! Total kills: ${defense.enemiesKilled}`);
+                  spawnLoot(enemy.x, enemy.y);
+
+                  // Remove dead enemy after short delay
+                  setTimeout(() => {
+                    const idx = defense.enemies.indexOf(enemy);
+                    if (idx !== -1) defense.enemies.splice(idx, 1);
+                  }, 2000);
+                }
+
+                hitCount++;
+              }
+            });
+
+            if (hitCount > 0) {
+              console.log(`💨 [Spray] Hit ${hitCount} enemies!`);
+              defense.lastSprayTime = now;
+            }
+          }
+
           // Update all enemies
           defense.enemies.forEach(enemy => {
             updateEnemyAI(enemy, dt, defense);
@@ -6637,7 +6715,7 @@ const CartoonSpriteGenerator = {
             endTurfDefense('base_destroyed');
           } else if (defense.playerHP <= 0) {
             defense.waveState = 'failed';
-            endTurfDefense('player_died');
+            endTurfDefense('player_down');
           }
 
           break;
@@ -6765,6 +6843,10 @@ const CartoonSpriteGenerator = {
       PLAYER_START_Y: 300,
       PLAYER_SPEED: 100, // pixels per second
       PLAYER_SHOOT_RANGE: 200,
+      PLAYER_SHOOT_DAMAGE: 25, // Damage per shot
+      PLAYER_SHOOT_FIRE_RATE: 300, // ms - minimum time between shots
+      PLAYER_SPRAY_DAMAGE: 8, // Damage per spray tick
+      PLAYER_SPRAY_FIRE_RATE: 100, // ms - time between spray damage ticks
 
       // Weapon & Ammo system
       WEAPON_AMMO_CAPACITY: 10, // Bullets per magazine
