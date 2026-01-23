@@ -17714,262 +17714,6 @@ const CartoonSpriteGenerator = {
       }
     };
 
-    // ========================================
-    // TURF DEFENSE SYSTEM (Phase 8 - Scaffolding)
-    // ========================================
-
-    /**
-     * Start Turf Defense mode
-     * Initializes defense state, snapshots building HP, and sets up player stats
-     */
-    function startTurfDefense() {
-      console.log('🎮 [TurfDefense] Starting Turf Defense mode...');
-
-      // Set active state
-      GameState.turfDefense.active = true;
-      GameState.turfDefense.wave = 1;
-      GameState.turfDefense.waveState = 'spawning';
-      GameState.turfDefense.timeActiveMs = 0;
-      GameState.turfDefense.lastSpawnTime = Date.now();
-
-      // Clear arrays
-      GameState.turfDefense.enemies = [];
-      GameState.turfDefense.loot = [];
-
-      // Snapshot building HP for all existing turf buildings
-      GameState.turfDefense.buildingHP = {};
-
-      // Snapshot all interactive buildings on the map
-      if (GameState.map && Array.isArray(GameState.map.buildings)) {
-        GameState.map.buildings.forEach((building, index) => {
-          const buildingId = building.id || `building_${index}`;
-          GameState.turfDefense.buildingHP[buildingId] = building.hp || 100;
-        });
-        console.log(`📊 [TurfDefense] Snapshotted ${Object.keys(GameState.turfDefense.buildingHP).length} buildings`);
-      }
-
-      // Snapshot property buildings
-      if (Array.isArray(GameState.propertyBuildings)) {
-        GameState.propertyBuildings.forEach((property, index) => {
-          const propertyId = property.id || `property_${index}`;
-          GameState.turfDefense.buildingHP[propertyId] = property.hp || 150;
-        });
-      }
-
-      // Initialize player HP
-      GameState.turfDefense.playerHP = 100;
-      GameState.turfDefense.playerHPMax = 100;
-
-      // Initialize magazine count from inventory/ammo system if available
-      // Check if player has magazines in weapon parts or inventory
-      if (GameState.weaponParts && typeof GameState.weaponParts.magazines === 'number') {
-        GameState.turfDefense.magazineCount = Math.max(GameState.weaponParts.magazines, 100);
-      } else {
-        GameState.turfDefense.magazineCount = 100; // Default
-      }
-
-      console.log(`🎮 [TurfDefense] Started - Wave ${GameState.turfDefense.wave}, Player HP: ${GameState.turfDefense.playerHP}/${GameState.turfDefense.playerHPMax}, Magazines: ${GameState.turfDefense.magazineCount}`);
-      console.log(`🏗️ [TurfDefense] Defending ${Object.keys(GameState.turfDefense.buildingHP).length} buildings`);
-
-      // Show notification
-      if (typeof TurfTab !== 'undefined' && typeof TurfTab.showTemporaryNotification === 'function') {
-        TurfTab.showTemporaryNotification('🎮 Turf Defense Started!');
-      }
-
-      // Start update interval if not already running
-      if (!TurfTab.turfDefenseUpdateInterval) {
-        TurfTab.turfDefenseUpdateInterval = setInterval(() => {
-          if (GameState.turfDefense.active) {
-            updateTurfDefense(100); // ~100ms updates
-          }
-        }, 100);
-      }
-
-      // Save state
-      if (typeof Storage !== 'undefined' && typeof Storage.save === 'function') {
-        Storage.save();
-      }
-    }
-
-    /**
-     * End Turf Defense mode
-     * Cleans up state and optionally awards results
-     * @param {string} reason - Reason for ending ('victory', 'defeat', 'restart', 'manual')
-     */
-    function endTurfDefense(reason = 'manual') {
-      console.log(`🛑 [TurfDefense] Ending Turf Defense mode - Reason: ${reason}`);
-
-      if (!GameState.turfDefense.active) {
-        console.warn('⚠️ [TurfDefense] Defense mode not active, nothing to end');
-        return;
-      }
-
-      // Calculate results
-      const results = {
-        wave: GameState.turfDefense.wave,
-        timeActiveMs: GameState.turfDefense.timeActiveMs,
-        timeActiveSec: Math.floor(GameState.turfDefense.timeActiveMs / 1000),
-        reason: reason
-      };
-
-      // Set inactive
-      GameState.turfDefense.active = false;
-
-      // Clear enemies and loot
-      GameState.turfDefense.enemies = [];
-      GameState.turfDefense.loot = [];
-
-      // Clear update interval
-      if (TurfTab.turfDefenseUpdateInterval) {
-        clearInterval(TurfTab.turfDefenseUpdateInterval);
-        TurfTab.turfDefenseUpdateInterval = null;
-      }
-
-      // Log results
-      console.log(`📊 [TurfDefense] Session Results:`, results);
-      console.log(`   - Wave Reached: ${results.wave}`);
-      console.log(`   - Time Active: ${results.timeActiveSec}s`);
-      console.log(`   - End Reason: ${results.reason}`);
-
-      // Show notification with results
-      let message = '';
-      if (reason === 'victory') {
-        message = `🎉 Victory! Survived ${results.wave} waves (${results.timeActiveSec}s)`;
-      } else if (reason === 'defeat') {
-        message = `💀 Defeated on wave ${results.wave} after ${results.timeActiveSec}s`;
-      } else if (reason === 'restart') {
-        message = '🔄 Turf Defense Restarting...';
-      } else {
-        message = `🛑 Turf Defense Ended - Wave ${results.wave}`;
-      }
-
-      if (typeof TurfTab !== 'undefined' && typeof TurfTab.showTemporaryNotification === 'function') {
-        TurfTab.showTemporaryNotification(message);
-      }
-
-      // Optional: Award placeholder rewards (console log for now)
-      if (reason === 'victory' || reason === 'defeat') {
-        console.log(`💰 [TurfDefense] Placeholder reward calculation:`);
-        console.log(`   - Base reward would be: ${results.wave * 100} cash`);
-        console.log(`   - Time bonus would be: ${Math.floor(results.timeActiveSec / 10)} XP`);
-      }
-
-      // Save state
-      if (typeof Storage !== 'undefined' && typeof Storage.save === 'function') {
-        Storage.save();
-      }
-    }
-
-    /**
-     * Update Turf Defense state
-     * Called every frame when defense mode is active
-     * @param {number} dt - Delta time in milliseconds
-     */
-    function updateTurfDefense(dt) {
-      if (!GameState.turfDefense.active) return;
-
-      // Update active time
-      GameState.turfDefense.timeActiveMs += dt;
-
-      // Update wave state machine (scaffolding - no enemies yet)
-      switch (GameState.turfDefense.waveState) {
-        case 'idle':
-          // Not actively in a wave
-          break;
-
-        case 'spawning':
-          // Would spawn enemies here (scaffolding - skip for now)
-          // Transition to active after a delay
-          if (Date.now() - GameState.turfDefense.lastSpawnTime > 2000) {
-            GameState.turfDefense.waveState = 'active';
-            console.log(`⚔️ [TurfDefense] Wave ${GameState.turfDefense.wave} active`);
-          }
-          break;
-
-        case 'active':
-          // Would update enemies, check collisions, etc. (scaffolding - skip for now)
-          // For scaffolding, just log periodically
-          if (GameState.turfDefense.timeActiveMs % 5000 < dt) {
-            console.log(`🎮 [TurfDefense] Wave ${GameState.turfDefense.wave} running - ${Math.floor(GameState.turfDefense.timeActiveMs / 1000)}s elapsed`);
-          }
-          break;
-
-        case 'complete':
-          // Wave completed successfully
-          console.log(`✅ [TurfDefense] Wave ${GameState.turfDefense.wave} complete!`);
-          GameState.turfDefense.wave++;
-          GameState.turfDefense.waveState = 'spawning';
-          GameState.turfDefense.lastSpawnTime = Date.now();
-          break;
-
-        case 'failed':
-          // Wave failed (player died or buildings destroyed)
-          console.log(`❌ [TurfDefense] Wave ${GameState.turfDefense.wave} failed`);
-          endTurfDefense('defeat');
-          break;
-      }
-
-      // Update enemies (scaffolding - no enemies yet)
-      // GameState.turfDefense.enemies.forEach(enemy => { ... });
-
-      // Update loot (scaffolding - no loot yet)
-      // GameState.turfDefense.loot.forEach(loot => { ... });
-    }
-
-    /**
-     * Draw Turf Defense UI and entities
-     * Called from TurfTab.render() when defense mode is active
-     */
-    function drawTurfDefense() {
-      if (!GameState.turfDefense.active) return;
-
-      // Get or create defense overlay container
-      let defenseOverlay = document.getElementById('turf-defense-overlay');
-      if (!defenseOverlay) {
-        defenseOverlay = document.createElement('div');
-        defenseOverlay.id = 'turf-defense-overlay';
-        defenseOverlay.style.cssText = `
-          position: absolute;
-          top: 10px;
-          left: 10px;
-          background: rgba(0, 0, 0, 0.7);
-          color: white;
-          padding: 10px;
-          border-radius: 8px;
-          font-family: monospace;
-          font-size: 14px;
-          z-index: 1000;
-          pointer-events: none;
-        `;
-
-        const mapContainer = document.getElementById('city-map');
-        if (mapContainer) {
-          mapContainer.appendChild(defenseOverlay);
-        }
-      }
-
-      // Update HUD content
-      const timeActiveSec = Math.floor(GameState.turfDefense.timeActiveMs / 1000);
-      const minutes = Math.floor(timeActiveSec / 60);
-      const seconds = timeActiveSec % 60;
-
-      defenseOverlay.innerHTML = `
-        <div style="font-weight: bold; margin-bottom: 8px; color: #ff6b6b;">🎮 TURF DEFENSE ACTIVE</div>
-        <div>Wave: ${GameState.turfDefense.wave}</div>
-        <div>State: ${GameState.turfDefense.waveState}</div>
-        <div>Time: ${minutes}:${seconds.toString().padStart(2, '0')}</div>
-        <div>Player HP: ${GameState.turfDefense.playerHP}/${GameState.turfDefense.playerHPMax}</div>
-        <div>Magazines: ${GameState.turfDefense.magazineCount}</div>
-        <div>Buildings: ${Object.keys(GameState.turfDefense.buildingHP).length}</div>
-        <div style="margin-top: 8px; font-size: 12px; color: #aaa;">Scaffolding: No enemies/UI yet</div>
-      `;
-
-      // Draw enemies (scaffolding - no enemies yet)
-      // GameState.turfDefense.enemies.forEach(enemy => { ... });
-
-      // Draw loot (scaffolding - no loot yet)
-      // GameState.turfDefense.loot.forEach(loot => { ... });
-    }
 
     const TurfTab = {
       roamInterval: null,
@@ -17990,7 +17734,7 @@ const CartoonSpriteGenerator = {
       turfDefenseButtonInitialized: false,
 
       /**
-       * Update Turf Defense button text based on active state
+       * Update Turf Defense button text and style based on active state
        */
       updateTurfDefenseButton() {
         const turfDefenseTestBtn = document.getElementById('turf-defense-test-btn');
@@ -18001,10 +17745,12 @@ const CartoonSpriteGenerator = {
 
         if (GameState.turfDefense && GameState.turfDefense.active) {
           textSpan.textContent = 'End Turf Defense';
-          console.log('🔄 [TurfDefense] Button updated to "End Turf Defense"');
+          turfDefenseTestBtn.style.background = 'linear-gradient(135deg, #ea6767 0%, #a24b4b 100%)';
+          console.log('🔄 [TurfDefense] Button updated to "End Turf Defense" (red)');
         } else {
           textSpan.textContent = 'Test Turf Defense';
-          console.log('🔄 [TurfDefense] Button updated to "Test Turf Defense"');
+          turfDefenseTestBtn.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+          console.log('🔄 [TurfDefense] Button updated to "Test Turf Defense" (purple)');
         }
       },
 
@@ -18028,7 +17774,7 @@ const CartoonSpriteGenerator = {
 
         console.log('✅ [TurfDefense] Test button found, attaching event listeners');
 
-        // Handler function for button toggle
+        // Handler function for button activation (TOGGLE mode)
         const handleTurfDefenseToggle = (e) => {
           if (e) {
             e.preventDefault();
@@ -18045,7 +17791,7 @@ const CartoonSpriteGenerator = {
             if (GameState.turfDefense && GameState.turfDefense.active) {
               console.log('🛑 [TurfDefense] Ending Turf Defense from button...');
               if (typeof endTurfDefense === 'function') {
-                endTurfDefense('user_button');
+                endTurfDefense('manual');
               }
             } else {
               console.log('🎮 [TEST] Starting Turf Defense from test button');
@@ -18066,6 +17812,9 @@ const CartoonSpriteGenerator = {
 
         // Mark as initialized to avoid duplicate listeners
         turfDefenseTestBtn.dataset.turfDefenseListenerAttached = 'true';
+
+        // Update button text to match current state
+        this.updateTurfDefenseButton();
 
         console.log('✅ [TurfDefense] Test button event listeners attached successfully');
         this.turfDefenseButtonInitialized = true;
