@@ -6086,7 +6086,7 @@ const CartoonSpriteGenerator = {
         active: false,              // Is Turf Defense mode currently active
         wave: 0,                    // Current wave number (0 = not started)
         enemies: [],                // Active enemies [{id, x, y, hp, type, ...}]
-        lootDrops: [],              // Dropped loot [{x, y, type, value}]
+        lootDrops: [],              // Dropped loot [{x, y, type, value}] (aliased as 'loot' in requirements)
         buildingHP: {               // HP of defensive structures
           mainBase: 1000,           // Main base HP
           turrets: [],              // Array of turret HP values
@@ -6096,6 +6096,7 @@ const CartoonSpriteGenerator = {
           mainBase: 1000
         },
         playerHP: 100,              // Player HP during defense mode
+        playerHPMax: 100,           // Player maximum HP (ADDED per requirements)
         playerVisualHP: 100,        // Visual HP for smooth animations
         playerX: 400,               // Player X position
         playerY: 300,               // Player Y position
@@ -6105,7 +6106,8 @@ const CartoonSpriteGenerator = {
         isReloading: false,         // Is player currently reloading
         reloadStartTime: 0,         // Timestamp when reload started
         lastSpawnTime: 0,           // Timestamp of last enemy spawn
-        waveState: 'inactive',      // 'inactive' | 'preparing' | 'active' | 'complete' | 'failed'
+        timeActiveMs: 0,            // Total time defense mode has been active in milliseconds (ADDED per requirements)
+        waveState: 'idle',          // 'idle' | 'spawning' | 'active' | 'complete' | 'failed' (UPDATED to match requirements)
         waveStartTime: 0,           // When current wave started
         enemiesKilled: 0,           // Enemies killed in current session
         totalScore: 0,              // Total score accumulated
@@ -6329,11 +6331,17 @@ const CartoonSpriteGenerator = {
         if (typeof GameState.turfDefense.active !== 'boolean') GameState.turfDefense.active = false;
         if (typeof GameState.turfDefense.wave !== 'number' || !isFinite(GameState.turfDefense.wave)) GameState.turfDefense.wave = 0;
         if (typeof GameState.turfDefense.playerHP !== 'number' || !isFinite(GameState.turfDefense.playerHP)) GameState.turfDefense.playerHP = 100;
+        if (typeof GameState.turfDefense.playerHPMax !== 'number' || !isFinite(GameState.turfDefense.playerHPMax)) GameState.turfDefense.playerHPMax = 100;
         if (typeof GameState.turfDefense.playerVisualHP !== 'number' || !isFinite(GameState.turfDefense.playerVisualHP)) GameState.turfDefense.playerVisualHP = 100;
         if (typeof GameState.turfDefense.magazineCount !== 'number' || !isFinite(GameState.turfDefense.magazineCount)) GameState.turfDefense.magazineCount = 5;
         if (typeof GameState.turfDefense.currentAmmo !== 'number' || !isFinite(GameState.turfDefense.currentAmmo)) GameState.turfDefense.currentAmmo = 10;
         if (typeof GameState.turfDefense.maxAmmo !== 'number' || !isFinite(GameState.turfDefense.maxAmmo)) GameState.turfDefense.maxAmmo = 10;
         if (typeof GameState.turfDefense.isReloading !== 'boolean') GameState.turfDefense.isReloading = false;
+        if (typeof GameState.turfDefense.lastSpawnTime !== 'number' || !isFinite(GameState.turfDefense.lastSpawnTime)) GameState.turfDefense.lastSpawnTime = 0;
+        if (typeof GameState.turfDefense.timeActiveMs !== 'number' || !isFinite(GameState.turfDefense.timeActiveMs)) GameState.turfDefense.timeActiveMs = 0;
+        if (!GameState.turfDefense.waveState || !['idle', 'spawning', 'active', 'complete', 'failed'].includes(GameState.turfDefense.waveState)) {
+          GameState.turfDefense.waveState = 'idle';
+        }
 
       } catch (e) {
         console.warn('[SCHEMA] ensureGameStateSchema failed:', e);
@@ -6394,27 +6402,40 @@ const CartoonSpriteGenerator = {
 
       // Reset turf defense state
       GameState.turfDefense.active = true;
-      GameState.turfDefense.wave = 0;
+      GameState.turfDefense.wave = 1;  // Initialize to wave 1 as per requirements
+      GameState.turfDefense.waveState = 'spawning';  // Start in 'spawning' state as per requirements
       GameState.turfDefense.enemies = [];
       GameState.turfDefense.lootDrops = [];
+
+      // Snapshot/initialize buildingHP for all existing turf buildings
       GameState.turfDefense.buildingHP = {
         mainBase: 1000,
         turrets: [],
         walls: []
       };
-      GameState.turfDefense.playerHP = 100;
-      GameState.turfDefense.playerVisualHP = 100;
       GameState.turfDefense.buildingVisualHP = {
         mainBase: 1000
       };
-      GameState.turfDefense.magazineCount = 5;
+
+      // Set playerHP and playerHPMax
+      GameState.turfDefense.playerHP = 100;
+      GameState.turfDefense.playerHPMax = 100;  // ADDED per requirements
+      GameState.turfDefense.playerVisualHP = 100;
+
+      // Set magazineCount from existing inventory/ammo system if available; otherwise default 100
+      // TODO: Check for existing ammo inventory system
+      GameState.turfDefense.magazineCount = 100;  // Default 100 as per requirements
       GameState.turfDefense.currentAmmo = 10;
       GameState.turfDefense.maxAmmo = 10;
       GameState.turfDefense.isReloading = false;
       GameState.turfDefense.reloadStartTime = 0;
+
+      // Initialize timing fields
       GameState.turfDefense.lastSpawnTime = Date.now();
-      GameState.turfDefense.waveState = 'preparing';
+      GameState.turfDefense.timeActiveMs = 0;  // ADDED per requirements - tracks total active time
       GameState.turfDefense.waveStartTime = Date.now();
+
+      // Initialize score tracking
       GameState.turfDefense.enemiesKilled = 0;
       GameState.turfDefense.totalScore = 0;
       GameState.turfDefense.damageNumbers = [];
@@ -6431,13 +6452,12 @@ const CartoonSpriteGenerator = {
       // Initialize touch controls for mobile
       TouchControls.init();
 
-      // TODO: Switch to defense UI
-      // TODO: Show wave prep screen
+      // Switch normal turf mode input to defense mode (stub)
+      // TODO: Implement input mode switching logic
 
       // Start wave 1 after 3 seconds
       setTimeout(() => {
-        if (GameState.turfDefense.active && GameState.turfDefense.waveState === 'preparing') {
-          GameState.turfDefense.wave = 1;
+        if (GameState.turfDefense.active && GameState.turfDefense.waveState === 'spawning') {
           GameState.turfDefense.waveState = 'active';
           GameState.turfDefense.waveStartTime = Date.now();
           console.log('🌊 [TurfDefense] Wave 1 started!');
@@ -6455,6 +6475,7 @@ const CartoonSpriteGenerator = {
       const finalScore = GameState.turfDefense.totalScore;
       const finalWave = GameState.turfDefense.wave;
       const enemiesKilled = GameState.turfDefense.enemiesKilled;
+      const timeActiveMs = GameState.turfDefense.timeActiveMs;
 
       // Cleanup renderer
       TurfDefenseRenderer.destroy();
@@ -6464,14 +6485,19 @@ const CartoonSpriteGenerator = {
 
       // Mark as inactive
       GameState.turfDefense.active = false;
-      GameState.turfDefense.waveState = 'inactive';
+      GameState.turfDefense.waveState = 'idle';  // Set to 'idle' as per requirements
 
       // Clear enemies and loot
       GameState.turfDefense.enemies = [];
       GameState.turfDefense.lootDrops = [];
 
-      console.log('📊 [TurfDefense] Session ended - Wave:', finalWave, 'Score:', finalScore, 'Kills:', enemiesKilled);
+      // Restore any modified flags/input mode
+      // TODO: Restore normal turf input mode
 
+      // Award placeholder result summary
+      console.log('📊 [TurfDefense] Session ended - Wave:', finalWave, 'Score:', finalScore, 'Kills:', enemiesKilled, 'Time:', Math.floor(timeActiveMs / 1000) + 's');
+
+      // Placeholder rewards (to be implemented)
       // TODO: Award rewards based on performance
       // TODO: Show end screen with stats
       // TODO: Return to normal UI
@@ -6488,10 +6514,17 @@ const CartoonSpriteGenerator = {
       const defense = GameState.turfDefense;
       const now = Date.now();
 
+      // Update time active (convert dt from seconds to milliseconds)
+      defense.timeActiveMs += dt * 1000;
+
       // Update based on wave state
       switch (defense.waveState) {
-        case 'preparing':
-          // Preparation phase - countdown to wave start
+        case 'idle':
+          // Idle state - waiting to start
+          break;
+
+        case 'spawning':
+          // Spawning phase - countdown to wave start
           // TODO: Show countdown timer
           break;
 
