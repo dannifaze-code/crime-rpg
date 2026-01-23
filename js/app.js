@@ -6434,8 +6434,8 @@ const CartoonSpriteGenerator = {
       // Initialize touch controls for mobile
       TouchControls.init();
 
-      // Update test button to show "End" mode
-      if (TurfTab && typeof TurfTab.updateTurfDefenseButton === 'function') {
+      // Update button text to "End Turf Defense"
+      if (typeof TurfTab !== 'undefined' && typeof TurfTab.updateTurfDefenseButton === 'function') {
         TurfTab.updateTurfDefenseButton();
       }
 
@@ -6478,8 +6478,8 @@ const CartoonSpriteGenerator = {
       GameState.turfDefense.enemies = [];
       GameState.turfDefense.lootDrops = [];
 
-      // Update test button to show "Start" mode
-      if (TurfTab && typeof TurfTab.updateTurfDefenseButton === 'function') {
+      // Update button text back to "Test Turf Defense"
+      if (typeof TurfTab !== 'undefined' && typeof TurfTab.updateTurfDefenseButton === 'function') {
         TurfTab.updateTurfDefenseButton();
       }
 
@@ -17734,23 +17734,23 @@ const CartoonSpriteGenerator = {
       turfDefenseButtonInitialized: false,
 
       /**
-       * Update Turf Defense test button text based on active state
+       * Update Turf Defense button text and style based on active state
        */
       updateTurfDefenseButton() {
         const turfDefenseTestBtn = document.getElementById('turf-defense-test-btn');
         if (!turfDefenseTestBtn) return;
 
-        const isActive = GameState.turfDefense && GameState.turfDefense.active;
-        const buttonText = turfDefenseTestBtn.querySelector('span:last-child');
+        const textSpan = turfDefenseTestBtn.querySelector('span:nth-child(2)');
+        if (!textSpan) return;
 
-        if (buttonText) {
-          if (isActive) {
-            buttonText.textContent = 'End Turf Defense';
-            turfDefenseTestBtn.style.background = 'linear-gradient(135deg, #ea6767 0%, #a24b4b 100%)';
-          } else {
-            buttonText.textContent = 'Test Turf Defense';
-            turfDefenseTestBtn.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
-          }
+        if (GameState.turfDefense && GameState.turfDefense.active) {
+          textSpan.textContent = 'End Turf Defense';
+          turfDefenseTestBtn.style.background = 'linear-gradient(135deg, #ea6767 0%, #a24b4b 100%)';
+          console.log('🔄 [TurfDefense] Button updated to "End Turf Defense" (red)');
+        } else {
+          textSpan.textContent = 'Test Turf Defense';
+          turfDefenseTestBtn.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+          console.log('🔄 [TurfDefense] Button updated to "Test Turf Defense" (purple)');
         }
       },
 
@@ -17787,14 +17787,14 @@ const CartoonSpriteGenerator = {
               ensureGameStateSchema();
             }
 
-            // TOGGLE: If active, end it. If inactive, start it.
+            // Toggle: If active, end it; if inactive, start it
             if (GameState.turfDefense && GameState.turfDefense.active) {
-              console.log('🛑 [TurfDefense] Ending Turf Defense...');
+              console.log('🛑 [TurfDefense] Ending Turf Defense from button...');
               if (typeof endTurfDefense === 'function') {
                 endTurfDefense('manual');
               }
             } else {
-              console.log('🎮 [TurfDefense] Starting Turf Defense...');
+              console.log('🎮 [TEST] Starting Turf Defense from test button');
               if (typeof startTurfDefense === 'function') {
                 startTurfDefense();
               } else {
