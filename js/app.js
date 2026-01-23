@@ -6571,6 +6571,14 @@ const CartoonSpriteGenerator = {
       const defense = GameState.turfDefense;
       const now = Date.now();
 
+      // Input safety: consume one-shot inputs to prevent stuck states
+      // Ultimate is one-shot (tap once to activate)
+      if (defense.input && defense.input.ultimate) {
+        // TODO: Trigger ultimate ability here when implemented
+        defense.input.ultimate = false; // Consume immediately
+      }
+      // Note: shooting and spraying are hold inputs, kept true while held
+
       // Update based on wave state
       switch (defense.waveState) {
         case 'preparing':
@@ -24965,11 +24973,16 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       // ========================================
       // GAME LOOP: Turf Defense Update
       // ========================================
-      let lastUpdateTime = Date.now();
+      // Use performance.now() for accurate real-time delta (prevents mobile drift)
+      let lastUpdateTime = performance.now();
       const gameLoopInterval = setInterval(() => {
-        const now = Date.now();
-        const dt = (now - lastUpdateTime) / 1000; // Delta time in seconds
+        const now = performance.now();
+        let dt = (now - lastUpdateTime) / 1000; // Delta time in seconds
         lastUpdateTime = now;
+
+        // Clamp dt to prevent fast-forward when returning from background
+        // Max 50ms (0.05s) prevents huge jumps that cause double hits/warping
+        dt = Math.min(dt, 0.05);
 
         // Update Turf Defense mode if active
         if (GameState.turfDefense && GameState.turfDefense.active) {
