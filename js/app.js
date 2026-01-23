@@ -6378,6 +6378,149 @@ const CartoonSpriteGenerator = {
     // ========================================
     // TURF DEFENSE MODE
     // ========================================
+    // TURF DEFENSE: BUILDING INTEGRATION
+    // ========================================
+
+    /**
+     * Get the real turf buildings from GameState
+     * Single source of truth for building data
+     * @returns {Array} Array of building objects from GameState.map.buildings
+     */
+    function getTurfBuildings() {
+      if (!GameState.map || !Array.isArray(GameState.map.buildings)) {
+        return [];
+      }
+      return GameState.map.buildings;
+    }
+
+    /**
+     * Assign stable defense IDs to buildings
+     * Ensures each building has a persistent _defId across the session
+     * @param {Array} buildings - Array of building objects
+     */
+    function assignStableBuildingIds(buildings) {
+      buildings.forEach((building, index) => {
+        if (!building._defId) {
+          // Create stable ID: bld_<index>_<typeId>
+          const nameSlug = (building.typeId || building.id || 'building').replace(/[^a-z0-9]/gi, '_');
+          building._defId = `bld_${index}_${nameSlug}`;
+        }
+      });
+    }
+
+    /**
+     * Build defense.structures array from real turf buildings
+     * Maps real building objects to defense structure objects
+     * @returns {Array} Array of structure objects with refs to real buildings
+     */
+    function buildDefenseStructuresFromTurf() {
+      const buildings = getTurfBuildings();
+      if (buildings.length === 0) {
+        console.warn('⚠️ [TurfDefense] No turf buildings found, creating fallback base');
+        return createFallbackStructures();
+      }
+
+      // Assign stable IDs to all buildings
+      assignStableBuildingIds(buildings);
+
+      const tileSize = 30; // RENDER_CONFIG.TILE_SIZE_PX
+      const structures = [];
+      let mainBase = null;
+
+      buildings.forEach((building) => {
+        // Convert tile coordinates to pixel coordinates (center of footprint)
+        const x = (building.x + building.footprint.width / 2) * tileSize;
+        const y = (building.y + building.footprint.height / 2) * tileSize;
+        const w = building.footprint.width * tileSize;
+        const h = building.footprint.height * tileSize;
+
+        // Determine if this is the main base (safehouse = critical)
+        const isCritical = building.typeId === 'safehouse';
+        const hpMax = isCritical ? 1000 : 500;
+
+        const structure = {
+          id: building._defId,
+          name: building.name || 'Building',
+          x: x,
+          y: y,
+          w: w,
+          h: h,
+          hp: hpMax,
+          hpMax: hpMax,
+          isCritical: isCritical,
+          ref: building  // Reference to real building object
+        };
+
+        structures.push(structure);
+
+        if (isCritical && !mainBase) {
+          mainBase = structure;
+        }
+      });
+
+      // If no safehouse found, promote first building to main base
+      if (!mainBase && structures.length > 0) {
+        structures[0].isCritical = true;
+        structures[0].name = 'Main Base';
+        structures[0].hp = 1000;
+        structures[0].hpMax = 1000;
+        mainBase = structures[0];
+      }
+
+      console.log(`📍 [TurfDefense] Built ${structures.length} structures from real buildings (Main Base: ${mainBase?.name || 'none'})`);
+      return structures;
+    }
+
+    /**
+     * Create fallback structures when no real buildings exist
+     * @returns {Array} Array with a single default base structure
+     */
+    function createFallbackStructures() {
+      const mapWidth = (GameState.map && GameState.map.width) || 30;
+      const mapHeight = (GameState.map && GameState.map.height) || 30;
+      const tileSize = 30;
+      const canvasWidth = mapWidth * tileSize;
+      const canvasHeight = mapHeight * tileSize;
+
+      return [{
+        id: 'fallback_base',
+        name: 'Main Base',
+        x: canvasWidth / 2,
+        y: canvasHeight / 2,
+        w: 80,
+        h: 80,
+        hp: 1000,
+        hpMax: 1000,
+        isCritical: true,
+        ref: null
+      }];
+    }
+
+    /**
+     * Sync defense structures to real building positions
+     * Updates structure bounds from building refs (in case buildings moved/resized)
+     * Called each frame during updateTurfDefense(dt)
+     */
+    function syncDefenseStructuresFromRefs() {
+      const defense = GameState.turfDefense;
+      if (!defense.active || !defense.structures) return;
+
+      const tileSize = 30; // RENDER_CONFIG.TILE_SIZE_PX
+
+      defense.structures.forEach(structure => {
+        if (structure.ref) {
+          // Update position from real building tile coordinates
+          structure.x = (structure.ref.x + structure.ref.footprint.width / 2) * tileSize;
+          structure.y = (structure.ref.y + structure.ref.footprint.height / 2) * tileSize;
+          structure.w = structure.ref.footprint.width * tileSize;
+          structure.h = structure.ref.footprint.height * tileSize;
+          // Name might change, sync it too
+          structure.name = structure.ref.name || structure.name;
+        }
+      });
+    }
+
+    // ========================================
 
     /**
      * Start Turf Defense mode
@@ -6393,76 +6536,8 @@ const CartoonSpriteGenerator = {
       const canvasWidth = mapWidth * tileSize;
       const canvasHeight = mapHeight * tileSize;
 
-      // Initialize structures from real building data
-      const structures = [];
-      if (GameState.map && GameState.map.buildings && GameState.map.buildings.length > 0) {
-        // Find the safehouse as the main base
-        let mainBase = null;
-
-        GameState.map.buildings.forEach((building, index) => {
-          // Convert tile coordinates to pixel coordinates
-          const x = (building.x + building.footprint.width / 2) * tileSize;
-          const y = (building.y + building.footprint.height / 2) * tileSize;
-          const w = building.footprint.width * tileSize;
-          const h = building.footprint.height * tileSize;
-
-          // Mark safehouse as main base (critical structure)
-          const isCritical = building.typeId === 'safehouse';
-          if (isCritical && !mainBase) {
-            mainBase = {
-              id: building.id,
-              name: building.name || 'Main Base',
-              x: x,
-              y: y,
-              w: w,
-              h: h,
-              hp: 1000,
-              hpMax: 1000,
-              isCritical: true,
-              buildingRef: building
-            };
-            structures.push(mainBase);
-          } else {
-            // Other buildings as secondary structures
-            structures.push({
-              id: building.id,
-              name: building.name || 'Building',
-              x: x,
-              y: y,
-              w: w,
-              h: h,
-              hp: 500,
-              hpMax: 500,
-              isCritical: false,
-              buildingRef: building
-            });
-          }
-        });
-
-        // If no safehouse found, use the first building as main base
-        if (!mainBase && structures.length > 0) {
-          structures[0].isCritical = true;
-          structures[0].name = 'Main Base';
-          structures[0].hp = 1000;
-          structures[0].hpMax = 1000;
-        }
-      } else {
-        // Fallback: create a default main base in the center
-        structures.push({
-          id: 'default_base',
-          name: 'Main Base',
-          x: canvasWidth / 2,
-          y: canvasHeight / 2,
-          w: 80,
-          h: 80,
-          hp: 1000,
-          hpMax: 1000,
-          isCritical: true,
-          buildingRef: null
-        });
-      }
-
-      console.log(`📍 [TurfDefense] Initialized ${structures.length} structures (Main Base: ${structures.find(s => s.isCritical)?.name || 'none'})`);
+      // Initialize structures from real turf buildings (single source of truth)
+      const structures = buildDefenseStructuresFromTurf();
 
       // Reset turf defense state
       GameState.turfDefense.active = true;
@@ -6548,6 +6623,17 @@ const CartoonSpriteGenerator = {
       GameState.turfDefense.enemies = [];
       GameState.turfDefense.lootDrops = [];
 
+      // Clear structures and cleanup building refs
+      if (GameState.turfDefense.structures) {
+        // Remove _defId from real buildings (cleanup temp fields)
+        GameState.turfDefense.structures.forEach(structure => {
+          if (structure.ref && structure.ref._defId) {
+            delete structure.ref._defId;
+          }
+        });
+        GameState.turfDefense.structures = [];
+      }
+
       // Update button text back to "Test Turf Defense"
       if (typeof TurfTab !== 'undefined' && typeof TurfTab.updateTurfDefenseButton === 'function') {
         TurfTab.updateTurfDefenseButton();
@@ -6578,6 +6664,10 @@ const CartoonSpriteGenerator = {
         defense.input.ultimate = false; // Consume immediately
       }
       // Note: shooting and spraying are hold inputs, kept true while held
+
+      // Sync structure positions/bounds from real building refs
+      // Ensures structures stay aligned with real turf buildings (single source of truth)
+      syncDefenseStructuresFromRefs();
 
       // Update based on wave state
       switch (defense.waveState) {
