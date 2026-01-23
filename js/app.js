@@ -2425,6 +2425,11 @@ Then tighten the rules later.`);
                     TurfTab.initZoomControls();
                     console.log('[GoogleAuth] ✅ Zoom controls re-initialized');
                   }
+                  // Re-initialize Turf Defense button after login
+                  if (typeof TurfTab !== 'undefined' && typeof TurfTab.initTurfDefenseButton === 'function') {
+                    TurfTab.initTurfDefenseButton();
+                    console.log('[GoogleAuth] ✅ Turf Defense button re-initialized');
+                  }
                 }, 300);
                 
                 // Force sprite load after 500ms
@@ -2493,6 +2498,11 @@ Then tighten the rules later.`);
                   if (typeof TurfTab !== 'undefined' && typeof TurfTab.initZoomControls === 'function') {
                     TurfTab.initZoomControls();
                     console.log('[GoogleAuth] ✅ Zoom controls re-initialized');
+                  }
+                  // Re-initialize Turf Defense button after login
+                  if (typeof TurfTab !== 'undefined' && typeof TurfTab.initTurfDefenseButton === 'function') {
+                    TurfTab.initTurfDefenseButton();
+                    console.log('[GoogleAuth] ✅ Turf Defense button re-initialized');
                   }
                 }, 300);
                 
@@ -17642,7 +17652,68 @@ const CartoonSpriteGenerator = {
       worldTickInterval: null,
       moneyDrainInterval: null,
       cooldownHeatCheckInterval: null,
-      
+      turfDefenseButtonInitialized: false,
+
+      /**
+       * Initialize Turf Defense test button with retry logic
+       * This ensures the button works even after DOM rebuilds (login, tab switches, etc.)
+       */
+      initTurfDefenseButton() {
+        const turfDefenseTestBtn = document.getElementById('turf-defense-test-btn');
+        if (!turfDefenseTestBtn) {
+          console.warn('⚠️ [TurfDefense] Test button not found in DOM, will retry on next render');
+          this.turfDefenseButtonInitialized = false;
+          return false;
+        }
+
+        // Check if already initialized (avoid duplicate listeners)
+        if (turfDefenseTestBtn.dataset.turfDefenseListenerAttached === 'true') {
+          console.log('✅ [TurfDefense] Test button already has listeners attached');
+          return true;
+        }
+
+        console.log('✅ [TurfDefense] Test button found, attaching event listeners');
+
+        // Handler function for button activation
+        const handleTurfDefenseStart = (e) => {
+          if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+          console.log('🎮 [TurfDefense] Test button activated!');
+          try {
+            // Ensure schema is valid before checking state
+            if (typeof ensureGameStateSchema === 'function') {
+              ensureGameStateSchema();
+            }
+
+            if (!GameState.turfDefense || !GameState.turfDefense.active) {
+              console.log('🎮 [TEST] Starting Turf Defense from test button');
+              if (typeof startTurfDefense === 'function') {
+                startTurfDefense();
+              } else {
+                console.error('❌ [TurfDefense] startTurfDefense function not found!');
+              }
+            } else {
+              console.log('⚠️ [TurfDefense] Already active, ignoring activation');
+            }
+          } catch (error) {
+            console.error('❌ [TurfDefense] Error in test button handler:', error);
+          }
+        };
+
+        // Add both click and touchstart for better mobile compatibility
+        turfDefenseTestBtn.addEventListener('click', handleTurfDefenseStart);
+        turfDefenseTestBtn.addEventListener('touchstart', handleTurfDefenseStart, { passive: false });
+
+        // Mark as initialized to avoid duplicate listeners
+        turfDefenseTestBtn.dataset.turfDefenseListenerAttached = 'true';
+
+        console.log('✅ [TurfDefense] Test button event listeners attached successfully');
+        this.turfDefenseButtonInitialized = true;
+        return true;
+      },
+
       init() {
         // Initialize Three.js weather overlay
         console.log('[TurfTab] Initializing weather overlay...');
@@ -17676,16 +17747,16 @@ const CartoonSpriteGenerator = {
           });
         }
 
-        // Initialize turf defense test button
-        const turfDefenseTestBtn = document.getElementById('turf-defense-test-btn');
-        if (turfDefenseTestBtn) {
-          turfDefenseTestBtn.addEventListener('click', () => {
-            if (!GameState.turfDefense.active) {
-              console.log('🎮 [TEST] Starting Turf Defense from test button');
-              startTurfDefense();
-            }
-          });
-        }
+        // Initialize turf defense test button (with retry if not found)
+        this.initTurfDefenseButton();
+
+        // Retry button initialization after a delay if it wasn't found
+        setTimeout(() => {
+          if (!this.turfDefenseButtonInitialized) {
+            console.log('🔄 [TurfDefense] Retrying button initialization after delay...');
+            this.initTurfDefenseButton();
+          }
+        }, 500);
 
         // Initialize zoom controls
         this.initZoomControls();
@@ -22171,6 +22242,12 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
           } else {
             console.log('[TurfTab] ⚠️ WeatherOverlay initialization deferred (waiting for valid dimensions)');
           }
+        }
+
+        // Re-initialize Turf Defense button if not initialized (fixes button not working after DOM rebuilds)
+        if (!this.turfDefenseButtonInitialized) {
+          console.log('[TurfTab] 🔧 Turf Defense button not initialized - initializing now...');
+          this.initTurfDefenseButton();
         }
 
         // PHASE 7.4D: Render procedural map tiles
