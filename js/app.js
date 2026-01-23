@@ -6434,6 +6434,11 @@ const CartoonSpriteGenerator = {
       // Initialize touch controls for mobile
       TouchControls.init();
 
+      // Update button text to "End Turf Defense"
+      if (typeof TurfTab !== 'undefined' && typeof TurfTab.updateTurfDefenseButton === 'function') {
+        TurfTab.updateTurfDefenseButton();
+      }
+
       // TODO: Switch to defense UI
       // TODO: Show wave prep screen
 
@@ -6472,6 +6477,11 @@ const CartoonSpriteGenerator = {
       // Clear enemies and loot
       GameState.turfDefense.enemies = [];
       GameState.turfDefense.lootDrops = [];
+
+      // Update button text back to "Test Turf Defense"
+      if (typeof TurfTab !== 'undefined' && typeof TurfTab.updateTurfDefenseButton === 'function') {
+        TurfTab.updateTurfDefenseButton();
+      }
 
       console.log('📊 [TurfDefense] Session ended - Wave:', finalWave, 'Score:', finalScore, 'Kills:', enemiesKilled);
 
@@ -17980,6 +17990,25 @@ const CartoonSpriteGenerator = {
       turfDefenseButtonInitialized: false,
 
       /**
+       * Update Turf Defense button text based on active state
+       */
+      updateTurfDefenseButton() {
+        const turfDefenseTestBtn = document.getElementById('turf-defense-test-btn');
+        if (!turfDefenseTestBtn) return;
+
+        const textSpan = turfDefenseTestBtn.querySelector('span:nth-child(2)');
+        if (!textSpan) return;
+
+        if (GameState.turfDefense && GameState.turfDefense.active) {
+          textSpan.textContent = 'End Turf Defense';
+          console.log('🔄 [TurfDefense] Button updated to "End Turf Defense"');
+        } else {
+          textSpan.textContent = 'Test Turf Defense';
+          console.log('🔄 [TurfDefense] Button updated to "Test Turf Defense"');
+        }
+      },
+
+      /**
        * Initialize Turf Defense test button with retry logic
        * This ensures the button works even after DOM rebuilds (login, tab switches, etc.)
        */
@@ -17999,8 +18028,8 @@ const CartoonSpriteGenerator = {
 
         console.log('✅ [TurfDefense] Test button found, attaching event listeners');
 
-        // Handler function for button activation
-        const handleTurfDefenseStart = (e) => {
+        // Handler function for button toggle
+        const handleTurfDefenseToggle = (e) => {
           if (e) {
             e.preventDefault();
             e.stopPropagation();
@@ -18012,20 +18041,19 @@ const CartoonSpriteGenerator = {
               ensureGameStateSchema();
             }
 
-            // If already active, end it first to allow restart
+            // Toggle: If active, end it; if inactive, start it
             if (GameState.turfDefense && GameState.turfDefense.active) {
-              console.log('🔄 [TurfDefense] Already active, restarting...');
+              console.log('🛑 [TurfDefense] Ending Turf Defense from button...');
               if (typeof endTurfDefense === 'function') {
-                endTurfDefense('restart');
+                endTurfDefense('user_button');
               }
-            }
-
-            // Start fresh TurfDefense session
-            console.log('🎮 [TEST] Starting Turf Defense from test button');
-            if (typeof startTurfDefense === 'function') {
-              startTurfDefense();
             } else {
-              console.error('❌ [TurfDefense] startTurfDefense function not found!');
+              console.log('🎮 [TEST] Starting Turf Defense from test button');
+              if (typeof startTurfDefense === 'function') {
+                startTurfDefense();
+              } else {
+                console.error('❌ [TurfDefense] startTurfDefense function not found!');
+              }
             }
           } catch (error) {
             console.error('❌ [TurfDefense] Error in test button handler:', error);
@@ -18033,8 +18061,8 @@ const CartoonSpriteGenerator = {
         };
 
         // Add both click and touchstart for better mobile compatibility
-        turfDefenseTestBtn.addEventListener('click', handleTurfDefenseStart);
-        turfDefenseTestBtn.addEventListener('touchstart', handleTurfDefenseStart, { passive: false });
+        turfDefenseTestBtn.addEventListener('click', handleTurfDefenseToggle);
+        turfDefenseTestBtn.addEventListener('touchstart', handleTurfDefenseToggle, { passive: false });
 
         // Mark as initialized to avoid duplicate listeners
         turfDefenseTestBtn.dataset.turfDefenseListenerAttached = 'true';
