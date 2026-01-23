@@ -6097,7 +6097,14 @@ const CartoonSpriteGenerator = {
         playerHPMax: 100,           // Maximum player HP
         magazineCount: 100,         // Available magazines/ammo
         lastSpawnTime: 0,           // Timestamp of last enemy spawn
-        timeActiveMs: 0             // Total time defense mode has been active
+        timeActiveMs: 0,            // Total time defense mode has been active
+        input: {                    // Player input state from touch controls
+          moveX: 0,                 // Joystick X axis [-1..1]
+          moveY: 0,                 // Joystick Y axis [-1..1]
+          shooting: false,          // Shoot button pressed
+          spraying: false,          // Spray button pressed
+          ultimate: false           // Ultimate button pressed
+        }
       }
     };
 
@@ -6303,6 +6310,15 @@ const CartoonSpriteGenerator = {
         if (!GameState.turfDefense.buildingHP || typeof GameState.turfDefense.buildingHP !== 'object') {
           GameState.turfDefense.buildingHP = {};
         }
+        if (!GameState.turfDefense.input || typeof GameState.turfDefense.input !== 'object') {
+          GameState.turfDefense.input = {
+            moveX: 0,
+            moveY: 0,
+            shooting: false,
+            spraying: false,
+            ultimate: false
+          };
+        }
         // Ensure turfDefense primitives exist
         if (typeof GameState.turfDefense.active !== 'boolean') GameState.turfDefense.active = false;
         if (typeof GameState.turfDefense.wave !== 'number' || !isFinite(GameState.turfDefense.wave)) GameState.turfDefense.wave = 1;
@@ -6400,6 +6416,15 @@ const CartoonSpriteGenerator = {
       // Initialize player position
       GameState.turfDefense.playerX = TurfDefenseConfig.PLAYER_START_X;
       GameState.turfDefense.playerY = TurfDefenseConfig.PLAYER_START_Y;
+
+      // Initialize input state
+      GameState.turfDefense.input = {
+        moveX: 0,
+        moveY: 0,
+        shooting: false,
+        spraying: false,
+        ultimate: false
+      };
 
       console.log('✅ [TurfDefense] Mode started - Wave', GameState.turfDefense.wave, 'State:', GameState.turfDefense.waveState);
 
@@ -7458,11 +7483,12 @@ const CartoonSpriteGenerator = {
         ctx.textAlign = 'center';
         ctx.fillText('YOU', playerX, playerY + 5);
 
-        // Display ammo count next to player (right side)
+        // Display magazine count next to player (right side)
         ctx.fillStyle = '#FFD700'; // Gold color
         ctx.font = 'bold 14px monospace';
         ctx.textAlign = 'left';
-        ctx.fillText(`X${defense.currentAmmo}`, playerX + 28, playerY + 5);
+        const magazineCount = defense.magazineCount || 0;
+        ctx.fillText(`X${magazineCount}`, playerX + 28, playerY + 5);
 
         // Reload animation overlay
         if (defense.isReloading) {
@@ -7870,6 +7896,13 @@ const CartoonSpriteGenerator = {
           e.preventDefault();
           button.style.transform = 'scale(1)';
           button.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.4)';
+
+          // Reset shooting/spraying flags on release (not ultimate - that's one-shot)
+          const defense = GameState.turfDefense;
+          if (defense && defense.input) {
+            if (id === 'shoot') defense.input.shooting = false;
+            else if (id === 'spray') defense.input.spraying = false;
+          }
         });
 
         // Mouse events for desktop testing
@@ -7885,6 +7918,13 @@ const CartoonSpriteGenerator = {
         button.addEventListener('mouseup', (e) => {
           e.preventDefault();
           button.style.transform = 'scale(1)';
+
+          // Reset shooting/spraying flags on release (not ultimate - that's one-shot)
+          const defense = GameState.turfDefense;
+          if (defense && defense.input) {
+            if (id === 'shoot') defense.input.shooting = false;
+            else if (id === 'spray') defense.input.spraying = false;
+          }
         });
 
         return button;
@@ -7987,6 +8027,12 @@ const CartoonSpriteGenerator = {
         this.movement.x = finalX / this.joystick.maxDistance;
         this.movement.y = finalY / this.joystick.maxDistance;
 
+        // Store in GameState.turfDefense.input
+        if (GameState.turfDefense && GameState.turfDefense.input) {
+          GameState.turfDefense.input.moveX = this.movement.x;
+          GameState.turfDefense.input.moveY = this.movement.y;
+        }
+
         // Debug log (throttled)
         if (Math.random() < 0.05) {
           console.log('[TouchControls] Movement:',
@@ -8003,6 +8049,12 @@ const CartoonSpriteGenerator = {
         this.joystickKnob.style.transform = 'translate(0, 0)';
         this.movement.x = 0;
         this.movement.y = 0;
+
+        // Reset input state
+        if (GameState.turfDefense && GameState.turfDefense.input) {
+          GameState.turfDefense.input.moveX = 0;
+          GameState.turfDefense.input.moveY = 0;
+        }
       },
 
       /**
@@ -8025,6 +8077,11 @@ const CartoonSpriteGenerator = {
       onShoot() {
         const defense = GameState.turfDefense;
         if (!defense.active) return;
+
+        // Set shooting input flag
+        if (defense.input) {
+          defense.input.shooting = true;
+        }
 
         // Find nearest enemy within shooting range
         const playerX = defense.playerX || TurfDefenseConfig.PLAYER_START_X;
@@ -8067,6 +8124,14 @@ const CartoonSpriteGenerator = {
        * Spray action handler
        */
       onSpray() {
+        const defense = GameState.turfDefense;
+        if (!defense.active) return;
+
+        // Set spraying input flag
+        if (defense.input) {
+          defense.input.spraying = true;
+        }
+
         console.log('💨 [TouchControls] SPRAY ATTACK!');
 
         // TODO: Implement spray attack logic
@@ -8088,6 +8153,21 @@ const CartoonSpriteGenerator = {
        * Ultimate action handler
        */
       onUltimate() {
+        const defense = GameState.turfDefense;
+        if (!defense.active) return;
+
+        // Set ultimate input flag (one-shot trigger)
+        if (defense.input) {
+          defense.input.ultimate = true;
+
+          // Auto-reset after one frame (simulated with setTimeout)
+          setTimeout(() => {
+            if (defense.input) {
+              defense.input.ultimate = false;
+            }
+          }, 100);
+        }
+
         console.log('⚡ [TouchControls] ULTIMATE ABILITY!');
 
         // TODO: Implement ultimate ability
@@ -8129,6 +8209,15 @@ const CartoonSpriteGenerator = {
         this.joystick.touchId = null;
         this.movement.x = 0;
         this.movement.y = 0;
+
+        // Reset input state in GameState
+        if (GameState.turfDefense && GameState.turfDefense.input) {
+          GameState.turfDefense.input.moveX = 0;
+          GameState.turfDefense.input.moveY = 0;
+          GameState.turfDefense.input.shooting = false;
+          GameState.turfDefense.input.spraying = false;
+          GameState.turfDefense.input.ultimate = false;
+        }
 
         console.log('✅ [TouchControls] Controls removed');
       }
