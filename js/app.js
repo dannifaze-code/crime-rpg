@@ -6448,7 +6448,11 @@ const CartoonSpriteGenerator = {
           hp: hpMax,
           hpMax: hpMax,
           isCritical: isCritical,
-          ref: building  // Reference to real building object
+          ref: building,  // Reference to real building object
+          // PHASE 3D: Hit feedback fields
+          hitFlashT: 0,
+          hitShakeT: 0,
+          lastDamageTime: 0
         };
 
         structures.push(structure);
@@ -6492,7 +6496,11 @@ const CartoonSpriteGenerator = {
         hp: 1000,
         hpMax: 1000,
         isCritical: true,
-        ref: null
+        ref: null,
+        // PHASE 3D: Hit feedback fields
+        hitFlashT: 0,
+        hitShakeT: 0,
+        lastDamageTime: 0
       }];
     }
 
@@ -6786,7 +6794,27 @@ const CartoonSpriteGenerator = {
             // Lerp enemy visual HP toward actual HP
             const lerpSpeed = TurfDefenseConfig.HP_BAR_LERP_SPEED;
             enemy.visualHP += (enemy.hp - enemy.visualHP) * lerpSpeed;
+
+            // PHASE 3D: Decay enemy attack animation timer
+            if (enemy.attackAnimT > 0) {
+              enemy.attackAnimT -= dt * 1000; // Convert dt to ms
+              if (enemy.attackAnimT < 0) enemy.attackAnimT = 0;
+            }
           });
+
+          // PHASE 3D: Decay structure hit feedback timers
+          if (defense.structures) {
+            defense.structures.forEach(structure => {
+              if (structure.hitFlashT > 0) {
+                structure.hitFlashT -= dt * 1000; // Convert dt to ms
+                if (structure.hitFlashT < 0) structure.hitFlashT = 0;
+              }
+              if (structure.hitShakeT > 0) {
+                structure.hitShakeT -= dt * 1000; // Convert dt to ms
+                if (structure.hitShakeT < 0) structure.hitShakeT = 0;
+              }
+            });
+          }
 
           // Lerp player visual HP toward actual HP
           const lerpSpeed = TurfDefenseConfig.HP_BAR_LERP_SPEED;
@@ -6983,7 +7011,9 @@ const CartoonSpriteGenerator = {
         targetBuildingId: 'mainBase', // Default target
         aggroed: false,
         lastAttackTime: 0,
-        velocity: { x: 0, y: 0 }
+        velocity: { x: 0, y: 0 },
+        // PHASE 3D: Attack animation timer
+        attackAnimT: 0
       };
     }
 
@@ -7419,6 +7449,14 @@ const CartoonSpriteGenerator = {
           structure.hp -= damage;
           enemy.lastAttackTime = now;
 
+          // PHASE 3D: Trigger hit feedback on structure
+          structure.hitFlashT = 150;    // Flash duration in ms
+          structure.hitShakeT = 200;    // Shake duration in ms
+          structure.lastDamageTime = now;
+
+          // PHASE 3D: Trigger enemy attack animation
+          enemy.attackAnimT = 300;      // Attack anim duration in ms
+
           // Spawn damage number at structure position
           spawnDamageNumber(structure.x, structure.y - 30, damage, 'damage');
 
@@ -7684,11 +7722,28 @@ const CartoonSpriteGenerator = {
 
         const hpPercent = structure.hp / structure.hpMax;
 
+        // PHASE 3D: Apply shake offset if structure is being hit
+        let shakeX = 0;
+        let shakeY = 0;
+        if (structure.hitShakeT > 0) {
+          // Simple random jitter (2-3px max)
+          const shakeIntensity = (structure.hitShakeT / 200); // Normalize to 0-1
+          shakeX = (Math.random() - 0.5) * 4 * shakeIntensity;
+          shakeY = (Math.random() - 0.5) * 4 * shakeIntensity;
+        }
+
         // HP bar dimensions
         const barWidth = Math.max(60, structure.w);
         const barHeight = 8;
-        const barX = structure.x - barWidth / 2;
-        const barY = structure.y - structure.h / 2 - 20;
+        const barX = structure.x - barWidth / 2 + shakeX;
+        const barY = structure.y - structure.h / 2 - 20 + shakeY;
+
+        // PHASE 3D: Flash effect when hit
+        if (structure.hitFlashT > 0) {
+          const flashAlpha = structure.hitFlashT / 150; // Normalize to 0-1
+          ctx.fillStyle = `rgba(255, 255, 255, ${flashAlpha * 0.6})`;
+          ctx.fillRect(barX - 4, barY - 4, barWidth + 8, barHeight + 8);
+        }
 
         // HP bar background
         ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
@@ -7696,7 +7751,16 @@ const CartoonSpriteGenerator = {
 
         // HP bar fill
         const fillWidth = barWidth * Math.max(0, Math.min(1, hpPercent));
-        ctx.fillStyle = hpPercent > 0.5 ? '#4CAF50' : hpPercent > 0.25 ? '#FFC107' : '#F44336';
+
+        // PHASE 3D: Critical building low HP pulsing
+        let fillColor = hpPercent > 0.5 ? '#4CAF50' : hpPercent > 0.25 ? '#FFC107' : '#F44336';
+        if (structure.isCritical && hpPercent <= 0.30) {
+          // Pulse red for critical low HP
+          const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 200);
+          ctx.fillStyle = `rgba(244, 67, 54, ${0.6 + pulse * 0.4})`;
+        } else {
+          ctx.fillStyle = fillColor;
+        }
         ctx.fillRect(barX, barY, fillWidth, barHeight);
 
         // HP bar border
@@ -7709,7 +7773,7 @@ const CartoonSpriteGenerator = {
           ctx.fillStyle = '#FFD700';
           ctx.font = 'bold 11px monospace';
           ctx.textAlign = 'center';
-          ctx.fillText(structure.name.toUpperCase(), structure.x, barY - 8);
+          ctx.fillText(structure.name.toUpperCase(), structure.x + shakeX, barY - 8);
         }
       },
 
@@ -7763,6 +7827,38 @@ const CartoonSpriteGenerator = {
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 1;
         ctx.strokeRect(barX, barY, barWidth, barHeight);
+
+        // PHASE 3D: Attack animation indicator
+        if (enemy.attackAnimT > 0) {
+          const animProgress = enemy.attackAnimT / 300; // Normalize to 0-1
+
+          // Draw impact arc for melee attack
+          if (enemy.state === 'attackingBuilding') {
+            // Draw an arc in front of enemy (toward target)
+            ctx.save();
+            ctx.globalAlpha = animProgress * 0.8;
+            ctx.strokeStyle = '#FF6B00';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            // Arc at 20px from enemy
+            const arcRadius = 20;
+            const arcAngle = Math.PI / 3; // 60 degrees
+            ctx.arc(enemy.x, enemy.y, arcRadius, -arcAngle / 2, arcAngle / 2);
+            ctx.stroke();
+            ctx.restore();
+          }
+
+          // Muzzle flash for player attacks (if we add this later)
+          if (enemy.state === 'attackingPlayer') {
+            ctx.save();
+            ctx.globalAlpha = animProgress;
+            ctx.fillStyle = '#FFFF00';
+            ctx.beginPath();
+            ctx.arc(enemy.x, enemy.y, 8, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+          }
+        }
 
         // Aggro indicator
         if (enemy.aggroed) {
@@ -7993,6 +8089,24 @@ const CartoonSpriteGenerator = {
           ctx.textAlign = 'center';
           ctx.fillStyle = '#4CAF50';
           ctx.fillText('WAVE COMPLETE!', width / 2, height / 2 - 50);
+        }
+
+        // PHASE 3D: Critical building low HP warning
+        if (defense.structures) {
+          const criticalStructure = defense.structures.find(s => s.isCritical);
+          if (criticalStructure && criticalStructure.hp > 0) {
+            const hpPercent = criticalStructure.hp / criticalStructure.hpMax;
+            if (hpPercent <= 0.30) {
+              // Pulse the warning text
+              const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 300);
+              ctx.save();
+              ctx.font = 'bold 20px monospace';
+              ctx.textAlign = 'center';
+              ctx.fillStyle = `rgba(244, 67, 54, ${0.7 + pulse * 0.3})`;
+              ctx.fillText('⚠️ BASE UNDER ATTACK ⚠️', width / 2, 120);
+              ctx.restore();
+            }
+          }
         }
       }
     };
