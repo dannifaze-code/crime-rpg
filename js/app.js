@@ -6387,9 +6387,18 @@ const CartoonSpriteGenerator = {
      * @returns {Array} Array of building objects from GameState.map.buildings
      */
     function getTurfBuildings() {
+      console.log('🏗️ [getTurfBuildings] Called');
+      console.log('   GameState.map exists:', !!GameState.map);
+      console.log('   GameState.map.buildings exists:', !!GameState.map?.buildings);
+      console.log('   GameState.map.buildings is array:', Array.isArray(GameState.map?.buildings));
+      console.log('   GameState.map.buildings length:', GameState.map?.buildings?.length || 0);
+
       if (!GameState.map || !Array.isArray(GameState.map.buildings)) {
+        console.warn('⚠️ [getTurfBuildings] Returning empty array - no buildings found!');
         return [];
       }
+
+      console.log(`✅ [getTurfBuildings] Returning ${GameState.map.buildings.length} buildings`);
       return GameState.map.buildings;
     }
 
@@ -6415,6 +6424,10 @@ const CartoonSpriteGenerator = {
      */
     function buildDefenseStructuresFromTurf() {
       const buildings = getTurfBuildings();
+
+      console.log(`🏗️ [TurfDefense] buildDefenseStructuresFromTurf() called`);
+      console.log(`🏗️ [TurfDefense] Found ${buildings.length} buildings in GameState.map.buildings`);
+
       if (buildings.length === 0) {
         console.warn('⚠️ [TurfDefense] No turf buildings found, creating fallback base');
         return createFallbackStructures();
@@ -6427,12 +6440,16 @@ const CartoonSpriteGenerator = {
       const structures = [];
       let mainBase = null;
 
-      buildings.forEach((building) => {
+      buildings.forEach((building, index) => {
         // Convert tile coordinates to pixel coordinates (center of footprint)
         const x = (building.x + building.footprint.width / 2) * tileSize;
         const y = (building.y + building.footprint.height / 2) * tileSize;
         const w = building.footprint.width * tileSize;
         const h = building.footprint.height * tileSize;
+
+        console.log(`🏗️ [Building ${index}] ${building.name} (${building.typeId})`);
+        console.log(`   Tile coords: (${building.x}, ${building.y}), Footprint: ${building.footprint.width}x${building.footprint.height}`);
+        console.log(`   Pixel coords: (${x}, ${y}), Size: ${w}x${h}`);
 
         // Determine if this is the main base (safehouse = critical)
         const isCritical = building.typeId === 'safehouse';
@@ -6910,6 +6927,15 @@ const CartoonSpriteGenerator = {
 
       // Render building HP bars (only during defense)
       if (defense.structures) {
+        // DEBUG: Log structures being rendered (only once per wave start)
+        if (!defense._structuresLogged) {
+          console.log(`🎨 [Renderer] Drawing ${defense.structures.length} structures:`);
+          defense.structures.forEach((s, i) => {
+            console.log(`  [${i}] ${s.name} at (${s.x}, ${s.y}) HP: ${s.hp}/${s.hpMax} Critical: ${s.isCritical}`);
+          });
+          defense._structuresLogged = true;
+        }
+
         defense.structures.forEach(structure => {
           TurfDefenseRenderer.drawStructureHP(ctx, structure);
         });
