@@ -6768,12 +6768,26 @@ const CartoonSpriteGenerator = {
       console.log('✅ [TurfDefense] Mode started - Wave', GameState.turfDefense.wave, 'State:', GameState.turfDefense.waveState);
 
       // Initialize renderer canvas
-      console.log('🎨 [TurfDefense] Calling TurfDefenseRenderer.init()...');
-      TurfDefenseRenderer.init();
-      console.log('🎨 [TurfDefense] After init() - canvas exists:', !!TurfDefenseRenderer.canvas, 'ctx exists:', !!TurfDefenseRenderer.ctx);
+      try {
+        console.log('🎨 [TurfDefense] Calling TurfDefenseRenderer.init()...');
+        console.log('  TurfDefenseRenderer exists:', typeof TurfDefenseRenderer);
+        console.log('  TurfDefenseRenderer.init exists:', typeof TurfDefenseRenderer?.init);
+
+        TurfDefenseRenderer.init();
+
+        console.log('🎨 [TurfDefense] After init() - canvas exists:', !!TurfDefenseRenderer.canvas, 'ctx exists:', !!TurfDefenseRenderer.ctx);
+      } catch (error) {
+        console.error('❌ [TurfDefense] ERROR during TurfDefenseRenderer.init():', error);
+        console.error('  Error message:', error.message);
+        console.error('  Error stack:', error.stack);
+      }
 
       // Initialize touch controls for mobile
-      TouchControls.init();
+      try {
+        TouchControls.init();
+      } catch (error) {
+        console.error('❌ [TurfDefense] ERROR during TouchControls.init():', error);
+      }
 
       // Update button text to "End Turf Defense"
       if (typeof TurfTab !== 'undefined' && typeof TurfTab.updateTurfDefenseButton === 'function') {
@@ -25621,19 +25635,34 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
         // DEBUG: Increment tick counter
         if (DEBUG_OVERLAY_ENABLED) {
           DebugOverlay.tick();
+
+          // Log game loop state occasionally (every 2 seconds = ~120 ticks at 60fps)
+          if (DebugOverlay.tickCount % 120 === 0) {
+            console.log('🎮 [GameLoop] Tick', DebugOverlay.tickCount, '- turfDefense.active:', GameState.turfDefense?.active);
+          }
         }
 
         // Update Turf Defense mode if active
         if (GameState.turfDefense && GameState.turfDefense.active) {
+          if (DEBUG_OVERLAY_ENABLED && DebugOverlay.tickCount % 120 === 0) {
+            console.log('  Entering TD update/draw block...');
+          }
+
           updateTurfDefense(dt);
           drawTurfDefense();
 
           // DEBUG: Check if update/draw were actually called
           if (DEBUG_OVERLAY_ENABLED && !DebugOverlay.updateCalledThisTick) {
             console.warn('⚠️ [DEBUG] turfDefense.active=true but updateTurfDefense() was NOT called!');
+            console.warn('  GameState.turfDefense:', !!GameState.turfDefense);
+            console.warn('  GameState.turfDefense.active:', GameState.turfDefense?.active);
+            console.warn('  updateTurfDefense function exists:', typeof updateTurfDefense);
           }
           if (DEBUG_OVERLAY_ENABLED && !DebugOverlay.drawCalledThisTick) {
             console.warn('⚠️ [DEBUG] turfDefense.active=true but drawTurfDefense() was NOT called!');
+            console.warn('  TurfDefenseRenderer.canvas:', !!TurfDefenseRenderer.canvas);
+            console.warn('  TurfDefenseRenderer.ctx:', !!TurfDefenseRenderer.ctx);
+            console.warn('  drawTurfDefense function exists:', typeof drawTurfDefense);
           }
         }
       }, 1000 / 60); // 60 FPS target
