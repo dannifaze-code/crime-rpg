@@ -6134,7 +6134,9 @@ const CartoonSpriteGenerator = {
         wave: 1,                    // Current wave number
         waveState: 'idle',          // 'idle' | 'spawning' | 'active' | 'complete' | 'failed'
         enemies: [],                // Active enemies (scaffolding - no enemies yet)
-        loot: [],                   // Dropped loot (scaffolding - no loot yet)
+        lootDrops: [],              // Dropped loot (renamed from 'loot' to match code usage)
+        structures: [],             // Defense structures (buildings being defended)
+        damageNumbers: [],          // Floating damage numbers for visual feedback
         buildingHP: {},             // HP of turf buildings (snapshot of all turf buildings)
         playerHP: 100,              // Player HP during defense mode
         playerHPMax: 100,           // Maximum player HP
@@ -6348,7 +6350,21 @@ const CartoonSpriteGenerator = {
         }
         // Ensure all turfDefense arrays exist
         if (!Array.isArray(GameState.turfDefense.enemies)) GameState.turfDefense.enemies = [];
-        if (!Array.isArray(GameState.turfDefense.loot)) GameState.turfDefense.loot = [];
+
+        // MIGRATION: Rename 'loot' to 'lootDrops' for consistency with code usage
+        if (!Array.isArray(GameState.turfDefense.lootDrops)) {
+          // Check if old 'loot' property exists and migrate it
+          if (Array.isArray(GameState.turfDefense.loot)) {
+            GameState.turfDefense.lootDrops = GameState.turfDefense.loot;
+            delete GameState.turfDefense.loot; // Remove old property
+          } else {
+            GameState.turfDefense.lootDrops = [];
+          }
+        }
+
+        if (!Array.isArray(GameState.turfDefense.structures)) GameState.turfDefense.structures = [];
+        if (!Array.isArray(GameState.turfDefense.damageNumbers)) GameState.turfDefense.damageNumbers = [];
+
         // Ensure turfDefense objects exist
         if (!GameState.turfDefense.buildingHP || typeof GameState.turfDefense.buildingHP !== 'object') {
           GameState.turfDefense.buildingHP = {};
@@ -7040,6 +7056,8 @@ const CartoonSpriteGenerator = {
           updateLootPickups(dt);
 
           // Check wave completion (all enemies dead)
+          // Safety: Ensure enemies array exists
+          if (!Array.isArray(defense.enemies)) defense.enemies = [];
           const aliveEnemies = defense.enemies.filter(e => e.state !== 'dead');
           if (aliveEnemies.length === 0 && defense.enemies.length > 0) {
             defense.waveState = 'complete';
@@ -7475,6 +7493,15 @@ const CartoonSpriteGenerator = {
      */
     function updateDamageNumbers(dt) {
       const defense = GameState.turfDefense;
+      if (!defense.active) return;
+
+      // Safety: Ensure damageNumbers array exists
+      if (!Array.isArray(defense.damageNumbers)) {
+        console.warn('⚠️ [updateDamageNumbers] damageNumbers is not an array, initializing...');
+        defense.damageNumbers = [];
+        return;
+      }
+
       const now = Date.now();
 
       // Update and remove expired damage numbers
@@ -7593,6 +7620,13 @@ const CartoonSpriteGenerator = {
     function updateLootPickups(dt) {
       const defense = GameState.turfDefense;
       if (!defense.active) return;
+
+      // Safety: Ensure lootDrops array exists
+      if (!Array.isArray(defense.lootDrops)) {
+        console.warn('⚠️ [updateLootPickups] lootDrops is not an array, initializing...');
+        defense.lootDrops = [];
+        return;
+      }
 
       const playerX = defense.playerX || TurfDefenseConfig.PLAYER_START_X;
       const playerY = defense.playerY || TurfDefenseConfig.PLAYER_START_Y;
