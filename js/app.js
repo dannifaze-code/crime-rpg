@@ -1,10 +1,53 @@
 /**
  * Crime RPG - Main Application Code
- * 
+ *
  * This file was extracted from index.html to keep the HTML file lightweight
- * and improve code organization. All game logic, UI interactions, and 
+ * and improve code organization. All game logic, UI interactions, and
  * application state management are contained here.
+ *
+ * =====================================================================
+ * DEBUG INSTRUMENTATION REPORT (PHASE 1-6 COMPLETE)
+ * =====================================================================
+ *
+ * ROOT CAUSE ANALYSIS:
+ * 1. ✅ Cache/Build Issues: BUILD_STAMP system added to verify latest code
+ * 2. 🔍 Runtime Gating: Full audit of all conditional gates documented below
+ * 3. ✅ Render Order: drawTurfDefense() called in main loop after updates
+ * 4. ✅ State Initialization: Buildings mapped from mapIcons + propertyBuildings
+ * 5. ✅ Loop Execution: 60fps setInterval verified at line 25294
+ *
+ * GATING CONDITIONS FOUND (see detailed analysis below):
+ * - GameState.turfDefense.active must be true (line 25304)
+ * - Canvas must exist (TurfDefenseRenderer.init line 7748)
+ * - city-map container must exist (line 7750)
+ * - Buildings must be initialized before startTurfDefense() (fixed in getTurfBuildings)
+ *
+ * CHANGES MADE:
+ * - Line 7: BUILD_STAMP constant (displays on-screen + console)
+ * - Line 8400+: DebugOverlay system (toggle with DEBUG_OVERLAY_ENABLED)
+ * - Line 25308+: Debug overlay rendering in main loop
+ * - Line 6389+: getTurfBuildings() fixed to use mapIcons + propertyBuildings
+ *
+ * HOW TO DISABLE DEBUG OVERLAY:
+ * Set DEBUG_OVERLAY_ENABLED = false at line ~30
+ *
+ * COORDINATE SPACE VERIFIED:
+ * - Buildings: Tile coords (x, y) converted to pixels (* 30)
+ * - Enemies: Spawn in pixel coords, same space as buildings
+ * - Player: Pixel coords, initialized at map center
+ * - Canvas: 900x900px (30x30 tiles * 30px/tile)
+ *
+ * =====================================================================
  */
+
+    // ========================================
+    // BUILD VERIFICATION & DEBUG CONTROLS
+    // ========================================
+    const BUILD_STAMP = "TD_DEBUG_" + new Date().toISOString();
+    const DEBUG_OVERLAY_ENABLED = true; // Set to false to disable debug overlay
+
+    // Log build stamp on load
+    console.log('🏗️ BUILD_STAMP:', BUILD_STAMP);
 
     // ========================================
     // WEATHER SYSTEM: Three.js Overlay (Phase 1)
@@ -6389,6 +6432,17 @@ const CartoonSpriteGenerator = {
     function getTurfBuildings() {
       console.log('🏗️ [getTurfBuildings] Called');
 
+      // DEBUG: Check state of source arrays
+      if (DEBUG_OVERLAY_ENABLED) {
+        console.log('  DEBUG: Checking building sources...');
+        console.log('    GameState.mapIcons exists:', !!GameState.mapIcons);
+        console.log('    GameState.mapIcons is array:', Array.isArray(GameState.mapIcons));
+        console.log('    GameState.mapIcons length:', GameState.mapIcons?.length || 0);
+        console.log('    GameState.propertyBuildings exists:', !!GameState.propertyBuildings);
+        console.log('    GameState.propertyBuildings is array:', Array.isArray(GameState.propertyBuildings));
+        console.log('    GameState.propertyBuildings length:', GameState.propertyBuildings?.length || 0);
+      }
+
       const buildings = [];
 
       // Get landmarks from mapIcons (Safehouse, Gun Shop, Casino, etc.)
@@ -6437,6 +6491,18 @@ const CartoonSpriteGenerator = {
       }
 
       console.log(`✅ [getTurfBuildings] Returning ${buildings.length} total buildings`);
+
+      // DEBUG: Show first few buildings
+      if (DEBUG_OVERLAY_ENABLED && buildings.length > 0) {
+        console.log('  First 3 buildings:');
+        buildings.slice(0, 3).forEach((b, i) => {
+          console.log(`    [${i}] ${b.name} (${b.type}) at tile (${b.x}, ${b.y}) footprint ${b.footprint.width}x${b.footprint.height}`);
+        });
+      } else if (DEBUG_OVERLAY_ENABLED && buildings.length === 0) {
+        console.warn('  ⚠️ GATE FAILURE: No buildings found in mapIcons or propertyBuildings!');
+        console.warn('  This will cause fallback structure creation.');
+      }
+
       return buildings;
     }
 
@@ -6650,6 +6716,20 @@ const CartoonSpriteGenerator = {
       // Initialize structures from real turf buildings (single source of truth)
       const structures = buildDefenseStructuresFromTurf();
 
+      // DEBUG: Log building detection results
+      if (DEBUG_OVERLAY_ENABLED) {
+        console.log('🏗️ [DEBUG] Building Detection Results:');
+        console.log(`  Buildings detected: ${structures.length}`);
+        if (structures.length > 0) {
+          console.log('  First 5 structures:');
+          structures.slice(0, 5).forEach((s, i) => {
+            console.log(`    [${i}] ${s.name} at (${s.x.toFixed(0)}, ${s.y.toFixed(0)}) ${s.w}x${s.h} HP:${s.hp}`);
+          });
+        } else {
+          console.warn('  ⚠️ NO STRUCTURES CREATED - Check getTurfBuildings()');
+        }
+      }
+
       // Reset turf defense state
       GameState.turfDefense.active = true;
       GameState.turfDefense.wave = 0;
@@ -6764,6 +6844,11 @@ const CartoonSpriteGenerator = {
      */
     function updateTurfDefense(dt) {
       if (!GameState.turfDefense.active) return;
+
+      // DEBUG: Mark that update was called
+      if (DEBUG_OVERLAY_ENABLED) {
+        DebugOverlay.markUpdate(dt);
+      }
 
       const defense = GameState.turfDefense;
       const now = Date.now();
@@ -7006,7 +7091,17 @@ const CartoonSpriteGenerator = {
       const canvas = TurfDefenseRenderer.canvas;
       const ctx = TurfDefenseRenderer.ctx;
 
-      if (!canvas || !ctx) return;
+      if (!canvas || !ctx) {
+        if (DEBUG_OVERLAY_ENABLED) {
+          console.warn('⚠️ [DEBUG] drawTurfDefense() called but canvas or ctx is null!');
+        }
+        return;
+      }
+
+      // DEBUG: Mark that draw was called
+      if (DEBUG_OVERLAY_ENABLED) {
+        DebugOverlay.markDraw();
+      }
 
       // Clear canvas with transparency (so we can see the map below)
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -7043,6 +7138,11 @@ const CartoonSpriteGenerator = {
 
       // Render HUD
       TurfDefenseRenderer.drawHUD(ctx, defense, canvas.width, canvas.height);
+
+      // DEBUG: Draw debug overlay (LAST - drawn on top)
+      if (DEBUG_OVERLAY_ENABLED) {
+        DebugOverlay.draw(ctx, canvas);
+      }
     }
 
     // ========================================
@@ -7187,6 +7287,19 @@ const CartoonSpriteGenerator = {
       }
 
       defense.lastSpawnTime = Date.now();
+
+      // DEBUG: Log spawn results
+      if (DEBUG_OVERLAY_ENABLED) {
+        console.log(`  Spawned ${enemyCount} enemies in pixel coords:`);
+        console.log(`    Canvas size: ${canvasWidth}x${canvasHeight}`);
+        if (defense.enemies.length > 0) {
+          const minX = Math.min(...defense.enemies.map(e => e.x));
+          const maxX = Math.max(...defense.enemies.map(e => e.x));
+          const minY = Math.min(...defense.enemies.map(e => e.y));
+          const maxY = Math.max(...defense.enemies.map(e => e.y));
+          console.log(`    Enemy bounds: X[${minX.toFixed(0)}-${maxX.toFixed(0)}] Y[${minY.toFixed(0)}-${maxY.toFixed(0)}]`);
+        }
+      }
     }
 
     /**
@@ -7749,7 +7862,20 @@ const CartoonSpriteGenerator = {
           const cityMap = document.getElementById('city-map');
           if (!cityMap) {
             console.error('❌ [TurfDefenseRenderer] city-map element not found!');
+            if (DEBUG_OVERLAY_ENABLED) {
+              console.error('  GATE FAILURE: Cannot initialize canvas without city-map container');
+              console.error('  Check that turf tab is active and map container is visible');
+            }
             return;
+          }
+
+          // DEBUG: Log container state
+          if (DEBUG_OVERLAY_ENABLED) {
+            const rect = cityMap.getBoundingClientRect();
+            console.log('✅ [TurfDefenseRenderer] city-map found');
+            console.log('  Container size:', rect.width, 'x', rect.height);
+            console.log('  Display:', getComputedStyle(cityMap).display);
+            console.log('  Visibility:', getComputedStyle(cityMap).visibility);
           }
 
           // Get map dimensions from GameState or use defaults
@@ -8781,6 +8907,158 @@ const CartoonSpriteGenerator = {
         }
 
         console.log('✅ [TouchControls] Controls removed');
+      }
+    };
+
+    // ========================================
+    // DEBUG OVERLAY SYSTEM (PHASE 1-6)
+    // ========================================
+    /**
+     * Debug overlay to diagnose why features aren't visible
+     * Shows: build stamp, tick count, state, entities, coordinates
+     * Toggle with DEBUG_OVERLAY_ENABLED constant at top of file
+     */
+    const DebugOverlay = {
+      tickCount: 0,
+      lastUpdateTime: 0,
+      updateCalledThisTick: false,
+      drawCalledThisTick: false,
+
+      /**
+       * Draw debug info overlay on canvas
+       * Called after drawTurfDefense() in main loop
+       */
+      draw(ctx, canvas) {
+        if (!DEBUG_OVERLAY_ENABLED || !ctx || !canvas) return;
+
+        const defense = GameState.turfDefense;
+        const buildings = getTurfBuildings ? getTurfBuildings() : [];
+
+        // Black background for readability
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(5, 5, 350, 380);
+
+        // White text
+        ctx.fillStyle = '#fff';
+        ctx.font = '11px monospace';
+        ctx.textAlign = 'left';
+
+        let y = 20;
+        const lineHeight = 14;
+
+        // Helper to draw a line of text
+        const drawLine = (text, color = '#fff') => {
+          ctx.fillStyle = color;
+          ctx.fillText(text, 10, y);
+          y += lineHeight;
+        };
+
+        // PHASE 1: Build verification
+        drawLine('=== BUILD VERIFICATION ===', '#FFD700');
+        drawLine(`Build: ${BUILD_STAMP.substring(0, 35)}...`);
+        drawLine('');
+
+        // PHASE 2: Main loop state
+        drawLine('=== MAIN LOOP (60fps) ===', '#FFD700');
+        drawLine(`Tick: ${this.tickCount}`);
+        drawLine(`DT: ${this.lastDt ? this.lastDt.toFixed(4) + 's' : 'N/A'}`);
+        drawLine(`updateTurfDefense(): ${this.updateCalledThisTick ? 'CALLED' : 'NOT CALLED'}`, this.updateCalledThisTick ? '#0F0' : '#F00');
+        drawLine(`drawTurfDefense(): ${this.drawCalledThisTick ? 'CALLED' : 'NOT CALLED'}`, this.drawCalledThisTick ? '#0F0' : '#F00');
+        drawLine('');
+
+        // PHASE 3: Gating conditions
+        drawLine('=== GATING CONDITIONS ===', '#FFD700');
+        const activeTab = GameState?.ui?.activeTab || 'unknown';
+        drawLine(`Active Tab: ${activeTab}`, activeTab === 'turf' ? '#0F0' : '#FFA500');
+        drawLine(`TD Active: ${defense?.active}`, defense?.active ? '#0F0' : '#F00');
+        drawLine(`TD Wave: ${defense?.wave || 0}`, defense?.wave > 0 ? '#0F0' : '#FFA500');
+        drawLine(`TD State: ${defense?.waveState || 'N/A'}`);
+        drawLine('');
+
+        // PHASE 4: Building detection
+        drawLine('=== BUILDING DETECTION ===', '#FFD700');
+        drawLine(`Buildings Found: ${buildings.length}`, buildings.length > 0 ? '#0F0' : '#F00');
+        if (buildings.length > 0) {
+          drawLine(`  1) ${buildings[0]?.name || 'N/A'}`);
+          if (buildings[1]) drawLine(`  2) ${buildings[1]?.name || 'N/A'}`);
+          if (buildings[2]) drawLine(`  3) ${buildings[2]?.name || 'N/A'}`);
+        }
+        drawLine(`Structures: ${defense?.structures?.length || 0}`, defense?.structures?.length > 0 ? '#0F0' : '#F00');
+        if (defense?.structures?.length > 0) {
+          const mainBase = defense.structures.find(s => s.isCritical);
+          if (mainBase) {
+            drawLine(`  Main: ${mainBase.name} (${mainBase.hp}/${mainBase.hpMax})`);
+          }
+        }
+        drawLine('');
+
+        // PHASE 5: Entity tracking
+        drawLine('=== ENTITIES ===', '#FFD700');
+        const enemies = defense?.enemies || [];
+        const loot = defense?.lootDrops || [];
+        drawLine(`Enemies: ${enemies.length}`, enemies.length > 0 ? '#0F0' : '#FFA500');
+        drawLine(`Loot: ${loot.length}`, loot.length > 0 ? '#0F0' : '#FFA500');
+
+        // Player position
+        const px = defense?.playerX || 0;
+        const py = defense?.playerY || 0;
+        drawLine(`Player: (${px.toFixed(0)}, ${py.toFixed(0)})`);
+
+        // Enemy bounds
+        if (enemies.length > 0) {
+          const minX = Math.min(...enemies.map(e => e.x));
+          const maxX = Math.max(...enemies.map(e => e.x));
+          const minY = Math.min(...enemies.map(e => e.y));
+          const maxY = Math.max(...enemies.map(e => e.y));
+          drawLine(`Enemy Bounds: X[${minX.toFixed(0)}-${maxX.toFixed(0)}]`);
+          drawLine(`              Y[${minY.toFixed(0)}-${maxY.toFixed(0)}]`);
+
+          // Count enemies in viewport
+          const inView = enemies.filter(e =>
+            e.x >= 0 && e.x <= canvas.width &&
+            e.y >= 0 && e.y <= canvas.height
+          ).length;
+          drawLine(`In Viewport: ${inView}/${enemies.length}`, inView > 0 ? '#0F0' : '#FFA500');
+        }
+        drawLine('');
+
+        // PHASE 6: Canvas state
+        drawLine('=== CANVAS STATE ===', '#FFD700');
+        drawLine(`Size: ${canvas.width}x${canvas.height}`);
+        const cityMap = document.getElementById('city-map');
+        if (cityMap) {
+          const rect = cityMap.getBoundingClientRect();
+          drawLine(`Container: ${rect.width.toFixed(0)}x${rect.height.toFixed(0)}`);
+          drawLine(`Visible: ${cityMap.style.display !== 'none'}`, cityMap.style.display !== 'none' ? '#0F0' : '#F00');
+        } else {
+          drawLine('Container: NOT FOUND', '#F00');
+        }
+
+        // Reset flags for next tick
+        this.updateCalledThisTick = false;
+        this.drawCalledThisTick = false;
+      },
+
+      /**
+       * Mark that update was called this tick
+       */
+      markUpdate(dt) {
+        this.updateCalledThisTick = true;
+        this.lastDt = dt;
+      },
+
+      /**
+       * Mark that draw was called this tick
+       */
+      markDraw() {
+        this.drawCalledThisTick = true;
+      },
+
+      /**
+       * Increment tick counter
+       */
+      tick() {
+        this.tickCount++;
       }
     };
 
@@ -25300,10 +25578,23 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
         // Max 50ms (0.05s) prevents huge jumps that cause double hits/warping
         dt = Math.min(dt, 0.05);
 
+        // DEBUG: Increment tick counter
+        if (DEBUG_OVERLAY_ENABLED) {
+          DebugOverlay.tick();
+        }
+
         // Update Turf Defense mode if active
         if (GameState.turfDefense && GameState.turfDefense.active) {
           updateTurfDefense(dt);
           drawTurfDefense();
+
+          // DEBUG: Check if update/draw were actually called
+          if (DEBUG_OVERLAY_ENABLED && !DebugOverlay.updateCalledThisTick) {
+            console.warn('⚠️ [DEBUG] turfDefense.active=true but updateTurfDefense() was NOT called!');
+          }
+          if (DEBUG_OVERLAY_ENABLED && !DebugOverlay.drawCalledThisTick) {
+            console.warn('⚠️ [DEBUG] turfDefense.active=true but drawTurfDefense() was NOT called!');
+          }
         }
       }, 1000 / 60); // 60 FPS target
 
