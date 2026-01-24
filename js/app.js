@@ -6388,18 +6388,104 @@ const CartoonSpriteGenerator = {
      */
     function getTurfBuildings() {
       console.log('🏗️ [getTurfBuildings] Called');
-      console.log('   GameState.map exists:', !!GameState.map);
-      console.log('   GameState.map.buildings exists:', !!GameState.map?.buildings);
-      console.log('   GameState.map.buildings is array:', Array.isArray(GameState.map?.buildings));
-      console.log('   GameState.map.buildings length:', GameState.map?.buildings?.length || 0);
 
-      if (!GameState.map || !Array.isArray(GameState.map.buildings)) {
-        console.warn('⚠️ [getTurfBuildings] Returning empty array - no buildings found!');
-        return [];
+      const buildings = [];
+
+      // Get landmarks from mapIcons (Safehouse, Gun Shop, Casino, etc.)
+      if (Array.isArray(GameState.mapIcons)) {
+        console.log(`   Found ${GameState.mapIcons.length} landmarks in GameState.mapIcons`);
+
+        GameState.mapIcons.forEach(icon => {
+          // Convert mapIcon to building format with footprint
+          const footprint = getFootprintForType(icon.type);
+          buildings.push({
+            x: icon.x,
+            y: icon.y,
+            typeId: icon.type,
+            type: icon.type,
+            name: icon.label || icon.type,
+            footprint: footprint,
+            icon: icon.icon,
+            isLandmark: true
+          });
+        });
+      } else {
+        console.log('   No landmarks found in GameState.mapIcons');
       }
 
-      console.log(`✅ [getTurfBuildings] Returning ${GameState.map.buildings.length} buildings`);
-      return GameState.map.buildings;
+      // Get properties from propertyBuildings
+      if (Array.isArray(GameState.propertyBuildings)) {
+        console.log(`   Found ${GameState.propertyBuildings.length} properties in GameState.propertyBuildings`);
+
+        GameState.propertyBuildings.forEach(prop => {
+          // Convert property to building format with footprint
+          const footprint = getFootprintForType(prop.type);
+          buildings.push({
+            x: prop.x,
+            y: prop.y,
+            typeId: prop.type,
+            type: prop.type,
+            name: prop.name,
+            footprint: footprint,
+            icon: getIconForPropertyType(prop.type),
+            isProperty: true,
+            owned: prop.owned
+          });
+        });
+      } else {
+        console.log('   No properties found in GameState.propertyBuildings');
+      }
+
+      console.log(`✅ [getTurfBuildings] Returning ${buildings.length} total buildings`);
+      return buildings;
+    }
+
+    /**
+     * Get footprint size for a building/landmark type
+     * @param {string} type - Building type
+     * @returns {Object} Footprint with width and height in tiles
+     */
+    function getFootprintForType(type) {
+      const footprints = {
+        // Landmarks
+        'safeHouse': { width: 3, height: 3 },
+        'policeStation': { width: 4, height: 4 },
+        'hospital': { width: 4, height: 4 },
+        'gunShop': { width: 2, height: 2 },
+        'chopShop': { width: 3, height: 3 },
+        'casino': { width: 4, height: 4 },
+        'nightclub': { width: 3, height: 3 },
+        'bank': { width: 4, height: 4 },
+        'warehouse': { width: 5, height: 5 },
+        'docks': { width: 6, height: 4 },
+        'gangHQ': { width: 4, height: 4 },
+
+        // Properties
+        'apartment': { width: 3, height: 3 },
+        'highrise': { width: 4, height: 5 },
+        'dealership': { width: 4, height: 3 },
+        'stripclub': { width: 3, height: 3 },
+        'mall': { width: 5, height: 5 }
+      };
+
+      return footprints[type] || { width: 2, height: 2 }; // Default 2x2
+    }
+
+    /**
+     * Get icon for a property type
+     * @param {string} type - Property type
+     * @returns {string} Icon emoji
+     */
+    function getIconForPropertyType(type) {
+      const icons = {
+        'apartment': '🏢',
+        'highrise': '🏙️',
+        'dealership': '🚗',
+        'stripclub': '💃',
+        'mall': '🏬'
+      };
+
+      return icons[type] || '🏗️';
     }
 
     /**
