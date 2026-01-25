@@ -6770,8 +6770,17 @@ const CartoonSpriteGenerator = {
     function setFreeRoamPlayerVisible(visible) {
       const el = document.getElementById('freeRoamPlayer');
       if (!el) return;
-      el.style.display = visible ? '' : 'none';
-      // Keep it from catching taps while hidden/shown
+
+      // On mobile, we want to keep the element in-layout so we can still measure its size reliably
+      // even after "hiding" it for Turf Defense. Using visibility keeps its box model intact.
+      if (visible) {
+        el.style.visibility = '';
+        // Restore display to whatever it naturally should be (empty lets CSS decide)
+        if (el.style.display === 'none') el.style.display = '';
+      } else {
+        // Never let the roam sprite catch taps while Turf Defense is active
+        el.style.visibility = 'hidden';
+      }
       el.style.pointerEvents = 'none';
     }
 
@@ -6789,11 +6798,52 @@ const CartoonSpriteGenerator = {
         if (el) {
           // Capture the on-screen size of the free-roam sprite BEFORE hiding it.
           // We'll use this later to match Turf Defense canvas sprite scale to free roam.
+          //
+          // Mobile quirk: right after initial load, layout can still be settling (address bar, DPR),
+          // which can make the first measurement wildly wrong (too big). So we do a tiny
+          // stabilization loop and only accept sane, stable measurements.
           try {
-            const rect = el.getBoundingClientRect();
-            const px = Math.min(rect.width || 0, rect.height || 0);
-            if (!GameState.turfDefense) GameState.turfDefense = {};
-            if (px > 0) GameState.turfDefense._freeRoamSpritePx = px;
+            const defense = GameState.turfDefense || (GameState.turfDefense = {});
+            const lastGood = (typeof defense._lastFreeRoamSpritePx === 'number' && defense._lastFreeRoamSpritePx > 0)
+              ? defense._lastFreeRoamSpritePx
+              : 0;
+
+            let attempts = 0;
+            let prevPx = 0;
+            const maxAttempts = 12;
+            const MIN_PX = 24;
+            const MAX_PX = 180;
+
+            const sample = () => {
+              try {
+                const rect = el.getBoundingClientRect();
+                const px = Math.min(rect.width || 0, rect.height || 0);
+
+                // Accept only sane values; otherwise keep trying.
+                const sane = (px >= MIN_PX && px <= MAX_PX);
+
+                // Consider "stable" when two consecutive samples are very close.
+                const stable = (prevPx > 0 && Math.abs(px - prevPx) <= 1.5);
+
+                if (sane && (stable || attempts >= 2)) {
+                  defense._freeRoamSpritePx = px;
+                  defense._lastFreeRoamSpritePx = px;
+                  return;
+                }
+
+                prevPx = sane ? px : prevPx;
+                attempts++;
+                if (attempts < maxAttempts) requestAnimationFrame(sample);
+                else if (lastGood > 0) defense._freeRoamSpritePx = lastGood;
+              } catch (e) {
+                attempts++;
+                if (attempts < maxAttempts) requestAnimationFrame(sample);
+                else if (lastGood > 0) defense._freeRoamSpritePx = lastGood;
+              }
+            };
+
+            // Prime with a quick sample now, then stabilize across a few frames.
+            requestAnimationFrame(sample);
           } catch (e) {}
 
           // Remember prior styles so we can restore after Turf Defense
@@ -6895,7 +6945,8 @@ function applyTurfDefenseSpriteScaleMatch() {
     const ratioW = (cssW > 0 && internalW > 0) ? (internalW / cssW) : 1;
     const ratioH = (cssH > 0 && internalH > 0) ? (internalH / cssH) : ratioW;
     const pxPerCss = Math.min(ratioW, ratioH);
-    const desiredInternalPx = freePxCss * pxPerCss;
+    const calibration = (defense && typeof defense._spriteScaleCalibration === 'number') ? defense._spriteScaleCalibration : 0.94;
+    const desiredInternalPx = freePxCss * pxPerCss * calibration;
 
     // Determine a reasonable "base frame" width from loaded sprites.
     let frameW = 0;
@@ -6951,7 +7002,19 @@ function scheduleTurfDefenseSpriteScaleMatch() {
         return;
       }
 
+      // Even after the first "ok", keep re-applying for a few frames.
+      // Reason: on mobile, sprite frames and canvas backing resolution can finalize a moment later,
+      // and we want the final scale to be based on real frame dimensions (not fallback defaults).
+      if (ok) {
+        defense._scaleMatchSettleFrames = (defense._scaleMatchSettleFrames || 0) + 1;
+        if (defense._scaleMatchSettleFrames < 10) {
+          requestAnimationFrame(tick);
+          return;
+        }
+      }
+
       // Also re-apply on viewport changes while defense is active (mobile address bar / tab switching).
+
       try {
         if (!defense._scaleMatchViewportHooked) {
           defense._scaleMatchViewportHooked = true;
