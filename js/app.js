@@ -7323,7 +7323,8 @@ const CartoonSpriteGenerator = {
 
       // Generate spawn positions around edges of map
       const spawnPositions = [];
-      const margin = 50;
+      const enemySpriteRadius = 15; // Enemy circle radius from drawEnemy()
+      const margin = 70; // Increased margin to account for enemy sprite size (15px radius + buffer)
       const numSpawns = Math.max(8, enemyCount);
 
       for (let i = 0; i < numSpawns; i++) {
