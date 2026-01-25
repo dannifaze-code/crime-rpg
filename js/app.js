@@ -10025,10 +10025,10 @@ function updateTurfDefense(dt) {
           position: absolute;
           bottom: 20px;
           left: 20px;
-          width: 140px;
-          height: 140px;
-          background: rgba(0, 0, 0, 0.3);
-          border: 3px solid rgba(255, 255, 255, 0.4);
+          width: 115px;
+          height: 115px;
+          background: transparent;
+          border: 2px solid rgba(255, 255, 255, 0.35);
           border-radius: 50%;
           pointer-events: auto;
           touch-action: none;
@@ -10041,13 +10041,13 @@ function updateTurfDefense(dt) {
         this.joystickKnob = document.createElement('div');
         this.joystickKnob.id = 'joystick-knob';
         this.joystickKnob.style.cssText = `
-          width: 60px;
-          height: 60px;
-          background: rgba(255, 255, 255, 0.8);
-          border: 3px solid rgba(255, 255, 255, 1);
+          width: 46px;
+          height: 46px;
+          background: rgba(255, 255, 255, 0.85);
+          border: 2px solid rgba(255, 255, 255, 1);
           border-radius: 50%;
           transition: transform 0.05s ease-out;
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
         `;
 
         this.joystickContainer.appendChild(this.joystickKnob);
@@ -10069,7 +10069,7 @@ function updateTurfDefense(dt) {
           right: 20px;
           display: flex;
           flex-direction: column;
-          gap: 15px;
+          gap: 12px;
           align-items: flex-end;
         `;
 
@@ -10090,15 +10090,15 @@ function updateTurfDefense(dt) {
         // Close button (top-right corner)
         const closeButton = document.createElement('button');
         closeButton.id = 'turf-defense-close-btn';
-        closeButton.innerHTML = `<span style="font-size: 24px;">✕</span>`;
+        closeButton.innerHTML = `<span style="font-size: 20px;">✕</span>`;
         closeButton.style.cssText = `
           position: absolute;
           top: 20px;
           right: 20px;
-          width: 50px;
-          height: 50px;
+          width: 44px;
+          height: 44px;
           background: rgba(200, 50, 50, 0.9);
-          border: 3px solid rgba(255, 255, 255, 0.6);
+          border: 2px solid rgba(255, 255, 255, 0.6);
           border-radius: 50%;
           color: white;
           font-size: 24px;
@@ -10144,12 +10144,12 @@ function updateTurfDefense(dt) {
       createButton(id, icon, color) {
         const button = document.createElement('button');
         button.id = `action-${id}`;
-        button.innerHTML = `<span style="font-size: 32px;">${icon}</span>`;
+        button.innerHTML = `<span style="font-size: 26px;">${icon}</span>`;
         button.style.cssText = `
-          width: 80px;
-          height: 80px;
+          width: 64px;
+          height: 64px;
           background: ${color};
-          border: 3px solid rgba(255, 255, 255, 0.6);
+          border: 2px solid rgba(255, 255, 255, 0.6);
           border-radius: 50%;
           color: white;
           font-size: 24px;
