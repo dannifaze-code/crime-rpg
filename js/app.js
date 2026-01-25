@@ -77,269 +77,6 @@ try {
     console.log('🏗️ BUILD_STAMP:', BUILD_STAMP);
 
     // ========================================
-    // CIA INTERVENTION SYSTEM (PHASE 1)
-    // ========================================
-    // System-only foundation for the "mysterious CIA operative" heat mitigation event.
-    // No UI/cutscene yet — everything is deterministic + testable via console logs.
-    const CIAIntervention = {
-      isActive() {
-        return !!(GameState && GameState.ciaIntervention && GameState.ciaIntervention.active);
-      },
-
-      start(reason = 'lockdown') {
-        try {
-          if (!GameState) return false;
-
-          // Ensure state exists (older saves / edge cases)
-          if (!GameState.ciaIntervention) {
-            GameState.ciaIntervention = { active: false, reason: null, snapshot: null, offers: null };
-          }
-
-          // No re-entry
-          if (GameState.ciaIntervention.active) return false;
-
-          GameState.ciaIntervention.active = true;
-          GameState.ciaIntervention.reason = reason || null;
-
-          // Freeze snapshot (the operative "knows everything")
-          GameState.ciaIntervention.snapshot = this.captureSnapshot();
-          GameState.ciaIntervention.offers = this.computeOffers(GameState.ciaIntervention.snapshot);
-
-          // Pause minimal gameplay systems (Phase 1: soft pause only)
-          this.pauseGameSystems();
-
-          console.log('[CIA] Intervention started', GameState.ciaIntervention);
-          return true;
-        } catch (e) {
-          console.warn('[CIA] start failed', e);
-          return false;
-        }
-      },
-
-      end() {
-        try {
-          if (!GameState || !GameState.ciaIntervention) return;
-          GameState.ciaIntervention.active = false;
-          GameState.ciaIntervention.reason = null;
-          GameState.ciaIntervention.snapshot = null;
-          GameState.ciaIntervention.offers = null;
-
-          this.resumeGameSystems();
-
-          console.log('[CIA] Intervention ended');
-        } catch (e) {
-          console.warn('[CIA] end failed', e);
-        }
-      },
-
-      captureSnapshot() {
-        const player = (GameState && GameState.player) ? GameState.player : {};
-        return {
-          cash: Number(player.cash || 0),
-          weapons: Array.isArray(player.weapons) ? player.weapons.slice() : [],
-          weaponParts: (player.weaponParts && typeof player.weaponParts === 'object') ? { ...player.weaponParts } : {},
-          properties: this.getOwnedPropertiesSnapshot(),
-          globalHeat: Number(player.globalHeat || 0),
-          timestamp: Date.now()
-        };
-      },
-
-      getOwnedPropertiesSnapshot() {
-        try {
-          const props = (GameState && GameState.turf && Array.isArray(GameState.turf.properties)) ? GameState.turf.properties : [];
-          return props
-            .filter(p => p && p.owned)
-            .map(p => ({
-              id: p.id,
-              name: p.name,
-              dailyIncome: Number(p.dailyIncome || p.income || 0),
-              tier: Number(p.tier || 1)
-            }));
-        } catch (e) {
-          return [];
-        }
-      },
-
-      clamp(n, lo, hi) {
-        n = Number(n || 0);
-        return Math.max(lo, Math.min(hi, n));
-      },
-
-      computeOffers(snapshot) {
-        const s = snapshot || {};
-        return {
-          cash: this.computeCashOffer(s),
-          weapons: this.computeWeaponOffer(s),
-          properties: this.computePropertyOffers(s)
-        };
-      },
-
-      // Cash offer: % scales with bankroll to keep it "fair", heat reduction scales with deal size.
-      computeCashOffer(snapshot) {
-        const heat = Number(snapshot && snapshot.globalHeat || 0);
-        const money = Number(snapshot && snapshot.cash || 0);
-        if (money <= 0) return null;
-
-        // % ramps from 10% upward, capped at 35%
-        const pct = Math.min(0.35, 0.10 + (money / 1000000));
-        const cost = Math.max(1, Math.floor(money * pct));
-
-        return {
-          type: 'cash',
-          pct,
-          cost,
-          heatReduction: this.clamp(heat * pct, 10, 70)
-        };
-      },
-
-      // Weapons offer: temporary placeholder valuation (per weapon count).
-      computeWeaponOffer(snapshot) {
-        const heat = Number(snapshot && snapshot.globalHeat || 0);
-        const weapons = (snapshot && Array.isArray(snapshot.weapons)) ? snapshot.weapons : [];
-        const count = weapons.length;
-        if (count <= 0) return null;
-
-        const value = count * 8; // tunable
-        return {
-          type: 'weapons',
-          weaponsTaken: count,
-          heatReduction: this.clamp(Math.max(value, heat * 0.15), 10, 60)
-        };
-      },
-
-      // Property offer: returns list of per-property choices.
-      computePropertyOffers(snapshot) {
-        const properties = (snapshot && Array.isArray(snapshot.properties)) ? snapshot.properties : [];
-        if (!properties.length) return null;
-
-        return properties.map(p => ({
-          type: 'property',
-          propertyId: p.id,
-          propertyName: p.name,
-          durationHours: 24,
-          heatReduction: this.clamp((Number(p.dailyIncome || 0) / 10), 5, 40)
-        }));
-      },
-
-      // Apply a resolution choice (Phase 1: system-only; UI will call this later).
-      apply(type, payload = {}) {
-        try {
-          if (!this.isActive()) return false;
-
-          if (type === 'cash') {
-            const cost = Number(payload.cost || 0);
-            const reduction = Number(payload.heatReduction || 0);
-            if (cost > 0) {
-              GameState.player.cash = Math.max(0, Number(GameState.player.cash || 0) - cost);
-            }
-            this.reduceGlobalHeat(reduction);
-          } else if (type === 'weapons') {
-            const reduction = Number(payload.heatReduction || 0);
-            this.removeAllPlayerWeapons();
-            this.reduceGlobalHeat(reduction);
-          } else if (type === 'property') {
-            const propertyId = payload.propertyId;
-            const hours = Number(payload.durationHours || 24);
-            const reduction = Number(payload.heatReduction || 0);
-            if (propertyId != null) this.markPropertyAsLeased(propertyId, hours);
-            this.reduceGlobalHeat(reduction);
-          } else {
-            console.warn('[CIA] Unknown resolution type:', type);
-            return false;
-          }
-
-          // Persist + exit
-          try { if (typeof Storage !== 'undefined' && Storage && typeof Storage.save === 'function') Storage.save(); } catch(e){}
-          this.end();
-          return true;
-        } catch (e) {
-          console.warn('[CIA] apply failed', e);
-          return false;
-        }
-      },
-
-      reduceGlobalHeat(amount) {
-        const amt = Number(amount || 0);
-        if (!amt) return;
-
-        GameState.player.globalHeat = Math.max(0, Number(GameState.player.globalHeat || 0) - amt);
-
-        // Update any dependent systems if present
-        try {
-          if (typeof ProfileTab !== 'undefined' && ProfileTab && typeof ProfileTab.render === 'function') ProfileTab.render();
-        } catch (e) {}
-      },
-
-      removeAllPlayerWeapons() {
-        try {
-          if (GameState.player && Array.isArray(GameState.player.weapons)) {
-            GameState.player.weapons = [];
-          }
-        } catch (e) {}
-      },
-
-      // Marks a property as "leased" to the CIA for X hours (Phase 1 marker only; income logic later).
-      markPropertyAsLeased(propertyId, durationHours = 24) {
-        try {
-          if (!GameState.turf) GameState.turf = {};
-          if (!GameState.turf.ciaLeases) GameState.turf.ciaLeases = {};
-
-          const until = Date.now() + (durationHours * 60 * 60 * 1000);
-          GameState.turf.ciaLeases[String(propertyId)] = until;
-
-          // Also mark on the property object if we can find it
-          const props = Array.isArray(GameState.turf.properties) ? GameState.turf.properties : [];
-          const prop = props.find(p => p && String(p.id) === String(propertyId));
-          if (prop) {
-            prop.ciaLeasedUntil = until;
-            prop.ciaLeased = true;
-          }
-        } catch (e) {}
-      },
-
-      // Minimal soft-pause (Phase 1): stop free roam + block turf defense entry.
-      pauseGameSystems() {
-        try {
-          if (!GameState._ciaPause) GameState._ciaPause = {};
-          GameState._ciaPause.wasFreeRoam = !!(GameState.character && GameState.character.freeRoam);
-
-          // Force stop free roam if active
-          if (GameState.character && GameState.character.freeRoam) {
-            GameState.character.freeRoam = false;
-            try { if (typeof TurfTab !== 'undefined' && TurfTab && typeof TurfTab.stopFreeRoam === 'function') TurfTab.stopFreeRoam(); } catch(e){}
-            try { if (typeof TurfTab !== 'undefined' && TurfTab && typeof TurfTab.updateRoamButton === 'function') TurfTab.updateRoamButton(); } catch(e){}
-          }
-
-          // Don't allow starting Turf Defense while CIA is active
-          GameState._ciaPause.blockTurfDefense = true;
-        } catch (e) {}
-      },
-
-      resumeGameSystems() {
-        try {
-          if (GameState && GameState._ciaPause) {
-            GameState._ciaPause.blockTurfDefense = false;
-          }
-        } catch (e) {}
-      }
-    };
-
-    // Convenience helpers for later phases + console testing
-    function startCIAIntervention(reason) { return CIAIntervention.start(reason); }
-    function endCIAIntervention() { return CIAIntervention.end(); }
-    function applyCIAResolution(type, payload) { return CIAIntervention.apply(type, payload); }
-
-    // Dev hooks (safe, non-invasive)
-    try {
-      if (typeof window !== 'undefined') {
-        window.startCIAIntervention = startCIAIntervention;
-        window.applyCIAResolution = applyCIAResolution;
-        window.endCIAIntervention = endCIAIntervention;
-      }
-    } catch (e) {}
-
-
-    // ========================================
     // WEATHER SYSTEM: Three.js Overlay (Phase 1)
     // ========================================
     const WeatherOverlay = {
@@ -3401,15 +3138,6 @@ Then tighten the rules later.`);
           // Reset heat values
           GameState.player.heat = 0;
           GameState.player.globalHeat = 0;
-
-          // Reset CIA Intervention runtime state
-          if (GameState.ciaIntervention) {
-            GameState.ciaIntervention.active = false;
-            GameState.ciaIntervention.reason = null;
-            GameState.ciaIntervention.snapshot = null;
-            GameState.ciaIntervention.offers = null;
-          }
-
           
           console.log('[ACCOUNT SWITCH] Runtime state reset complete');
         } catch (e) {
@@ -6478,24 +6206,25 @@ const CartoonSpriteGenerator = {
       cityState: {
         lockdown: false,
         lockdownUntil: null,
+        lockdownId: null, // Unique id per lockdown event (for one-shot triggers)
         manhuntActive: false,
         manhuntTarget: null,
         policeActivity: "low",  // low, medium, high, extreme
         worldTick: 0,  // Increments over time (no visible timer)
         riskLevel: 0   // 0-100, escalates with activity
       },
-      
-      
 
-      // CIA Intervention (Phase 1): System-only state for "The Visitor" heat mitigation event
-      ciaIntervention: {
-        active: false,
-        reason: null,     // e.g. 'lockdown'
-        snapshot: null,   // frozen player+inventory+turf data at intervention start
-        offers: null      // computed offer options (cash/weapons/property)
-      },
+// CIA Intervention (Global Heat event orchestrator)
+ciaIntervention: {
+  active: false,
+  reason: null,         // e.g. 'lockdown'
+  snapshot: null,       // frozen player data at trigger time
+  offers: null,         // computed options (cash / weapons / properties)
+  lastLockdownId: null, // prevents re-triggering for same lockdown
+},
 
-heatLog: [],  // Track heat-generating events
+      
+      heatLog: [],  // Track heat-generating events
       
       drainLog: [],  // Track money drains
       
@@ -6560,6 +6289,21 @@ heatLog: [],  // Track heat-generating events
         if (!GameState.ui || typeof GameState.ui !== 'object') {
           GameState.ui = JSON.parse(JSON.stringify(DEFAULT_STATE.ui));
         }
+
+
+if (!GameState.cityState || typeof GameState.cityState !== 'object') {
+  GameState.cityState = JSON.parse(JSON.stringify(DEFAULT_STATE.cityState));
+}
+if (GameState.cityState && typeof GameState.cityState.lockdownId === 'undefined') {
+  GameState.cityState.lockdownId = null;
+}
+
+if (!GameState.ciaIntervention || typeof GameState.ciaIntervention !== 'object') {
+  GameState.ciaIntervention = JSON.parse(JSON.stringify(DEFAULT_STATE.ciaIntervention));
+}
+if (typeof GameState.ciaIntervention.lastLockdownId === 'undefined') {
+  GameState.ciaIntervention.lastLockdownId = null;
+}
 
         // ----- player basics -----
         const p = GameState.player;
@@ -7427,12 +7171,6 @@ function scheduleTurfDefenseSpriteScaleMatch() {
 
     function startTurfDefense() {
       console.log('🛡️ [TurfDefense] Starting Turf Defense mode...');
-
-      // Block Turf Defense during CIA Intervention
-      if (GameState && GameState._ciaPause && GameState._ciaPause.blockTurfDefense) {
-        console.log('🕶️ [CIA] Turf Defense blocked while intervention is active');
-        return;
-      }
 
       // Get map dimensions
       const mapWidth = (GameState.map && GameState.map.width) || 30;
@@ -20688,9 +20426,6 @@ function updateTurfDefense(dt) {
         // Check for active lockdown/manhunt on init
         if (GameState.cityState.lockdown) {
           this.showLockdownState();
-
-        // CIA Intervention (Phase 1): begin the 'Visitor' event on lockdown
-        try { if (typeof startCIAIntervention === 'function') startCIAIntervention('lockdown'); } catch (e) {}
         }
         
         // Check for ongoing transition on init
@@ -24433,6 +24168,227 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
         console.log(`Global heat +${amount}%: ${reason}`);
       },
       
+
+
+// -------------------------------------------------------------------
+// CIA Intervention (Phase 1): systems-only, no UI yet.
+// Triggered when City Lockdown starts at >=85% global heat.
+// -------------------------------------------------------------------
+function _ciaClamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+function capturePlayerSnapshotForCIA() {
+  try {
+    const p = (GameState && GameState.player) ? GameState.player : {};
+    const weapons = Array.isArray(p.weapons) ? p.weapons.slice() : [];
+    const weaponParts = (p.weaponParts && typeof p.weaponParts === 'object') ? Object.assign({}, p.weaponParts) : {};
+    const properties = (GameState && GameState.turf && Array.isArray(GameState.turf.properties))
+      ? GameState.turf.properties.filter(pr => pr && pr.owned).map(pr => ({
+          id: pr.id,
+          name: pr.name || pr.title || 'Property',
+          dailyIncome: Number(pr.dailyIncome || pr.income || 0) || 0,
+          tier: Number(pr.tier || 1) || 1,
+        }))
+      : [];
+    return {
+      cash: Number(p.cash || 0) || 0,
+      weapons,
+      weaponParts,
+      properties,
+      globalHeat: Number(p.globalHeat || 0) || 0,
+      timestamp: Date.now(),
+    };
+  } catch (e) {
+    return { cash: 0, weapons: [], weaponParts: {}, properties: [], globalHeat: 0, timestamp: Date.now() };
+  }
+}
+
+function computeCIAOffers(snapshot) {
+  const heat = _ciaClamp(Number(snapshot.globalHeat || 0) || 0, 0, 100);
+  const cash = Math.max(0, Number(snapshot.cash || 0) || 0);
+
+  // Cash offer: dynamic % of cash, bigger wallets pay a bit more, but still capped.
+  let cashOffer = null;
+  if (cash > 0) {
+    const pct = Math.min(0.35, 0.10 + (cash / 1000000)); // 10% + scaling, capped at 35%
+    const cost = Math.floor(cash * pct);
+    const reduction = _ciaClamp(Math.round(heat * pct), 10, 70);
+    cashOffer = { type: 'cash', cost, pct, heatReduction: reduction };
+  }
+
+  // Weapons offer: simple baseline (Phase 1); later we can weight rarity.
+  let weaponsOffer = null;
+  const wCount = Array.isArray(snapshot.weapons) ? snapshot.weapons.length : 0;
+  const partsCount = snapshot.weaponParts && typeof snapshot.weaponParts === 'object'
+    ? Object.values(snapshot.weaponParts).reduce((a, v) => a + (Number(v) || 0), 0)
+    : 0;
+
+  if (wCount > 0 || partsCount > 0) {
+    const valueScore = (wCount * 8) + (partsCount * 2);
+    weaponsOffer = {
+      type: 'weapons',
+      weaponsCount: wCount,
+      partsCount,
+      heatReduction: _ciaClamp(Math.round(valueScore), 10, 60),
+    };
+  }
+
+  // Property offers: each property can be leased for 24h, reduction based on income.
+  let propertyOffers = null;
+  if (Array.isArray(snapshot.properties) && snapshot.properties.length) {
+    propertyOffers = snapshot.properties.map(pr => {
+      const income = Math.max(0, Number(pr.dailyIncome || 0) || 0);
+      return {
+        type: 'property',
+        propertyId: pr.id,
+        name: pr.name,
+        durationHours: 24,
+        heatReduction: _ciaClamp(Math.round(income / 10), 5, 40),
+        dailyIncome: income,
+        tier: pr.tier || 1,
+      };
+    });
+  }
+
+  return { cash: cashOffer, weapons: weaponsOffer, properties: propertyOffers };
+}
+
+function pauseGameSystemsForCIA() {
+  // Soft pause: block actions that would conflict. Keep it minimal to avoid regressions.
+  try {
+    GameState.ciaIntervention._prevCanStartTurfDefense = (GameState.turfDefense && GameState.turfDefense._canStart !== undefined) ? GameState.turfDefense._canStart : null;
+    if (GameState.turfDefense) GameState.turfDefense._canStart = false;
+  } catch (_) {}
+
+  try {
+    // Prevent accidental free-roam interactions during dialog (Phase 1 uses no UI yet).
+    GameState.ciaIntervention._prevFreeRoam = !!(GameState.character && GameState.character.freeRoam);
+    if (GameState.character) GameState.character.freeRoam = false;
+  } catch (_) {}
+}
+
+function resumeGameSystemsAfterCIA() {
+  try {
+    if (GameState.turfDefense) {
+      if (GameState.ciaIntervention && GameState.ciaIntervention._prevCanStartTurfDefense !== null) {
+        GameState.turfDefense._canStart = GameState.ciaIntervention._prevCanStartTurfDefense;
+      } else {
+        delete GameState.turfDefense._canStart;
+      }
+    }
+  } catch (_) {}
+
+  try {
+    // Don't force free roam back on; just restore if it was on.
+    if (GameState.character && GameState.ciaIntervention) {
+      if (GameState.ciaIntervention._prevFreeRoam) GameState.character.freeRoam = true;
+    }
+  } catch (_) {}
+}
+
+function startCIAIntervention(reason) {
+  try {
+    if (!GameState.ciaIntervention || typeof GameState.ciaIntervention !== 'object') {
+      GameState.ciaIntervention = JSON.parse(JSON.stringify(DEFAULT_STATE.ciaIntervention));
+    }
+    if (GameState.ciaIntervention.active) return;
+
+    // Prevent re-triggering within same lockdown
+    const lid = (GameState.cityState && GameState.cityState.lockdownId) ? GameState.cityState.lockdownId : null;
+    if (lid && GameState.ciaIntervention.lastLockdownId === lid) return;
+
+    GameState.ciaIntervention.active = true;
+    GameState.ciaIntervention.reason = reason || 'lockdown';
+    GameState.ciaIntervention.snapshot = capturePlayerSnapshotForCIA();
+    GameState.ciaIntervention.offers = computeCIAOffers(GameState.ciaIntervention.snapshot);
+
+    if (lid) GameState.ciaIntervention.lastLockdownId = lid;
+
+    pauseGameSystemsForCIA();
+
+    // Phase 1: visible verification without full UI
+    console.log("[CIA] Intervention started", GameState.ciaIntervention);
+    try { showToast && showToast("👁️ A visitor is watching… (Phase 1)", 2500); } catch (_) {}
+    try {
+      if (!document.getElementById('cia-phase1-banner')) {
+        const b = document.createElement('div');
+        b.id = 'cia-phase1-banner';
+        b.style.position = 'fixed';
+        b.style.left = '50%';
+        b.style.top = '12%';
+        b.style.transform = 'translateX(-50%)';
+        b.style.zIndex = '99999';
+        b.style.padding = '10px 14px';
+        b.style.borderRadius = '14px';
+        b.style.background = 'rgba(0,0,0,0.75)';
+        b.style.color = '#fff';
+        b.style.fontFamily = 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+        b.style.fontSize = '14px';
+        b.style.boxShadow = '0 8px 20px rgba(0,0,0,0.35)';
+        b.textContent = "👤 The Visitor has arrived (Phase 1)";
+        document.body.appendChild(b);
+        setTimeout(() => { try { b.remove(); } catch(_){} }, 2800);
+      }
+    } catch (_) {}
+
+    try { Storage && Storage.save && Storage.save(); } catch (_) {}
+  } catch (e) {
+    console.warn("[CIA] Failed to start intervention", e);
+  }
+}
+
+function reduceGlobalHeatForCIA(amount, reason) {
+  const a = Math.max(0, Number(amount || 0) || 0);
+  if (a <= 0) return;
+  const p = GameState.player;
+  p.globalHeat = Math.max(0, Math.min(100, (Number(p.globalHeat || 0) || 0) - a));
+  try { TurfTab && TurfTab.updateGlobalHeatDisplay && TurfTab.updateGlobalHeatDisplay(); } catch (_) {}
+  try { updateHeatIndicator && updateHeatIndicator(); } catch (_) {}
+  try { Storage && Storage.save && Storage.save(); } catch (_) {}
+  console.log("[CIA] Heat reduced:", a, reason || "");
+}
+
+function applyCIAResolution(type, payload) {
+  try {
+    if (!GameState.ciaIntervention || !GameState.ciaIntervention.active) return;
+    const p = GameState.player;
+
+    if (type === 'cash' && payload && payload.cost) {
+      p.cash = Math.max(0, (Number(p.cash || 0) || 0) - (Number(payload.cost) || 0));
+      reduceGlobalHeatForCIA(payload.heatReduction || 0, 'cash');
+    } else if (type === 'weapons' && payload) {
+      // Phase 1: simple confiscation. Later we'll let player choose which.
+      if (Array.isArray(p.weapons)) p.weapons.length = 0;
+      if (p.weaponParts && typeof p.weaponParts === 'object') {
+        Object.keys(p.weaponParts).forEach(k => { p.weaponParts[k] = 0; });
+      }
+      reduceGlobalHeatForCIA(payload.heatReduction || 0, 'weapons');
+    } else if (type === 'property' && payload && payload.propertyId != null) {
+      // Phase 1: mark lease in state; visual red hue comes Phase 2.
+      if (!GameState.ciaLeases) GameState.ciaLeases = {};
+      const ms = (Number(payload.durationHours || 24) || 24) * 60 * 60 * 1000;
+      GameState.ciaLeases[String(payload.propertyId)] = {
+        until: Date.now() + ms,
+        dailyIncome: Number(payload.dailyIncome || 0) || 0,
+      };
+      reduceGlobalHeatForCIA(payload.heatReduction || 0, 'property');
+    }
+
+    endCIAIntervention();
+  } catch (e) {
+    console.warn("[CIA] applyCIAResolution failed", e);
+  }
+}
+
+function endCIAIntervention() {
+  try {
+    if (!GameState.ciaIntervention) return;
+    GameState.ciaIntervention.active = false;
+    resumeGameSystemsAfterCIA();
+    console.log("[CIA] Intervention ended");
+    try { Storage && Storage.save && Storage.save(); } catch (_) {}
+  } catch (_) {}
+}
+
       updatePoliceActivity() {
         const heat = GameState.player.globalHeat;
         let newActivity;
@@ -24475,23 +24431,41 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       },
       
       startLockdownCheck() {
-        // Check for lockdown every 10 seconds
-        this.lockdownCheckInterval = setInterval(() => {
-          const heat = GameState.player.globalHeat;
-          
-          // Trigger lockdown at 85% heat
-          if (heat >= 85 && !GameState.cityState.lockdown) {
-            this.initilateLockdown();
-          }
-          
-          // End lockdown check
-          if (GameState.cityState.lockdown && GameState.cityState.lockdownUntil) {
-            if (Date.now() >= GameState.cityState.lockdownUntil) {
-              this.endLockdown();
-            }
-          }
-        }, 10000); // Every 10 seconds
-      },
+  const runLockdownCheck = () => {
+    const heat = GameState.player.globalHeat;
+
+    // If a player loads in already hot, ensure lockdown exists immediately (no waiting 10s)
+    if (heat >= 85 && !GameState.cityState.lockdown) {
+      this.initilateLockdown();
+    }
+
+    // If lockdown is already active (from a previous session) and CIA hasn't triggered for it, trigger now.
+    if (heat >= 85 && GameState.cityState.lockdown) {
+      const lid = GameState.cityState.lockdownId || null;
+      if (GameState.ciaIntervention && !GameState.ciaIntervention.active) {
+        if (!lid || GameState.ciaIntervention.lastLockdownId !== lid) {
+          startCIAIntervention('lockdown');
+        }
+      }
+    }
+
+    // End lockdown check
+    if (GameState.cityState.lockdown && GameState.cityState.lockdownUntil) {
+      if (Date.now() >= GameState.cityState.lockdownUntil) {
+        this.endLockdown();
+      }
+    }
+  };
+
+  // Run once immediately so existing players don't miss the trigger
+  try { runLockdownCheck(); } catch (_) {}
+
+  // Check for lockdown every 10 seconds
+  this.lockdownCheckInterval = setInterval(() => {
+    runLockdownCheck();
+  }, 10000); // Every 10 seconds
+},
+
       
       initilateLockdown() {
         GameState.cityState.lockdown = true;
