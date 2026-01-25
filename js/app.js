@@ -2211,7 +2211,81 @@ Then tighten the rules later.`);
     }
 
     // ========================================
-    // GOOGLE AUTH MANAGER: Cloud Authentication
+    
+    // ----------------------------------------
+    // Cloud Save: make GameState Firebase-safe
+    // (Firebase RTDB rejects undefined/functions/cycles/DOM nodes)
+    // ----------------------------------------
+    function buildSerializableGameStateForCloud(state) {
+      const seen = new WeakSet();
+      const MAX_DEPTH = 10;
+
+      function clean(value, depth) {
+        if (depth > MAX_DEPTH) return undefined;
+
+        if (value === null) return null;
+
+        const t = typeof value;
+        if (t === 'string' || t === 'number' || t === 'boolean') return value;
+
+        if (t === 'bigint') return Number(value);
+        if (t === 'undefined' || t === 'function' || t === 'symbol') return undefined;
+
+        // Dates -> timestamp
+        if (value instanceof Date) return value.getTime();
+
+        // DOM / canvas objects -> drop
+        try {
+          if (typeof HTMLElement !== 'undefined' && value instanceof HTMLElement) return undefined;
+        } catch (_) {}
+        // Some browsers expose nodeType without HTMLElement
+        if (value && typeof value === 'object' && (value.nodeType === 1 || value.nodeType === 9)) return undefined;
+
+        // Canvas / contexts
+        if (typeof HTMLCanvasElement !== 'undefined' && value instanceof HTMLCanvasElement) return undefined;
+        if (typeof CanvasRenderingContext2D !== 'undefined' && value instanceof CanvasRenderingContext2D) return undefined;
+
+        if (Array.isArray(value)) {
+          const arr = new Array(value.length);
+          for (let i = 0; i < value.length; i++) {
+            const v = clean(value[i], depth + 1);
+            arr[i] = (v === undefined) ? null : v;
+          }
+          return arr;
+        }
+
+        if (t === 'object') {
+          if (seen.has(value)) return undefined;
+          seen.add(value);
+
+          const out = {};
+          for (const k in value) {
+            if (!Object.prototype.hasOwnProperty.call(value, k)) continue;
+
+            // Drop internal/runtime-only keys
+            if (k.startsWith('_')) continue;
+            if (k === 'ctx' || k === 'canvas' || k === 'renderer' || k === 'touchControls') continue;
+
+            const v = clean(value[k], depth + 1);
+            if (v !== undefined) out[k] = v;
+          }
+          return out;
+        }
+
+        return undefined;
+      }
+
+      const cleaned = clean(state, 0) || {};
+      // Final pass ensures no undefined sneaks through
+      try {
+        return JSON.parse(JSON.stringify(cleaned));
+      } catch (e) {
+        console.warn('[GoogleAuth] Cloud payload JSON sanitize failed:', e);
+        return {};
+      }
+    }
+
+// GOOGLE AUTH MANAGER: Cloud Authentication
     // ========================================
     const GoogleAuthManager = {
       currentUser: null,
@@ -2729,7 +2803,8 @@ Then tighten the rules later.`);
         try {
           console.log('[GoogleAuth] Saving to cloud...');
           
-          await database.ref('users/' + this.currentUser.uid + '/gameState').set(GameState);
+          const payload = buildSerializableGameStateForCloud(GameState);
+          await database.ref('users/' + this.currentUser.uid + '/gameState').set(payload);
           await database.ref('users/' + this.currentUser.uid + '/lastSave').set(Date.now());
           
           console.log('[GoogleAuth] ✅ Saved to cloud');
@@ -7517,6 +7592,7 @@ try {
     }
 
 function updateTurfDefense(dt) {
+  if (typeof DebugOverlay !== 'undefined' && DEBUG_OVERLAY_ENABLED && DebugOverlay.markUpdate) DebugOverlay.markUpdate(dt);
       // Track call count for conditional logging
       if (!GameState.turfDefense._updateCallCount) GameState.turfDefense._updateCallCount = 0;
       GameState.turfDefense._updateCallCount++;
@@ -8007,6 +8083,7 @@ function updateTurfDefense(dt) {
      * Handles rendering of defense-specific UI and entities
      */
     function drawTurfDefense() {
+  if (typeof DebugOverlay !== 'undefined' && DEBUG_OVERLAY_ENABLED && DebugOverlay.markDraw) DebugOverlay.markDraw();
       // Track call count for conditional logging
       if (!GameState.turfDefense._drawCallCount) GameState.turfDefense._drawCallCount = 0;
       GameState.turfDefense._drawCallCount++;
