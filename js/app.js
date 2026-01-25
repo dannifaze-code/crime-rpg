@@ -6764,6 +6764,22 @@ const CartoonSpriteGenerator = {
           if (!GameState.turfDefense) GameState.turfDefense = {};
           GameState.turfDefense._prevFreeRoamPlayerDisplay = el.style.display;
           GameState.turfDefense._prevFreeRoamPlayerVisibility = el.style.visibility;
+          // Capture current on-screen size (for matching Turf Defense sprite scale)
+          try {
+            const r = el.getBoundingClientRect();
+            if (r && r.width > 0 && r.height > 0) {
+              GameState.turfDefense._freeRoamSpritePxW = r.width;
+              GameState.turfDefense._freeRoamSpritePxH = r.height;
+            } else if (window.getComputedStyle) {
+              const cs = window.getComputedStyle(el);
+              const w = parseFloat(cs.width);
+              const h = parseFloat(cs.height);
+              if (w > 0 && h > 0) {
+                GameState.turfDefense._freeRoamSpritePxW = w;
+                GameState.turfDefense._freeRoamSpritePxH = h;
+              }
+            }
+          } catch (e) {}
         }
       } catch (e) {}
 
@@ -7043,7 +7059,61 @@ const CartoonSpriteGenerator = {
           _lastDustAt: 0
         };
       }
+    
+    // ------------------------------------------------------------
+    // TURF DEFENSE: Shot feedback (micro camera shake + recoil kick)
+    // ------------------------------------------------------------
+    function triggerCameraShake(defense, mag = 1) {
+      if (!defense) return;
+      const now = performance.now ? performance.now() : Date.now();
+      defense._camShake = {
+        born: now,
+        life: 90, // ms
+        mag: 3.2 * mag
+      };
     }
+
+    function triggerRecoilKick(defense, facingAngle, mag = 1) {
+      if (!defense || !defense.playerSprite) return;
+      const now = performance.now ? performance.now() : Date.now();
+      defense.playerSprite._recoil = {
+        born: now,
+        life: 85, // ms
+        mag: 6.0 * mag,
+        ang: facingAngle || 0
+      };
+    }
+
+    function getCameraShakeOffset(defense) {
+      if (!defense || !defense._camShake) return { x: 0, y: 0 };
+      const now = performance.now ? performance.now() : Date.now();
+      const age = now - defense._camShake.born;
+      if (age >= defense._camShake.life) { defense._camShake = null; return { x: 0, y: 0 }; }
+      const t = 1 - (age / defense._camShake.life);
+      // Random jitter each frame; small and quick
+      const amp = defense._camShake.mag * t;
+      return {
+        x: (Math.random() - 0.5) * 2 * amp,
+        y: (Math.random() - 0.5) * 2 * amp
+      };
+    }
+
+    function getRecoilOffset(sprite) {
+      if (!sprite || !sprite._recoil) return { x: 0, y: 0 };
+      const now = performance.now ? performance.now() : Date.now();
+      const age = now - sprite._recoil.born;
+      if (age >= sprite._recoil.life) { sprite._recoil = null; return { x: 0, y: 0 }; }
+      // Ease-out recoil (fast kick, quick settle)
+      const t = 1 - (age / sprite._recoil.life);
+      const k = t * t;
+      const amp = sprite._recoil.mag * k;
+      const ang = sprite._recoil.ang || 0;
+      return {
+        x: -Math.cos(ang) * amp,
+        y: -Math.sin(ang) * amp
+      };
+    }
+}
 
     function spawnTracer(defense, x1, y1, x2, y2) {
       ensureDefenseVFX(defense);
@@ -7836,6 +7906,10 @@ function updateTurfDefense(dt) {
 
       // VFX layer (dust/smoke/casings/tracers)
       try { drawDefenseVFX(ctx, defense); } catch (e) {}
+      // Apply micro camera shake (world only; HUD stays stable)
+      const _shake = getCameraShakeOffset(defense);
+      ctx.save();
+      ctx.translate(_shake.x, _shake.y);
 
       // Render building HP bars (only during defense)
       if (defense.structures) {
@@ -7866,6 +7940,8 @@ function updateTurfDefense(dt) {
 
       // Render floating damage numbers
       TurfDefenseRenderer.drawDamageNumbers(ctx, defense);
+      // End world shake transform
+      ctx.restore();
 
       // Render HUD
       TurfDefenseRenderer.drawHUD(ctx, defense, canvas.width, canvas.height);
@@ -8776,6 +8852,9 @@ function updateTurfDefense(dt) {
         spawnTracer(defense, muzzleX, muzzleY, x, y);
         spawnSmoke(defense, muzzleX, muzzleY, ang);
         spawnShellCasing(defense, playerX, playerY, ang);
+        // Micro shot feedback (recoil kick + tiny camera shake)
+        triggerRecoilKick(defense, ang, 1);
+        triggerCameraShake(defense, 1);
       }
 
       // Check if any enemy is hit (simple radius check)
@@ -9077,9 +9156,13 @@ function updateTurfDefense(dt) {
         // Use visualHP for smooth animation
         const hpPercent = enemy.visualHP / enemy.maxHP;
 
+        
+        const _h = GameState.turfDefense && GameState.turfDefense._freeRoamSpritePxH;
+        const radius = _h ? Math.max(18, Math.min(30, _h * 0.45)) : 22;
+
         // Enemy body (circle)
         ctx.beginPath();
-        ctx.arc(enemy.x, enemy.y, 15, 0, Math.PI * 2);
+        ctx.arc(enemy.x, enemy.y, radius, 0, Math.PI * 2);
 
         // Color based on state
         if (enemy.state === 'attackingPlayer') {
@@ -9100,10 +9183,10 @@ function updateTurfDefense(dt) {
         ctx.stroke();
 
         // Animated HP bar
-        const barWidth = 34;
-        const barHeight = 5;
+        const barWidth = radius * 2.2;
+        const barHeight = Math.max(5, radius * 0.35);
         const barX = enemy.x - barWidth / 2;
-        const barY = enemy.y - 28;
+        const barY = enemy.y - (radius + 13);
 
         // HP bar background
         ctx.fillStyle = '#000';
@@ -9168,11 +9251,16 @@ function updateTurfDefense(dt) {
         const playerY = defense.playerY || TurfDefenseConfig.PLAYER_START_Y;
         const sprite = defense.playerSprite;
         const spriteLoaded = PlayerSpriteManager.loaded;
-        const scale = PlayerSpriteManager.config.spriteScale;
+        let scale = PlayerSpriteManager.config.spriteScale;
 
         // Draw sprite if loaded, otherwise fallback to placeholder
         if (spriteLoaded && sprite) {
           const facingAngle = sprite.facingAngle || 0;
+
+          // Recoil kick (tiny backward nudge on shots)
+          const _recoil = getRecoilOffset(sprite);
+          const drawX = playerX + _recoil.x;
+          const drawY = playerY + _recoil.y;
 
           // Get current frames
           const bodyFrames = PlayerSpriteManager.getBodyFrames(sprite.anim);
@@ -9180,10 +9268,20 @@ function updateTurfDefense(dt) {
           const bodyImg = bodyFrames && bodyFrames.length > 0 ? bodyFrames[sprite.bodyFrame % bodyFrames.length] : null;
           const feetImg = feetFrames && feetFrames.length > 0 ? feetFrames[sprite.feetFrame % feetFrames.length] : null;
 
+          // Match Turf Defense sprite size to Free Roam sprite (captured before hiding)
+          try {
+            const targetH = defense && defense._freeRoamSpritePxH;
+            if (targetH && bodyImg && bodyImg.height) {
+              const dyn = targetH / bodyImg.height;
+              // Clamp to sane bounds to avoid exploding sprites if CSS returns weird values
+              scale = Math.max(0.25, Math.min(1.6, dyn));
+            }
+          } catch (e) {}
+
           // Draw feet layer first (underneath body)
           if (feetImg) {
             ctx.save();
-            ctx.translate(playerX, playerY);
+            ctx.translate(drawX, drawY);
             ctx.rotate(facingAngle);
             const feetW = feetImg.width * scale;
             const feetH = feetImg.height * scale;
@@ -9194,7 +9292,7 @@ function updateTurfDefense(dt) {
           // Draw body layer (on top of feet)
           if (bodyImg) {
             ctx.save();
-            ctx.translate(playerX, playerY);
+            ctx.translate(drawX, drawY);
             ctx.rotate(facingAngle);
             const bodyW = bodyImg.width * scale;
             const bodyH = bodyImg.height * scale;
