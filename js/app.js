@@ -7088,7 +7088,7 @@ const CartoonSpriteGenerator = {
               const sprite = defense.playerSprite;
               const isMoving = Math.abs(movement.x) > 0.05 || Math.abs(movement.y) > 0.05;
               sprite.isMoving = isMoving;
-              if (isMoving) sprite.facingAngle = Math.atan2(movement.y, movement.x) + Math.PI / 2;
+              if (isMoving) sprite.facingAngle = Math.atan2(movement.y, movement.x);
             }
           } catch (e) {}
 
@@ -7151,7 +7151,7 @@ const CartoonSpriteGenerator = {
 
             // Face movement direction when moving (aim code below may override when shooting)
             if (isMoving) {
-              sprite.facingAngle = Math.atan2(movement.y, movement.x) + Math.PI / 2;
+              sprite.facingAngle = Math.atan2(movement.y, movement.x);
             }
 
             // Find nearest enemy for aiming when shooting
@@ -7172,7 +7172,7 @@ const CartoonSpriteGenerator = {
             if (nearestEnemyForAim && (defense.input.shooting || defense.input.spraying)) {
               const dx = nearestEnemyForAim.x - defense.playerX;
               const dy = nearestEnemyForAim.y - defense.playerY;
-              sprite.facingAngle = Math.atan2(dy, dx) + Math.PI / 2;
+              sprite.facingAngle = Math.atan2(dy, dx);
             }
 
             // Determine animation state
@@ -7403,7 +7403,7 @@ const CartoonSpriteGenerator = {
               const sprite = defense.playerSprite;
               const isMoving = Math.abs(movement.x) > 0.05 || Math.abs(movement.y) > 0.05;
               sprite.isMoving = isMoving;
-              if (isMoving) sprite.facingAngle = Math.atan2(movement.y, movement.x) + Math.PI / 2;
+              if (isMoving) sprite.facingAngle = Math.atan2(movement.y, movement.x);
             }
           } catch (e) {}
 
@@ -8435,7 +8435,7 @@ const CartoonSpriteGenerator = {
         // Update facing angle toward target
         const dx = x - playerX;
         const dy = y - playerY;
-        defense.playerSprite.facingAngle = Math.atan2(dy, dx) + Math.PI / 2;
+        defense.playerSprite.facingAngle = Math.atan2(dy, dx);
       }
 
       // Check if any enemy is hit (simple radius check)
