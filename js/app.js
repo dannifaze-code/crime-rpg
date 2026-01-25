@@ -7047,28 +7047,43 @@ const CartoonSpriteGenerator = {
 
     function spawnTracer(defense, x1, y1, x2, y2) {
       ensureDefenseVFX(defense);
+      const now = performance.now ? performance.now() : Date.now();
       defense.vfx.tracers.push({
         x1, y1, x2, y2,
-        born: performance.now ? performance.now() : Date.now(),
-        life: 90 // ms
+        born: now,
+        // Tuned for readability on small screens
+        life: 120, // ms
+        // visual tuning
+        coreW: 1.6,
+        glowW: 4.2
       });
     }
 
     function spawnShellCasing(defense, x, y, facingAngle) {
       ensureDefenseVFX(defense);
+      const now = performance.now ? performance.now() : Date.now();
+
       // Eject to the right side of the gun relative to facing
-      const ejectAng = facingAngle + Math.PI / 2 + (Math.random() - 0.5) * 0.45;
-      const speed = 90 + Math.random() * 70;
+      const ejectAng = facingAngle + Math.PI / 2 + (Math.random() - 0.5) * 0.50;
+      const speed = 95 + Math.random() * 85;
+
+      // Give each casing its own little "floor" so it can bounce and then rest.
+      const floorY = y + (10 + Math.random() * 8);
+
       defense.vfx.casings.push({
         x, y,
         vx: Math.cos(ejectAng) * speed,
-        vy: Math.sin(ejectAng) * speed - (80 + Math.random() * 40), // little pop upward
+        vy: Math.sin(ejectAng) * speed - (95 + Math.random() * 55), // pop upward
         rot: Math.random() * Math.PI * 2,
-        vr: (Math.random() - 0.5) * 10,
-        born: performance.now ? performance.now() : Date.now(),
-        life: 1300, // ms visible on ground
-        groundT: 220, // ms of "falling"
-        r: 2.2
+        vr: (Math.random() - 0.5) * 12,
+        floorY,
+        bounces: 0,
+        settled: false,
+        born: now,
+        // Total life includes a short "resting" moment on the ground
+        life: 1650 + Math.random() * 500,
+        r: 2.25,
+        sparkle: Math.random() < 0.35
       });
     }
 
@@ -7123,30 +7138,66 @@ const CartoonSpriteGenerator = {
         p.vy *= 0.86;
       });
 
-      stepList(defense.vfx.smoke, (p) => {
-        p.x += (p.vx * dtMs) / 1000;
-        p.y += (p.vy * dtMs) / 1000;
+      stepList(defense.vfx.smoke, (p, age) => {
+        const dt = dtMs / 1000;
+
+        // gentle upward buoyancy (y down -> upward is negative)
+        p.vy -= 14 * dt;
+
+        // slight sideways drift / swirl so it feels alive
+        p.vx += Math.sin((age || 0) * 0.012) * 6 * dt;
+
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+
         p.vx *= 0.90;
         p.vy *= 0.90;
       });
 
       stepList(defense.vfx.casings, (p, age) => {
-        const t = age;
-        if (t < p.groundT) {
-          // simple gravity
-          p.vy += (520 * dtMs) / 1000;
-          p.x += (p.vx * dtMs) / 1000;
-          p.y += (p.vy * dtMs) / 1000;
-          p.vx *= 0.98;
-          p.vy *= 0.98;
-          p.rot += p.vr * (dtMs / 1000);
+        const dt = dtMs / 1000;
+
+        // Physics (bounce, then rest)
+        if (!p.settled) {
+          // gravity
+          p.vy += 520 * dt;
+
+          // integrate
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+
+          // mild drag
+          p.vx *= 0.985;
+          p.vy *= 0.995;
+
+          // rotation
+          p.rot += p.vr * dt;
+
+          // bounce off "floor"
+          if (typeof p.floorY === 'number' && p.y >= p.floorY && p.vy > 0) {
+            p.y = p.floorY;
+
+            // bounce
+            p.vy = -p.vy * (0.32 + Math.random() * 0.10);
+            p.vx *= 0.55 + Math.random() * 0.10;
+            p.vr *= 0.55;
+
+            p.bounces = (p.bounces || 0) + 1;
+
+            // settle after a couple bounces or if nearly stopped
+            if (p.bounces >= 2 || Math.abs(p.vy) < 38) {
+              p.settled = true;
+              p.vy = 0;
+              p.vx *= 0.6;
+              p.vr *= 0.35;
+              p.restAt = now;
+            }
+          }
         } else {
-          // settled on ground: tiny drift to stop
-          p.vx *= 0.90;
-          p.vy *= 0.90;
-          p.x += (p.vx * dtMs) / 1000;
-          p.y += (p.vy * dtMs) / 1000;
-          p.rot += p.vr * (dtMs / 1000) * 0.3;
+          // resting on ground: drift to stop
+          p.vx *= 0.88;
+          p.x += p.vx * dt;
+          p.rot += p.vr * dt;
         }
       });
     }
@@ -7181,26 +7232,56 @@ const CartoonSpriteGenerator = {
         ctx.restore();
       }
 
-      // Shell casings (small rotated rectangles)
+      // Shell casings (bounce + rest + optional sparkle)
       for (const p of defense.vfx.casings) {
         const age = now - p.born;
         const a = Math.max(0, 1 - age / p.life);
+
         ctx.save();
         ctx.translate(p.x, p.y);
         ctx.rotate(p.rot);
-        ctx.globalAlpha = 0.65 * a;
+
+        // slightly higher alpha once settled so it "rests" visibly
+        const baseAlpha = p.settled ? 0.78 : 0.62;
+        ctx.globalAlpha = baseAlpha * a;
+
         ctx.fillStyle = '#caa04a';
-        ctx.fillRect(-p.r, -p.r / 2, p.r * 2.2, p.r);
+        ctx.fillRect(-p.r, -p.r / 2, p.r * 2.25, p.r);
+
+        // tiny sparkle/glint shortly after landing
+        if (p.sparkle && p.settled && p.restAt) {
+          const sinceRest = now - p.restAt;
+          if (sinceRest >= 0 && sinceRest < 220) {
+            const sa = (1 - sinceRest / 220) * 0.9 * a;
+            ctx.globalAlpha = sa;
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(p.r * 0.35, -p.r * 0.35, 0.9, 0.9);
+          }
+        }
+
         ctx.restore();
       }
 
-      // Bullet tracers (thin quick fading lines) - draw last so they read on small screens
+      // Bullet tracers (tuned for mobile readability): soft glow + bright core
       for (const t of defense.vfx.tracers) {
         const age = now - t.born;
         const a = Math.max(0, 1 - age / t.life);
+
+        // glow pass (slight "bloom" look)
         ctx.save();
-        ctx.globalAlpha = a * 0.9;
-        ctx.lineWidth = 1.5;
+        ctx.globalAlpha = a * 0.22;
+        ctx.lineWidth = (t.glowW || 4.2);
+        ctx.strokeStyle = '#fff';
+        ctx.beginPath();
+        ctx.moveTo(t.x1, t.y1);
+        ctx.lineTo(t.x2, t.y2);
+        ctx.stroke();
+        ctx.restore();
+
+        // core pass
+        ctx.save();
+        ctx.globalAlpha = a * 0.92;
+        ctx.lineWidth = (t.coreW || 1.6);
         ctx.strokeStyle = '#fff';
         ctx.beginPath();
         ctx.moveTo(t.x1, t.y1);
@@ -7400,14 +7481,20 @@ function updateTurfDefense(dt) {
             }
 
 
-            // --- Turn / rotation smoothing (keeps aim readable on mobile) ---
-            // Set desired facing in sprite._targetFacingAngle above, then smoothly converge here.
+            // --- Turn / rotation smoothing ---
+            // Separate aim smoothing from move smoothing:
+            // - movement can be buttery (less twitchy)
+            // - aiming should stay snappy and responsive
+            const isAiming = !!(nearestEnemyForAim && (defense.input.shooting || defense.input.spraying));
             if (typeof sprite._targetFacingAngle === 'number') {
               const target = sprite._targetFacingAngle;
               const cur = (typeof sprite.facingAngle === 'number') ? sprite.facingAngle : target;
-              // Exponential smoothing: higher = snappier. Tuned for Diablo-like feel.
-              const TURN_SMOOTH_SPEED = 18; // per-second
-              const t = 1 - Math.exp(-TURN_SMOOTH_SPEED * dt);
+
+              const MOVE_TURN_SMOOTH = 14; // per-second (smoother while walking)
+              const AIM_TURN_SMOOTH  = 28; // per-second (snappy while aiming)
+              const speed = isAiming ? AIM_TURN_SMOOTH : MOVE_TURN_SMOOTH;
+
+              const t = 1 - Math.exp(-speed * dt);
               sprite.facingAngle = _lerpAngle(cur, target, t);
             }
 
