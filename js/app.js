@@ -7043,14 +7043,35 @@ function applyTurfDefenseSpriteScaleMatch() {
     // Need a few stable frames before applying (first-run == second-run == Chromebook)
     if ((defense._tdScaleStableFrames || 0) < 3) return false;
 
-    // --- Source-of-truth size (Free Roam scale = 4) ----------------------------
-    let freePxCss = 0;
-    try {
-      if (typeof ImportedSpriteSheet !== 'undefined' && ImportedSpriteSheet && ImportedSpriteSheet.spriteWidth) {
-        freePxCss = (ImportedSpriteSheet.spriteWidth * 4);
-      }
-    } catch (e) {}
-    if (!(freePxCss > 0)) return false; // no calibration hacks, no guessing
+    // --- Source-of-truth size: measure the actual Free Roam DOM sprite ----------
+    // We sample and cache this during pauseFreeRoamForTurfDefense(). Use it here.
+    let freePxCss = (defense && typeof defense._freeRoamSpritePx === 'number') ? defense._freeRoamSpritePx : 0;
+
+    // If cache isn't ready yet, try to measure right now (best-effort).
+    if (!(freePxCss > 0)) {
+      try {
+        const el = document.getElementById('freeRoamPlayer');
+        if (el && el.getBoundingClientRect) {
+          const r = el.getBoundingClientRect();
+          const px = Math.min(r.width || 0, r.height || 0);
+          if (px > 10 && px < 512) freePxCss = px;
+        }
+      } catch (e) {}
+    }
+
+    // Last resort fallback: match the design-time scale (sprite sheet * 4),
+    // but ONLY if it looks sane. (We still prefer the measured DOM size.)
+    if (!(freePxCss > 0)) {
+      try {
+        if (typeof ImportedSpriteSheet !== 'undefined' && ImportedSpriteSheet && ImportedSpriteSheet.spriteWidth) {
+          const fallback = (ImportedSpriteSheet.spriteWidth * 4);
+          if (fallback > 10 && fallback < 256) freePxCss = fallback;
+        }
+      } catch (e) {}
+    }
+
+    // If we still don't have a real size, keep waiting.
+    if (!(freePxCss > 0)) return false;
 
     // Convert desired CSS pixels into canvas internal pixels.
     // Mobile can be non-uniform; use the smaller ratio to avoid overscaling.
@@ -7061,7 +7082,7 @@ function applyTurfDefenseSpriteScaleMatch() {
 
     const desiredInternalPx = freePxCss * pxPerCss;
 
-    // Determine a reasonable "base frame" width from loaded sprites.
+    // Determine a "base frame" width from loaded sprites (must be real, no guessing).
     let frameW = 0;
     try {
       if (typeof PlayerSpriteManager !== 'undefined' && PlayerSpriteManager && PlayerSpriteManager.loaded) {
@@ -7070,11 +7091,18 @@ function applyTurfDefenseSpriteScaleMatch() {
         frameW = img && img.width ? img.width : 0;
       }
     } catch (e) {}
-    if (!(frameW > 0)) frameW = 96; // fallback
 
-    // Compute new scale and clamp to sane bounds.
+    // If sprites aren't loaded yet, wait (fallback widths can make us wrong).
+    if (!(frameW > 0)) return false;
+
+    // Compute the scale that makes the canvas sprite match the CSS free-roam sprite size.
     const newScaleRaw = desiredInternalPx / frameW;
-    const newScale = Math.max(0.15, Math.min(2.0, newScaleRaw));
+
+    // Safety: if scale is wildly out of bounds, treat as unstable and retry later
+    // (instead of clamping and permanently locking the wrong size).
+    if (!(newScaleRaw > 0.05 && newScaleRaw < 2.0 && isFinite(newScaleRaw))) return false;
+
+    const newScale = newScaleRaw;
 
     if (!defense._prevSpriteScale) defense._prevSpriteScale = (PlayerSpriteManager && PlayerSpriteManager.config ? PlayerSpriteManager.config.spriteScale : 0.5);
     if (PlayerSpriteManager && PlayerSpriteManager.config) PlayerSpriteManager.config.spriteScale = newScale;
@@ -7093,6 +7121,7 @@ function applyTurfDefenseSpriteScaleMatch() {
   }
 }
 
+
 function scheduleTurfDefenseSpriteScaleMatch() {
   try {
     const defense = GameState && GameState.turfDefense ? GameState.turfDefense : null;
@@ -7100,7 +7129,7 @@ function scheduleTurfDefenseSpriteScaleMatch() {
 
     // Try a few frames in a row (sprites/canvas may not be ready on mobile immediately)
     let attempts = 0;
-    const maxAttempts = 30;
+    const maxAttempts = 180;
 
     const tick = () => {
       if (!GameState.turfDefense || !GameState.turfDefense.active) return;
