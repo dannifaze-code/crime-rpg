@@ -6604,7 +6604,14 @@ const CartoonSpriteGenerator = {
       // Assign stable IDs to all buildings
       assignStableBuildingIds(buildings);
 
+      // Get map bounds for validation
+      const mapWidth = (GameState.map && GameState.map.width) || 30;
+      const mapHeight = (GameState.map && GameState.map.height) || 30;
       const tileSize = 30; // RENDER_CONFIG.TILE_SIZE_PX
+      const canvasWidth = mapWidth * tileSize;
+      const canvasHeight = mapHeight * tileSize;
+      const edgeBuffer = 100; // Safe zone from edges
+
       const structures = [];
       let mainBase = null;
 
@@ -6615,9 +6622,16 @@ const CartoonSpriteGenerator = {
         const w = building.footprint.width * tileSize;
         const h = building.footprint.height * tileSize;
 
+        // Validate building is within map bounds
+        const nearEdge = x < edgeBuffer || x > (canvasWidth - edgeBuffer) ||
+                        y < edgeBuffer || y > (canvasHeight - edgeBuffer);
+        if (nearEdge) {
+          console.warn(`⚠️ [Building ${index}] ${building.name} is near map edge (${x.toFixed(0)}, ${y.toFixed(0)})`);
+        }
+
         console.log(`🏗️ [Building ${index}] ${building.name} (${building.typeId})`);
         console.log(`   Tile coords: (${building.x}, ${building.y}), Footprint: ${building.footprint.width}x${building.footprint.height}`);
-        console.log(`   Pixel coords: (${x}, ${y}), Size: ${w}x${h}`);
+        console.log(`   Pixel coords: (${x}, ${y}), Size: ${w}x${h} ${nearEdge ? '[NEAR EDGE]' : '[SAFE]'}`);
 
         // Determine if this is the main base (safehouse = critical)
         const isCritical = building.typeId === 'safehouse';
@@ -6633,6 +6647,7 @@ const CartoonSpriteGenerator = {
           hp: hpMax,
           hpMax: hpMax,
           isCritical: isCritical,
+          nearEdge: nearEdge, // Flag for enemy targeting
           ref: building,  // Reference to real building object
           // PHASE 3D: Hit feedback fields
           hitFlashT: 0,
@@ -6656,7 +6671,9 @@ const CartoonSpriteGenerator = {
         mainBase = structures[0];
       }
 
-      console.log(`📍 [TurfDefense] Built ${structures.length} structures from real buildings (Main Base: ${mainBase?.name || 'none'})`);
+      const safeCount = structures.filter(s => !s.nearEdge).length;
+      console.log(`📍 [TurfDefense] Built ${structures.length} structures (${safeCount} safe, ${structures.length - safeCount} near edges)`);
+      console.log(`📍 [TurfDefense] Main Base: ${mainBase?.name || 'none'} at (${mainBase?.x.toFixed(0)}, ${mainBase?.y.toFixed(0)})`);
       return structures;
     }
 
@@ -6834,7 +6851,14 @@ const CartoonSpriteGenerator = {
       GameState.turfDefense.active = false;
       GameState.turfDefense.waveState = 'inactive';
 
-      // Clear enemies and loot
+      // Clear enemies (ensure any runtime state is discarded)
+      if (Array.isArray(GameState.turfDefense.enemies)) {
+        GameState.turfDefense.enemies.forEach(enemy => {
+          // Clear any stuck tracking state
+          delete enemy.stuckAtBoundary;
+          delete enemy.stuckStartTime;
+        });
+      }
       GameState.turfDefense.enemies = [];
       GameState.turfDefense.lootDrops = [];
 
@@ -7339,15 +7363,32 @@ const CartoonSpriteGenerator = {
       const mainBase = defense.structures ? defense.structures.find(s => s.isCritical) : null;
       const structures = defense.structures || [];
 
+      // Filter for safe structures (not near edges) for initial targeting
+      const safeStructures = structures.filter(s => !s.nearEdge && s.hp > 0);
+      const hasOnlySafeStructures = safeStructures.length > 0;
+
+      console.log(`🎯 [Spawn] ${safeStructures.length}/${structures.length} structures are safe for targeting`);
+
       for (let i = 0; i < enemyCount; i++) {
         const spawnPos = spawnPositions[i % spawnPositions.length];
         const enemy = createEnemy(`enemy_${wave}_${i}`, spawnPos);
 
-        // Assign target structure (prefer main base, but distribute across structures)
+        // Assign target structure (prefer main base, but distribute across SAFE structures)
         if (mainBase && (i % 3 === 0 || structures.length === 1)) {
           enemy.targetStructureId = mainBase.id;
+        } else if (hasOnlySafeStructures) {
+          // Prefer safe non-critical structures
+          const safeNonCritical = safeStructures.filter(s => !s.isCritical);
+          if (safeNonCritical.length > 0) {
+            const target = safeNonCritical[i % safeNonCritical.length];
+            enemy.targetStructureId = target.id;
+          } else {
+            // All safe structures are critical, use them anyway
+            const target = safeStructures[i % safeStructures.length];
+            enemy.targetStructureId = target.id;
+          }
         } else if (structures.length > 1) {
-          // Target a random non-critical structure
+          // No safe structures, fall back to any non-critical structure
           const nonCritical = structures.filter(s => !s.isCritical && s.hp > 0);
           if (nonCritical.length > 0) {
             const target = nonCritical[i % nonCritical.length];
@@ -7415,13 +7456,17 @@ const CartoonSpriteGenerator = {
           targetY = structure.y;
           targetType = 'structure';
         } else {
-          // If target structure is destroyed, find nearest alive structure
+          // If target structure is destroyed/invalid, find new target (prefer safe structures)
           const aliveStructures = defense.structures ? defense.structures.filter(s => s.hp > 0) : [];
           if (aliveStructures.length > 0) {
-            // Find nearest structure
+            // Prefer safe structures (not near edges)
+            const safeAlive = aliveStructures.filter(s => !s.nearEdge);
+            const candidatePool = safeAlive.length > 0 ? safeAlive : aliveStructures;
+
+            // Find nearest structure from candidate pool
             let nearestDist = Infinity;
             let nearest = null;
-            aliveStructures.forEach(s => {
+            candidatePool.forEach(s => {
               const dist = Math.sqrt(Math.pow(s.x - enemy.x, 2) + Math.pow(s.y - enemy.y, 2));
               if (dist < nearestDist) {
                 nearestDist = dist;
@@ -7503,23 +7548,20 @@ const CartoonSpriteGenerator = {
             // If stuck for more than 1 second, pick a new target away from edges
             const stuckDuration = Date.now() - enemy.stuckStartTime;
             if (stuckDuration > 1000) {
-              // Find structures that are not near map edges
-              const aliveStructures = defense.structures ? defense.structures.filter(s => {
-                if (s.hp <= 0) return false;
-                // Check if structure is safely away from edges (at least 100px from boundary)
-                const edgeBuffer = 100;
-                return s.x > edgeBuffer && s.x < (canvasWidth - edgeBuffer) &&
-                       s.y > edgeBuffer && s.y < (canvasHeight - edgeBuffer);
-              }) : [];
+              // Find structures that are not near map edges (use nearEdge flag)
+              const safeStructures = defense.structures ? defense.structures.filter(s =>
+                s.hp > 0 && !s.nearEdge
+              ) : [];
 
-              if (aliveStructures.length > 0) {
-                // Pick a random reachable structure
-                const newTarget = aliveStructures[Math.floor(Math.random() * aliveStructures.length)];
+              if (safeStructures.length > 0) {
+                // Pick a random safe structure
+                const newTarget = safeStructures[Math.floor(Math.random() * safeStructures.length)];
                 enemy.targetStructureId = newTarget.id;
                 enemy.stuckAtBoundary = false;
                 enemy.stuckStartTime = null;
+                console.log(`🔄 [Enemy ${enemy.id}] Stuck at boundary, retargeting to safe structure: ${newTarget.name}`);
               } else {
-                // No safe structures, just pick the nearest one
+                // No safe structures, pick the nearest alive one (even if near edge)
                 const allAlive = defense.structures ? defense.structures.filter(s => s.hp > 0) : [];
                 if (allAlive.length > 0) {
                   let nearestDist = Infinity;
@@ -7535,6 +7577,7 @@ const CartoonSpriteGenerator = {
                     enemy.targetStructureId = nearest.id;
                     enemy.stuckAtBoundary = false;
                     enemy.stuckStartTime = null;
+                    console.warn(`⚠️ [Enemy ${enemy.id}] No safe structures, targeting nearest: ${nearest.name} (near edge)`);
                   }
                 }
               }
