@@ -7471,6 +7471,8 @@ const CartoonSpriteGenerator = {
         enemy.velocity.y = dirY * TurfDefenseConfig.ENEMY_SPEED;
 
         // Update position
+        const oldX = enemy.x;
+        const oldY = enemy.y;
         enemy.x += enemy.velocity.x * dt;
         enemy.y += enemy.velocity.y * dt;
 
@@ -7482,8 +7484,67 @@ const CartoonSpriteGenerator = {
         const canvasHeight = mapHeight * tileSize;
         const enemyRadius = 15; // Enemy sprite radius
 
-        enemy.x = Math.max(enemyRadius, Math.min(canvasWidth - enemyRadius, enemy.x));
-        enemy.y = Math.max(enemyRadius, Math.min(canvasHeight - enemyRadius, enemy.y));
+        const clampedX = Math.max(enemyRadius, Math.min(canvasWidth - enemyRadius, enemy.x));
+        const clampedY = Math.max(enemyRadius, Math.min(canvasHeight - enemyRadius, enemy.y));
+
+        // Detect if enemy was clamped (stuck at boundary)
+        const wasClamped = (clampedX !== enemy.x) || (clampedY !== enemy.y);
+
+        enemy.x = clampedX;
+        enemy.y = clampedY;
+
+        // If enemy is stuck at boundary, check if we should pick a new target
+        if (wasClamped && !enemy.aggroed) {
+          // Initialize stuck tracking if not exists
+          if (!enemy.stuckAtBoundary) {
+            enemy.stuckAtBoundary = true;
+            enemy.stuckStartTime = Date.now();
+          } else {
+            // If stuck for more than 1 second, pick a new target away from edges
+            const stuckDuration = Date.now() - enemy.stuckStartTime;
+            if (stuckDuration > 1000) {
+              // Find structures that are not near map edges
+              const aliveStructures = defense.structures ? defense.structures.filter(s => {
+                if (s.hp <= 0) return false;
+                // Check if structure is safely away from edges (at least 100px from boundary)
+                const edgeBuffer = 100;
+                return s.x > edgeBuffer && s.x < (canvasWidth - edgeBuffer) &&
+                       s.y > edgeBuffer && s.y < (canvasHeight - edgeBuffer);
+              }) : [];
+
+              if (aliveStructures.length > 0) {
+                // Pick a random reachable structure
+                const newTarget = aliveStructures[Math.floor(Math.random() * aliveStructures.length)];
+                enemy.targetStructureId = newTarget.id;
+                enemy.stuckAtBoundary = false;
+                enemy.stuckStartTime = null;
+              } else {
+                // No safe structures, just pick the nearest one
+                const allAlive = defense.structures ? defense.structures.filter(s => s.hp > 0) : [];
+                if (allAlive.length > 0) {
+                  let nearestDist = Infinity;
+                  let nearest = null;
+                  allAlive.forEach(s => {
+                    const dist = Math.sqrt(Math.pow(s.x - enemy.x, 2) + Math.pow(s.y - enemy.y, 2));
+                    if (dist < nearestDist) {
+                      nearestDist = dist;
+                      nearest = s;
+                    }
+                  });
+                  if (nearest) {
+                    enemy.targetStructureId = nearest.id;
+                    enemy.stuckAtBoundary = false;
+                    enemy.stuckStartTime = null;
+                  }
+                }
+              }
+            }
+          }
+        } else {
+          // Reset stuck tracking if enemy is moving freely
+          enemy.stuckAtBoundary = false;
+          enemy.stuckStartTime = null;
+        }
       }
     }
 
