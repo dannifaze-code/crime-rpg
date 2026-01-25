@@ -6783,19 +6783,11 @@ const CartoonSpriteGenerator = {
 
       console.log('✅ [TurfDefense] Mode started - Wave', GameState.turfDefense.wave, 'State:', GameState.turfDefense.waveState);
 
-      // Initialize renderer canvas
+      // Initialize renderer canvas (may retry if city-map not ready)
       try {
-        console.log('🎨 [TurfDefense] Calling TurfDefenseRenderer.init()...');
-        console.log('  TurfDefenseRenderer exists:', typeof TurfDefenseRenderer);
-        console.log('  TurfDefenseRenderer.init exists:', typeof TurfDefenseRenderer?.init);
-
         TurfDefenseRenderer.init();
-
-        console.log('🎨 [TurfDefense] After init() - canvas exists:', !!TurfDefenseRenderer.canvas, 'ctx exists:', !!TurfDefenseRenderer.ctx);
       } catch (error) {
         console.error('❌ [TurfDefense] ERROR during TurfDefenseRenderer.init():', error);
-        console.error('  Error message:', error.message);
-        console.error('  Error stack:', error.stack);
       }
 
       // Initialize touch controls for mobile
@@ -7150,20 +7142,32 @@ const CartoonSpriteGenerator = {
       }
 
       if (!GameState.turfDefense.active) {
-        console.warn(`⚠️ [drawTurfDefense] EARLY RETURN - active is FALSE (call #${callCount})`);
+        if (shouldLog) {
+          console.log(`[drawTurfDefense] Defense not active, skipping (call #${callCount})`);
+        }
         return;
       }
 
       const defense = GameState.turfDefense;
-      const canvas = TurfDefenseRenderer.canvas;
-      const ctx = TurfDefenseRenderer.ctx;
+      let canvas = TurfDefenseRenderer.canvas;
+      let ctx = TurfDefenseRenderer.ctx;
 
+      // Retry initialization if canvas doesn't exist yet (timing issue)
       if (!canvas || !ctx) {
-        console.warn(`⚠️ [drawTurfDefense] EARLY RETURN - canvas/ctx is null (call #${callCount})`);
-        console.warn('  canvas:', !!canvas, 'ctx:', !!ctx);
-        console.warn('  TurfDefenseRenderer.canvas:', !!TurfDefenseRenderer.canvas);
-        console.warn('  TurfDefenseRenderer.ctx:', !!TurfDefenseRenderer.ctx);
-        return;
+        if (shouldLog) {
+          console.log(`[drawTurfDefense] Canvas not ready, attempting init (call #${callCount})`);
+        }
+        TurfDefenseRenderer.init();
+        canvas = TurfDefenseRenderer.canvas;
+        ctx = TurfDefenseRenderer.ctx;
+
+        // Still null after init? City-map element not ready yet
+        if (!canvas || !ctx) {
+          if (shouldLog) {
+            console.log(`[drawTurfDefense] Canvas still not ready after init attempt (call #${callCount})`);
+          }
+          return;
+        }
       }
 
       // DEBUG: Mark that draw was called
@@ -7939,34 +7943,36 @@ const CartoonSpriteGenerator = {
     const TurfDefenseRenderer = {
       canvas: null,
       ctx: null,
+      _initAttempts: 0,
+      _lastErrorLogged: false,
 
       /**
        * Initialize renderer canvas
        */
       init() {
-        console.log('🎨 [TurfDefenseRenderer] init() called');
-        console.log('  this.canvas exists:', !!this.canvas);
+        this._initAttempts++;
+        const shouldLog = this._initAttempts <= 3 || this._initAttempts % 120 === 0;
+
+        if (shouldLog) {
+          console.log(`🎨 [TurfDefenseRenderer] init() called (attempt #${this._initAttempts})`);
+          console.log('  this.canvas exists:', !!this.canvas);
+        }
 
         // Create canvas if not exists
         if (!this.canvas) {
-          console.log('  Canvas does not exist, creating new canvas...');
           const cityMap = document.getElementById('city-map');
-          console.log('  city-map element:', cityMap ? 'FOUND' : 'NOT FOUND');
 
           if (!cityMap) {
-            console.error('❌ [TurfDefenseRenderer] city-map element not found!');
-            console.error('  GATE FAILURE: Cannot initialize canvas without city-map container');
-            console.error('  Check that turf tab is active and map container is visible');
+            // Only log error once to avoid spam
+            if (!this._lastErrorLogged) {
+              console.log('📍 [TurfDefenseRenderer] city-map element not ready yet, will retry');
+              this._lastErrorLogged = true;
+            }
             return;
           }
 
-          // DEBUG: Log container state
-          const rect = cityMap.getBoundingClientRect();
-          console.log('✅ [TurfDefenseRenderer] city-map found');
-          console.log('  Container size:', rect.width, 'x', rect.height);
-          console.log('  Display:', getComputedStyle(cityMap).display);
-          console.log('  Visibility:', getComputedStyle(cityMap).visibility);
-          console.log('  Opacity:', getComputedStyle(cityMap).opacity);
+          // Map is ready now, clear error flag
+          this._lastErrorLogged = false;
 
           // Get map dimensions from GameState or use defaults
           const mapWidth = (GameState.map && GameState.map.width) || 30;
@@ -7975,12 +7981,11 @@ const CartoonSpriteGenerator = {
           const canvasWidth = mapWidth * tileSize;
           const canvasHeight = mapHeight * tileSize;
 
-          console.log('  Creating canvas element...');
+          // Create canvas element
           this.canvas = document.createElement('canvas');
           this.canvas.id = 'turf-defense-canvas';
           this.canvas.width = canvasWidth;
           this.canvas.height = canvasHeight;
-          console.log('  Canvas created:', canvasWidth, 'x', canvasHeight);
 
           this.canvas.style.cssText = `
             position: absolute;
@@ -7991,14 +7996,9 @@ const CartoonSpriteGenerator = {
             pointer-events: auto;
             z-index: 100;
           `;
-          console.log('  Canvas styles applied');
 
-          console.log('  Appending canvas to city-map...');
           cityMap.appendChild(this.canvas);
-          console.log('  Canvas appended to DOM');
-
           this.ctx = this.canvas.getContext('2d');
-          console.log('  Canvas context obtained:', !!this.ctx);
 
           // Add click handler for desktop shooting
           this.canvas.addEventListener('click', (e) => {
@@ -8011,15 +8011,13 @@ const CartoonSpriteGenerator = {
           });
 
           console.log(`🎨 [TurfDefenseRenderer] Canvas initialized (${canvasWidth}x${canvasHeight})`);
-          console.log(`  Canvas element ID: ${this.canvas.id}`);
-          console.log(`  Canvas parent: ${this.canvas.parentElement?.id || 'NO PARENT'}`);
-        } else {
+        } else if (shouldLog) {
           console.log('  Canvas already exists, skipping creation');
-          console.log('  Existing canvas:', this.canvas.width, 'x', this.canvas.height);
-          console.log('  Existing ctx:', !!this.ctx);
         }
 
-        console.log('🎨 [TurfDefenseRenderer] init() COMPLETE - canvas:', !!this.canvas, 'ctx:', !!this.ctx);
+        if (shouldLog) {
+          console.log('🎨 [TurfDefenseRenderer] init() COMPLETE - canvas:', !!this.canvas, 'ctx:', !!this.ctx);
+        }
       },
 
       /**
