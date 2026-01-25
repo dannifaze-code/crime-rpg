@@ -9140,9 +9140,6 @@ const CartoonSpriteGenerator = {
           drawLine('Container: NOT FOUND', '#F00');
         }
 
-        // Reset flags for next tick
-        this.updateCalledThisTick = false;
-        this.drawCalledThisTick = false;
       },
 
       /**
@@ -9161,10 +9158,13 @@ const CartoonSpriteGenerator = {
       },
 
       /**
-       * Increment tick counter
+       * Increment tick counter and reset call tracking flags
        */
       tick() {
         this.tickCount++;
+        // Reset flags at START of tick (before update/draw are called)
+        this.updateCalledThisTick = false;
+        this.drawCalledThisTick = false;
       }
     };
 
