@@ -6798,7 +6798,24 @@ const CartoonSpriteGenerator = {
         ultimate: false
       };
 
+      // Initialize player sprite state
+      GameState.turfDefense.playerSprite = {
+        anim: 'idle', // 'idle' | 'move' | 'shoot' | 'reload'
+        bodyFrame: 0,
+        feetFrame: 0,
+        lastBodyFrameTime: Date.now(),
+        lastFeetFrameTime: Date.now(),
+        facingAngle: -Math.PI / 2, // Start facing up (default)
+        isMoving: false,
+        showMuzzleFlash: false,
+        muzzleFlashEndTime: 0,
+        shootAnimEndTime: 0 // When to return to idle after shoot anim
+      };
+
       console.log('✅ [TurfDefense] Mode started - Wave', GameState.turfDefense.wave, 'State:', GameState.turfDefense.waveState);
+
+      // Preload player sprites
+      PlayerSpriteManager.preload();
 
       // Initialize renderer canvas (may retry if city-map not ready)
       try {
@@ -6964,6 +6981,88 @@ const CartoonSpriteGenerator = {
           // Clamp player to canvas bounds
           defense.playerX = Math.max(20, Math.min(canvasWidth - 20, defense.playerX));
           defense.playerY = Math.max(20, Math.min(canvasHeight - 20, defense.playerY));
+
+          // Update player sprite state
+          if (defense.playerSprite) {
+            const sprite = defense.playerSprite;
+            const isMoving = Math.abs(movement.x) > 0.1 || Math.abs(movement.y) > 0.1;
+            sprite.isMoving = isMoving;
+
+            // Update facing angle based on movement direction
+            if (isMoving) {
+              sprite.facingAngle = Math.atan2(movement.y, movement.x) + Math.PI / 2;
+            }
+
+            // Find nearest enemy for aiming when shooting
+            let nearestEnemyForAim = null;
+            let nearestDistForAim = TurfDefenseConfig.PLAYER_SHOOT_RANGE * 1.5;
+            defense.enemies.forEach(enemy => {
+              if (enemy.state === 'dead') return;
+              const dist = Math.sqrt(
+                Math.pow(enemy.x - defense.playerX, 2) + Math.pow(enemy.y - defense.playerY, 2)
+              );
+              if (dist < nearestDistForAim) {
+                nearestDistForAim = dist;
+                nearestEnemyForAim = enemy;
+              }
+            });
+
+            // Update facing angle when shooting/aiming at enemy
+            if (nearestEnemyForAim && (defense.input.shooting || defense.input.spraying)) {
+              const dx = nearestEnemyForAim.x - defense.playerX;
+              const dy = nearestEnemyForAim.y - defense.playerY;
+              sprite.facingAngle = Math.atan2(dy, dx) + Math.PI / 2;
+            }
+
+            // Determine animation state
+            let newAnim = 'idle';
+            if (defense.isReloading) {
+              newAnim = 'reload';
+            } else if (now < sprite.shootAnimEndTime) {
+              newAnim = 'shoot';
+            } else if (isMoving) {
+              newAnim = 'move';
+            }
+
+            // Reset frame if animation changed
+            if (sprite.anim !== newAnim) {
+              sprite.anim = newAnim;
+              sprite.bodyFrame = 0;
+              sprite.lastBodyFrameTime = now;
+            }
+
+            // Update body animation frame
+            const bodyFrameRate = PlayerSpriteManager.getFrameRate(sprite.anim);
+            const bodyFrameDuration = 1000 / bodyFrameRate;
+            if (now - sprite.lastBodyFrameTime >= bodyFrameDuration) {
+              const bodyFrames = PlayerSpriteManager.getBodyFrames(sprite.anim);
+              if (bodyFrames && bodyFrames.length > 0) {
+                sprite.bodyFrame = (sprite.bodyFrame + 1) % bodyFrames.length;
+                sprite.lastBodyFrameTime = now;
+
+                // Special handling for shoot animation - only play once
+                if (sprite.anim === 'shoot' && sprite.bodyFrame === 0) {
+                  sprite.shootAnimEndTime = 0; // Animation complete
+                }
+              }
+            }
+
+            // Update feet animation frame
+            const feetFrameRate = PlayerSpriteManager.config.frameRate;
+            const feetFrameDuration = 1000 / feetFrameRate;
+            if (now - sprite.lastFeetFrameTime >= feetFrameDuration) {
+              const feetFrames = PlayerSpriteManager.getFeetFrames(isMoving);
+              if (feetFrames && feetFrames.length > 0) {
+                sprite.feetFrame = (sprite.feetFrame + 1) % feetFrames.length;
+                sprite.lastFeetFrameTime = now;
+              }
+            }
+
+            // Update muzzle flash visibility
+            if (now > sprite.muzzleFlashEndTime) {
+              sprite.showMuzzleFlash = false;
+            }
+          }
 
           // Handle player shooting input (continuous)
           if (defense.input.shooting && now - defense.lastShootTime >= TurfDefenseConfig.PLAYER_SHOOT_FIRE_RATE) {
@@ -7247,6 +7346,139 @@ const CartoonSpriteGenerator = {
     // ========================================
     // TURF DEFENSE: ENEMY SYSTEM
     // ========================================
+
+    /**
+     * Player Sprite Manager for Turf Defense
+     * Loads and manages the actual player character sprites
+     */
+    const PlayerSpriteManager = {
+      sprites: {
+        // Body sprites (handgun)
+        bodyIdle: [],
+        bodyMove: [],
+        bodyShoot: [],
+        bodyReload: [],
+        // Feet sprites
+        feetIdle: [],
+        feetWalk: [],
+        // Effects
+        muzzleFlash: null
+      },
+      loaded: false,
+      loading: false,
+
+      // Animation configuration
+      config: {
+        idleFrames: 20,
+        moveFrames: 20,
+        shootFrames: 3,
+        reloadFrames: 15,
+        feetIdleFrames: 1,
+        feetWalkFrames: 20,
+        frameRate: 15, // frames per second for most animations
+        shootFrameRate: 20, // faster for shooting
+        reloadFrameRate: 8, // slower for reload
+        spriteScale: 0.5 // scale down sprites for turf defense view
+      },
+
+      /**
+       * Preload all player sprites
+       */
+      async preload() {
+        if (this.loaded || this.loading) return;
+        this.loading = true;
+        console.log('🎨 [PlayerSprite] Starting sprite preload...');
+
+        const loadImage = (src) => {
+          return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = () => {
+              console.warn(`⚠️ [PlayerSprite] Failed to load: ${src}`);
+              resolve(null); // Resolve with null to continue loading
+            };
+            img.src = src;
+          });
+        };
+
+        try {
+          // Load body idle sprites (handgun)
+          for (let i = 0; i < this.config.idleFrames; i++) {
+            const img = await loadImage(`sprites/Top_Down_Survivor/handgun/idle/survivor-idle_handgun_${i}.png`);
+            if (img) this.sprites.bodyIdle.push(img);
+          }
+
+          // Load body move sprites (handgun)
+          for (let i = 0; i < this.config.moveFrames; i++) {
+            const img = await loadImage(`sprites/Top_Down_Survivor/handgun/move/survivor-move_handgun_${i}.png`);
+            if (img) this.sprites.bodyMove.push(img);
+          }
+
+          // Load body shoot sprites (handgun)
+          for (let i = 0; i < this.config.shootFrames; i++) {
+            const img = await loadImage(`sprites/Top_Down_Survivor/handgun/shoot/survivor-shoot_handgun_${i}.png`);
+            if (img) this.sprites.bodyShoot.push(img);
+          }
+
+          // Load body reload sprites (handgun)
+          for (let i = 0; i < this.config.reloadFrames; i++) {
+            const img = await loadImage(`sprites/Top_Down_Survivor/handgun/reload/survivor-reload_handgun_${i}.png`);
+            if (img) this.sprites.bodyReload.push(img);
+          }
+
+          // Load feet idle sprite
+          const feetIdleImg = await loadImage('sprites/Top_Down_Survivor/feet/idle/survivor-idle_0.png');
+          if (feetIdleImg) this.sprites.feetIdle.push(feetIdleImg);
+
+          // Load feet walk sprites
+          for (let i = 0; i < this.config.feetWalkFrames; i++) {
+            const img = await loadImage(`sprites/Top_Down_Survivor/feet/walk/survivor-walk_${i}.png`);
+            if (img) this.sprites.feetWalk.push(img);
+          }
+
+          // Load muzzle flash
+          this.sprites.muzzleFlash = await loadImage('sprites/SurvivorSpine/images/muzzle_flash_01.png');
+
+          this.loaded = true;
+          this.loading = false;
+          console.log(`✅ [PlayerSprite] Sprites loaded: idle=${this.sprites.bodyIdle.length}, move=${this.sprites.bodyMove.length}, shoot=${this.sprites.bodyShoot.length}, reload=${this.sprites.bodyReload.length}, feetWalk=${this.sprites.feetWalk.length}`);
+        } catch (err) {
+          console.error('❌ [PlayerSprite] Error loading sprites:', err);
+          this.loading = false;
+        }
+      },
+
+      /**
+       * Get current sprite frames based on animation state
+       */
+      getBodyFrames(animState) {
+        switch (animState) {
+          case 'shoot': return this.sprites.bodyShoot;
+          case 'reload': return this.sprites.bodyReload;
+          case 'move': return this.sprites.bodyMove;
+          case 'idle':
+          default: return this.sprites.bodyIdle;
+        }
+      },
+
+      /**
+       * Get feet frames based on movement
+       */
+      getFeetFrames(isMoving) {
+        return isMoving ? this.sprites.feetWalk : this.sprites.feetIdle;
+      },
+
+      /**
+       * Get frame rate for animation state
+       */
+      getFrameRate(animState) {
+        switch (animState) {
+          case 'shoot': return this.config.shootFrameRate;
+          case 'reload': return this.config.reloadFrameRate;
+          default: return this.config.frameRate;
+        }
+      }
+    };
 
     /**
      * Enemy System Constants
@@ -7945,6 +8177,22 @@ const CartoonSpriteGenerator = {
       defense.currentAmmo--;
       console.log(`🔫 [Shoot] Ammo: ${defense.currentAmmo}/${defense.maxAmmo}`);
 
+      // Trigger shoot animation and muzzle flash
+      if (defense.playerSprite) {
+        const now = Date.now();
+        defense.playerSprite.anim = 'shoot';
+        defense.playerSprite.bodyFrame = 0;
+        defense.playerSprite.lastBodyFrameTime = now;
+        defense.playerSprite.shootAnimEndTime = now + 200; // Shoot anim lasts 200ms
+        defense.playerSprite.showMuzzleFlash = true;
+        defense.playerSprite.muzzleFlashEndTime = now + 80; // Flash lasts 80ms
+
+        // Update facing angle toward target
+        const dx = x - playerX;
+        const dy = y - playerY;
+        defense.playerSprite.facingAngle = Math.atan2(dy, dx) + Math.PI / 2;
+      }
+
       // Check if any enemy is hit (simple radius check)
       let hitEnemy = null;
       let closestDist = 30; // Hit radius
@@ -8328,112 +8576,169 @@ const CartoonSpriteGenerator = {
       },
 
       /**
-       * Draw player (placeholder circle)
+       * Draw player with actual sprite
        */
       drawPlayer(ctx, defense) {
         const playerX = defense.playerX || TurfDefenseConfig.PLAYER_START_X;
         const playerY = defense.playerY || TurfDefenseConfig.PLAYER_START_Y;
+        const sprite = defense.playerSprite;
+        const spriteLoaded = PlayerSpriteManager.loaded;
+        const scale = PlayerSpriteManager.config.spriteScale;
 
-        // Player body
-        ctx.beginPath();
-        ctx.arc(playerX, playerY, 20, 0, Math.PI * 2);
-        ctx.fillStyle = '#2196F3'; // Blue
-        ctx.fill();
+        // Draw sprite if loaded, otherwise fallback to placeholder
+        if (spriteLoaded && sprite) {
+          const facingAngle = sprite.facingAngle || 0;
 
-        // Player outline
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 3;
-        ctx.stroke();
+          // Get current frames
+          const bodyFrames = PlayerSpriteManager.getBodyFrames(sprite.anim);
+          const feetFrames = PlayerSpriteManager.getFeetFrames(sprite.isMoving);
+          const bodyImg = bodyFrames && bodyFrames.length > 0 ? bodyFrames[sprite.bodyFrame % bodyFrames.length] : null;
+          const feetImg = feetFrames && feetFrames.length > 0 ? feetFrames[sprite.feetFrame % feetFrames.length] : null;
 
-        // Animated HP bar
+          // Draw feet layer first (underneath body)
+          if (feetImg) {
+            ctx.save();
+            ctx.translate(playerX, playerY);
+            ctx.rotate(facingAngle);
+            const feetW = feetImg.width * scale;
+            const feetH = feetImg.height * scale;
+            ctx.drawImage(feetImg, -feetW / 2, -feetH / 2, feetW, feetH);
+            ctx.restore();
+          }
+
+          // Draw body layer (on top of feet)
+          if (bodyImg) {
+            ctx.save();
+            ctx.translate(playerX, playerY);
+            ctx.rotate(facingAngle);
+            const bodyW = bodyImg.width * scale;
+            const bodyH = bodyImg.height * scale;
+            ctx.drawImage(bodyImg, -bodyW / 2, -bodyH / 2, bodyW, bodyH);
+
+            // Draw muzzle flash if active
+            if (sprite.showMuzzleFlash && PlayerSpriteManager.sprites.muzzleFlash) {
+              const flashImg = PlayerSpriteManager.sprites.muzzleFlash;
+              const flashScale = 0.4;
+              const flashW = flashImg.width * flashScale;
+              const flashH = flashImg.height * flashScale;
+              // Position flash at gun muzzle (offset from center, pointing up in sprite space)
+              const muzzleOffsetY = -bodyH / 2 - flashH / 3;
+              ctx.drawImage(flashImg, -flashW / 2, muzzleOffsetY, flashW, flashH);
+            }
+
+            ctx.restore();
+          }
+
+          // Draw direction indicator (small arrow showing facing direction)
+          ctx.save();
+          ctx.translate(playerX, playerY);
+          ctx.rotate(facingAngle);
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(0, -35);
+          ctx.lineTo(-5, -28);
+          ctx.moveTo(0, -35);
+          ctx.lineTo(5, -28);
+          ctx.stroke();
+          ctx.restore();
+
+        } else {
+          // Fallback: Draw placeholder circle if sprites not loaded
+          ctx.beginPath();
+          ctx.arc(playerX, playerY, 20, 0, Math.PI * 2);
+          ctx.fillStyle = '#2196F3';
+          ctx.fill();
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = 3;
+          ctx.stroke();
+
+          // Fallback label
+          ctx.fillStyle = '#fff';
+          ctx.font = '10px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText('YOU', playerX, playerY + 5);
+        }
+
+        // Animated HP bar (always shown)
         const hpPercent = defense.playerVisualHP / 100;
-        const barWidth = 44;
-        const barHeight = 7;
-        const barX = playerX - barWidth / 2;
-        const barY = playerY - 38;
+        const hpBarWidth = 44;
+        const hpBarHeight = 7;
+        const hpBarX = playerX - hpBarWidth / 2;
+        const hpBarY = playerY - 45;
 
         // HP bar background
         ctx.fillStyle = '#000';
-        ctx.fillRect(barX, barY, barWidth, barHeight);
+        ctx.fillRect(hpBarX, hpBarY, hpBarWidth, hpBarHeight);
 
         // HP bar fill (animated)
-        const fillWidth = barWidth * Math.max(0, Math.min(1, hpPercent));
+        const hpFillWidth = hpBarWidth * Math.max(0, Math.min(1, hpPercent));
         ctx.fillStyle = hpPercent > 0.5 ? '#4CAF50' : hpPercent > 0.25 ? '#FFC107' : '#F44336';
-        ctx.fillRect(barX, barY, fillWidth, barHeight);
+        ctx.fillRect(hpBarX, hpBarY, hpFillWidth, hpBarHeight);
 
         // HP bar border
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 1;
-        ctx.strokeRect(barX, barY, barWidth, barHeight);
+        ctx.strokeRect(hpBarX, hpBarY, hpBarWidth, hpBarHeight);
 
-        // Label
+        // Display ammo count (bullets in current magazine)
         ctx.fillStyle = '#fff';
-        ctx.font = '10px monospace';
+        ctx.font = 'bold 12px monospace';
         ctx.textAlign = 'center';
-        ctx.fillText('YOU', playerX, playerY + 5);
+        const currentAmmo = defense.currentAmmo || 0;
+        const maxAmmo = defense.maxAmmo || 10;
+        ctx.fillText(`${currentAmmo}/${maxAmmo}`, playerX, playerY + 50);
 
-        // Display magazine count next to player (right side)
-        ctx.fillStyle = '#FFD700'; // Gold color
-        ctx.font = 'bold 14px monospace';
-        ctx.textAlign = 'left';
+        // Display magazine count next to ammo
+        ctx.fillStyle = '#FFD700';
+        ctx.font = 'bold 10px monospace';
         const magazineCount = defense.magazineCount || 0;
-        ctx.fillText(`X${magazineCount}`, playerX + 28, playerY + 5);
+        ctx.fillText(`[${magazineCount}]`, playerX + 30, playerY + 50);
 
         // Reload animation overlay
         if (defense.isReloading) {
           const elapsed = Date.now() - defense.reloadStartTime;
           const progress = Math.min(1, elapsed / TurfDefenseConfig.WEAPON_RELOAD_TIME);
 
-          // Spinning reload icon above player
-          const iconY = playerY - 50;
-          const angle = (Date.now() / 100) % (Math.PI * 2); // Spin animation
-
-          ctx.save();
-          ctx.translate(playerX, iconY);
-          ctx.rotate(angle);
-
-          // Draw reload icon (circular arrows)
-          ctx.strokeStyle = '#FFA500'; // Orange
-          ctx.lineWidth = 3;
-          ctx.beginPath();
-          ctx.arc(0, 0, 10, 0, Math.PI * 1.5);
-          ctx.stroke();
-
-          // Arrow head
-          ctx.beginPath();
-          ctx.moveTo(0, -10);
-          ctx.lineTo(-3, -13);
-          ctx.lineTo(3, -10);
-          ctx.closePath();
-          ctx.fillStyle = '#FFA500';
-          ctx.fill();
-
-          ctx.restore();
-
-          // Progress bar
-          const barWidth = 40;
-          const barHeight = 4;
-          const barX = playerX - barWidth / 2;
-          const barY = iconY + 15;
+          // Reload progress bar above player
+          const reloadBarWidth = 50;
+          const reloadBarHeight = 6;
+          const reloadBarX = playerX - reloadBarWidth / 2;
+          const reloadBarY = playerY - 60;
 
           // Background
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-          ctx.fillRect(barX, barY, barWidth, barHeight);
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+          ctx.fillRect(reloadBarX, reloadBarY, reloadBarWidth, reloadBarHeight);
 
           // Progress fill
           ctx.fillStyle = '#FFA500';
-          ctx.fillRect(barX, barY, barWidth * progress, barHeight);
+          ctx.fillRect(reloadBarX, reloadBarY, reloadBarWidth * progress, reloadBarHeight);
 
           // Border
           ctx.strokeStyle = '#fff';
           ctx.lineWidth = 1;
-          ctx.strokeRect(barX, barY, barWidth, barHeight);
+          ctx.strokeRect(reloadBarX, reloadBarY, reloadBarWidth, reloadBarHeight);
 
           // Reload text
           ctx.fillStyle = '#FFA500';
           ctx.font = 'bold 10px monospace';
           ctx.textAlign = 'center';
-          ctx.fillText('RELOADING', playerX, barY - 5);
+          ctx.fillText('RELOADING', playerX, reloadBarY - 5);
+
+          // Spinning icon (optional visual flair)
+          const iconX = playerX + reloadBarWidth / 2 + 15;
+          const iconY = reloadBarY + reloadBarHeight / 2;
+          const spinAngle = (Date.now() / 100) % (Math.PI * 2);
+
+          ctx.save();
+          ctx.translate(iconX, iconY);
+          ctx.rotate(spinAngle);
+          ctx.strokeStyle = '#FFA500';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(0, 0, 6, 0, Math.PI * 1.5);
+          ctx.stroke();
+          ctx.restore();
         }
       },
 
