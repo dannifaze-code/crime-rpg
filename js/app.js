@@ -6791,7 +6791,7 @@ const CartoonSpriteGenerator = {
           // We'll use this later to match Turf Defense canvas sprite scale to free roam.
           try {
             const rect = el.getBoundingClientRect();
-            const px = Math.max(rect.width || 0, rect.height || 0);
+            const px = Math.min(rect.width || 0, rect.height || 0);
             if (!GameState.turfDefense) GameState.turfDefense = {};
             if (px > 0) GameState.turfDefense._freeRoamSpritePx = px;
           } catch (e) {}
@@ -6886,10 +6886,15 @@ function applyTurfDefenseSpriteScaleMatch() {
 
     const rect = canvas.getBoundingClientRect();
     const cssW = rect && rect.width ? rect.width : 0;
+    const cssH = rect && rect.height ? rect.height : 0;
     const internalW = canvas.width || 0;
+    const internalH = canvas.height || 0;
 
     // Convert desired CSS pixels into canvas internal pixels.
-    const pxPerCss = (cssW > 0 && internalW > 0) ? (internalW / cssW) : 1;
+    // On mobile the canvas can be scaled non-uniformly; use the smaller ratio to avoid overscaling.
+    const ratioW = (cssW > 0 && internalW > 0) ? (internalW / cssW) : 1;
+    const ratioH = (cssH > 0 && internalH > 0) ? (internalH / cssH) : ratioW;
+    const pxPerCss = Math.min(ratioW, ratioH);
     const desiredInternalPx = freePxCss * pxPerCss;
 
     // Determine a reasonable "base frame" width from loaded sprites.
