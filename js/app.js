@@ -5042,7 +5042,7 @@ Then tighten the rules later.`);
 
         setTimeout(() => {
           toast.remove();
-        }, 3000);
+        }, 150);
       }
     };
     // ========================================
@@ -6757,6 +6757,16 @@ const CartoonSpriteGenerator = {
       } catch (e) {}
 
       // Hide the roaming player sprite (prevents double-visuals)
+      try {
+        const el = document.getElementById('freeRoamPlayer');
+        if (el) {
+          // Remember prior styles so we can restore after Turf Defense
+          if (!GameState.turfDefense) GameState.turfDefense = {};
+          GameState.turfDefense._prevFreeRoamPlayerDisplay = el.style.display;
+          GameState.turfDefense._prevFreeRoamPlayerVisibility = el.style.visibility;
+        }
+      } catch (e) {}
+
       setFreeRoamPlayerVisible(false);
 
       // Best-effort: stop any sprite controller loops (if present)
@@ -6781,16 +6791,43 @@ const CartoonSpriteGenerator = {
         }
       } catch (e) {}
 
-      // If free roam is enabled, show sprite + recreate controller if needed
+      // Restore roaming sprite visibility/state (even if free roam is currently off)
       try {
-        if (GameState && GameState.character && GameState.character.freeRoam) {
-          setFreeRoamPlayerVisible(true);
-          if (typeof TurfTab !== 'undefined' && TurfTab && typeof TurfTab.ensureRoamSprite === 'function') {
-            TurfTab.ensureRoamSprite();
-          }
-        } else {
-          setFreeRoamPlayerVisible(false);
+        // Ensure DOM element exists if Turf tab is present
+        if (typeof TurfTab !== 'undefined' && TurfTab && typeof TurfTab.ensureRoamSprite === 'function') {
+          TurfTab.ensureRoamSprite();
         }
+
+        const el = document.getElementById('freeRoamPlayer');
+        if (el) {
+          const prevDisplay = GameState.turfDefense && typeof GameState.turfDefense._prevFreeRoamPlayerDisplay !== 'undefined'
+            ? GameState.turfDefense._prevFreeRoamPlayerDisplay
+            : '';
+          const prevVis = GameState.turfDefense && typeof GameState.turfDefense._prevFreeRoamPlayerVisibility !== 'undefined'
+            ? GameState.turfDefense._prevFreeRoamPlayerVisibility
+            : '';
+
+          // If free roam is enabled now, force visible. Otherwise restore prior style (never keep it hidden by accident).
+          if (GameState && GameState.character && GameState.character.freeRoam) {
+            el.style.display = '';
+            el.style.visibility = '';
+          } else {
+            el.style.display = (prevDisplay === 'none') ? '' : (prevDisplay || '');
+            el.style.visibility = prevVis || '';
+          }
+          el.style.pointerEvents = 'none';
+        } else {
+          // Fallback: use helper
+          if (GameState && GameState.character && GameState.character.freeRoam) setFreeRoamPlayerVisible(true);
+        }
+
+        // One more nudge on the next frame in case the Turf tab rebuilds DOM after this runs
+        requestAnimationFrame(() => {
+          try {
+            const el2 = document.getElementById('freeRoamPlayer');
+            if (el2 && el2.style.display === 'none') el2.style.display = '';
+          } catch (e) {}
+        });
       } catch (e) {}
 
       try { document.body && document.body.classList.remove('turf-defense-active'); } catch (e) {}
@@ -7018,6 +7055,43 @@ const CartoonSpriteGenerator = {
       switch (defense.waveState) {
         case 'preparing':
           // Preparation phase - countdown to wave start
+          // Allow player movement during prep (no frozen controls between waves)
+          try {
+            const mapWidth = (GameState.map && GameState.map.width) || 30;
+            const mapHeight = (GameState.map && GameState.map.height) || 30;
+            const tileSize = 30;
+            const canvasWidth = mapWidth * tileSize;
+            const canvasHeight = mapHeight * tileSize;
+
+            const rawMove = TouchControls.getMovement();
+            const dead = 0.18;
+            let mx = rawMove.x;
+            let my = rawMove.y;
+            if (Math.abs(mx) < dead) mx = 0;
+            if (Math.abs(my) < dead) my = 0;
+            if (mx !== 0 && my !== 0) {
+              if (Math.abs(mx) >= Math.abs(my)) my = 0;
+              else mx = 0;
+            }
+            const movement = { x: mx, y: my };
+
+            if (!defense.playerX) defense.playerX = canvasWidth / 2;
+            if (!defense.playerY) defense.playerY = canvasHeight / 2;
+
+            defense.playerX += movement.x * TurfDefenseConfig.PLAYER_SPEED * dt;
+            defense.playerY += movement.y * TurfDefenseConfig.PLAYER_SPEED * dt;
+
+            defense.playerX = Math.max(20, Math.min(canvasWidth - 20, defense.playerX));
+            defense.playerY = Math.max(20, Math.min(canvasHeight - 20, defense.playerY));
+
+            if (defense.playerSprite) {
+              const sprite = defense.playerSprite;
+              const isMoving = Math.abs(movement.x) > 0.05 || Math.abs(movement.y) > 0.05;
+              sprite.isMoving = isMoving;
+              if (isMoving) sprite.facingAngle = Math.atan2(movement.y, movement.x) + Math.PI / 2;
+            }
+          } catch (e) {}
+
           // TODO: Show countdown timer
           break;
 
@@ -7037,7 +7111,28 @@ const CartoonSpriteGenerator = {
           const canvasHeight = mapHeight * tileSize;
 
           // Update player movement from joystick
-          const movement = TouchControls.getMovement();
+          // NOTE: Free-roam keeps full omni movement; Turf Defense snaps to clean 4-direction movement (Diablo-ish).
+          const rawMove = TouchControls.getMovement();
+          const dead = 0.18;
+
+          let mx = rawMove.x;
+          let my = rawMove.y;
+
+          // Deadzone
+          if (Math.abs(mx) < dead) mx = 0;
+          if (Math.abs(my) < dead) my = 0;
+
+          // Snap to cardinal direction (dominant axis)
+          if (mx !== 0 && my !== 0) {
+            if (Math.abs(mx) >= Math.abs(my)) {
+              my = 0;
+            } else {
+              mx = 0;
+            }
+          }
+
+          const movement = { x: mx, y: my };
+
           if (!defense.playerX) defense.playerX = canvasWidth / 2;
           if (!defense.playerY) defense.playerY = canvasHeight / 2;
 
@@ -7051,10 +7146,10 @@ const CartoonSpriteGenerator = {
           // Update player sprite state
           if (defense.playerSprite) {
             const sprite = defense.playerSprite;
-            const isMoving = Math.abs(movement.x) > 0.1 || Math.abs(movement.y) > 0.1;
+            const isMoving = Math.abs(movement.x) > 0.05 || Math.abs(movement.y) > 0.05;
             sprite.isMoving = isMoving;
 
-            // Update facing angle based on movement direction
+            // Face movement direction when moving (aim code below may override when shooting)
             if (isMoving) {
               sprite.facingAngle = Math.atan2(movement.y, movement.x) + Math.PI / 2;
             }
@@ -7193,7 +7288,7 @@ const CartoonSpriteGenerator = {
                   setTimeout(() => {
                     const idx = defense.enemies.indexOf(enemy);
                     if (idx !== -1) defense.enemies.splice(idx, 1);
-                  }, 2000);
+                  }, 0);
                 }
 
                 hitCount++;
@@ -7275,6 +7370,43 @@ const CartoonSpriteGenerator = {
           // Wave completed - prepare for next wave
           console.log('✅ [TurfDefense] Wave', defense.wave, 'complete!');
 
+          // Keep controls responsive between waves (no freeze while scheduling next wave)
+          try {
+            const mapWidth = (GameState.map && GameState.map.width) || 30;
+            const mapHeight = (GameState.map && GameState.map.height) || 30;
+            const tileSize = 30;
+            const canvasWidth = mapWidth * tileSize;
+            const canvasHeight = mapHeight * tileSize;
+
+            const rawMove = TouchControls.getMovement();
+            const dead = 0.18;
+            let mx = rawMove.x;
+            let my = rawMove.y;
+            if (Math.abs(mx) < dead) mx = 0;
+            if (Math.abs(my) < dead) my = 0;
+            if (mx !== 0 && my !== 0) {
+              if (Math.abs(mx) >= Math.abs(my)) my = 0;
+              else mx = 0;
+            }
+            const movement = { x: mx, y: my };
+
+            if (!defense.playerX) defense.playerX = canvasWidth / 2;
+            if (!defense.playerY) defense.playerY = canvasHeight / 2;
+
+            defense.playerX += movement.x * TurfDefenseConfig.PLAYER_SPEED * dt;
+            defense.playerY += movement.y * TurfDefenseConfig.PLAYER_SPEED * dt;
+
+            defense.playerX = Math.max(20, Math.min(canvasWidth - 20, defense.playerX));
+            defense.playerY = Math.max(20, Math.min(canvasHeight - 20, defense.playerY));
+
+            if (defense.playerSprite) {
+              const sprite = defense.playerSprite;
+              const isMoving = Math.abs(movement.x) > 0.05 || Math.abs(movement.y) > 0.05;
+              sprite.isMoving = isMoving;
+              if (isMoving) sprite.facingAngle = Math.atan2(movement.y, movement.x) + Math.PI / 2;
+            }
+          } catch (e) {}
+
           // Check for victory (wave 5 complete)
           if (defense.wave >= 5) {
             console.log('🎉 [TurfDefense] VICTORY! All waves completed!');
@@ -7292,18 +7424,19 @@ const CartoonSpriteGenerator = {
               if (!defense.active || defense.waveState !== 'complete') return;
 
               defense.wave++;
-              defense.waveState = 'preparing';
+              defense.waveState = 'active';
               defense.waveStartTime = Date.now();
               console.log('🌊 [TurfDefense] Starting wave', defense.wave);
 
-              // Auto-start next wave after prep time
+              // Spawn immediately so the action doesn't pause
+              try { spawnWaveEnemies(); } catch (e) {}
+
+              // Tiny safety unlock for scheduler (kept for stability)
               setTimeout(() => {
-                if (!defense.active || defense.waveState !== 'preparing') return;
-                defense.waveState = 'active';
-                defense.waveStartTime = Date.now();
+                if (!defense.active) return;
                 // Allow future schedules
                 defense._nextWaveScheduled = false;
-              }, 3000);
+              }, 150);
             }, 2000);
           }
           break;
@@ -9050,6 +9183,90 @@ const CartoonSpriteGenerator = {
         document.body.appendChild(this.container);
 
         console.log('✅ [TouchControls] Controls initialized');
+
+        // Keep controls on-screen across tab switches / address-bar resizes
+        this.refreshLayout();
+        this.bindLayoutEvents();
+      },
+
+      /**
+       * Keep control UI clamped to the visible viewport (mobile-safe)
+       */
+      refreshLayout() {
+        try {
+          const vv = window.visualViewport;
+          const w = (vv && vv.width) ? vv.width : window.innerWidth;
+          const h = (vv && vv.height) ? vv.height : window.innerHeight;
+
+          if (this.container) {
+            this.container.style.width = `${Math.round(w)}px`;
+            this.container.style.height = `${Math.round(h)}px`;
+          }
+
+          // Keep controls above the game's tab bar
+          const tabBar = document.getElementById('tab-bar');
+          const tabH = tabBar ? tabBar.getBoundingClientRect().height : 0;
+          const base = 20;
+          const bottomOffset = Math.round(tabH + base);
+
+          if (this.joystickContainer) {
+            this.joystickContainer.style.bottom = `${bottomOffset}px`;
+            this.joystickContainer.style.left = '20px';
+          }
+
+          const btn = document.getElementById('action-buttons-container');
+          if (btn) {
+            btn.style.bottom = `${bottomOffset}px`;
+            btn.style.right = '20px';
+          }
+        } catch (e) {}
+      },
+
+      /**
+       * Bind viewport/layout events so controls stay in-bounds
+       */
+      bindLayoutEvents() {
+        try {
+          if (this._layoutBound) return;
+          this._layoutBound = true;
+          this._onLayoutChange = () => this.refreshLayout();
+
+          window.addEventListener('resize', this._onLayoutChange, { passive: true });
+          window.addEventListener('orientationchange', this._onLayoutChange, { passive: true });
+          window.addEventListener('focus', this._onLayoutChange, { passive: true });
+          window.addEventListener('blur', this._onLayoutChange, { passive: true });
+          document.addEventListener('visibilitychange', this._onLayoutChange, { passive: true });
+
+          if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', this._onLayoutChange, { passive: true });
+            window.visualViewport.addEventListener('scroll', this._onLayoutChange, { passive: true });
+          }
+        } catch (e) {}
+      },
+
+      /**
+       * Unbind layout events
+       */
+      unbindLayoutEvents() {
+        try {
+          if (!this._layoutBound) return;
+          this._layoutBound = false;
+          const fn = this._onLayoutChange;
+          if (!fn) return;
+
+          window.removeEventListener('resize', fn);
+          window.removeEventListener('orientationchange', fn);
+          window.removeEventListener('focus', fn);
+          window.removeEventListener('blur', fn);
+          document.removeEventListener('visibilitychange', fn);
+
+          if (window.visualViewport) {
+            window.visualViewport.removeEventListener('resize', fn);
+            window.visualViewport.removeEventListener('scroll', fn);
+          }
+
+          this._onLayoutChange = null;
+        } catch (e) {}
       },
 
       /**
@@ -9515,6 +9732,8 @@ const CartoonSpriteGenerator = {
        */
       destroy() {
         console.log('🗑️ [TouchControls] Removing controls...');
+
+        this.unbindLayoutEvents();
 
         if (this.container && this.container.parentNode) {
           this.container.parentNode.removeChild(this.container);
