@@ -6981,6 +6981,7 @@ const CartoonSpriteGenerator = {
       }
       GameState.turfDefense.enemies = [];
       GameState.turfDefense.lootDrops = [];
+      GameState.turfDefense.vfx = null;
 
       // Clear structures and cleanup building refs
       if (GameState.turfDefense.structures) {
@@ -7010,7 +7011,206 @@ const CartoonSpriteGenerator = {
      * Called each frame when defense mode is active
      * @param {number} dt - Delta time in seconds since last update
      */
-    function updateTurfDefense(dt) {
+    
+    // ========================================
+    // TURF DEFENSE: INPUT + VFX POLISH HELPERS
+    // ========================================
+
+    // Smoothly interpolate angles taking shortest path (-PI..PI)
+    function _wrapPi(a) {
+      while (a <= -Math.PI) a += Math.PI * 2;
+      while (a > Math.PI) a -= Math.PI * 2;
+      return a;
+    }
+    function _lerpAngle(current, target, t) {
+      const delta = _wrapPi(target - current);
+      return _wrapPi(current + delta * t);
+    }
+
+    function ensureDefenseVFX(defense) {
+      if (!defense) return;
+      if (!defense.vfx) {
+        defense.vfx = {
+          // quick-fading bullet lines
+          tracers: [],
+          // shell casings that fall + fade
+          casings: [],
+          // small dust puffs on movement
+          dust: [],
+          // muzzle smoke
+          smoke: [],
+          // internal timers
+          _lastDustAt: 0
+        };
+      }
+    }
+
+    function spawnTracer(defense, x1, y1, x2, y2) {
+      ensureDefenseVFX(defense);
+      defense.vfx.tracers.push({
+        x1, y1, x2, y2,
+        born: performance.now ? performance.now() : Date.now(),
+        life: 90 // ms
+      });
+    }
+
+    function spawnShellCasing(defense, x, y, facingAngle) {
+      ensureDefenseVFX(defense);
+      // Eject to the right side of the gun relative to facing
+      const ejectAng = facingAngle + Math.PI / 2 + (Math.random() - 0.5) * 0.45;
+      const speed = 90 + Math.random() * 70;
+      defense.vfx.casings.push({
+        x, y,
+        vx: Math.cos(ejectAng) * speed,
+        vy: Math.sin(ejectAng) * speed - (80 + Math.random() * 40), // little pop upward
+        rot: Math.random() * Math.PI * 2,
+        vr: (Math.random() - 0.5) * 10,
+        born: performance.now ? performance.now() : Date.now(),
+        life: 1300, // ms visible on ground
+        groundT: 220, // ms of "falling"
+        r: 2.2
+      });
+    }
+
+    function spawnDust(defense, x, y, mx, my) {
+      ensureDefenseVFX(defense);
+      // kick dust behind movement direction
+      const backAng = Math.atan2(my, mx) + Math.PI + (Math.random() - 0.5) * 0.8;
+      const speed = 30 + Math.random() * 40;
+      defense.vfx.dust.push({
+        x, y,
+        vx: Math.cos(backAng) * speed,
+        vy: Math.sin(backAng) * speed,
+        born: performance.now ? performance.now() : Date.now(),
+        life: 260 + Math.random() * 140,
+        r: 3 + Math.random() * 4
+      });
+    }
+
+    function spawnSmoke(defense, x, y, facingAngle) {
+      ensureDefenseVFX(defense);
+      const ang = facingAngle + (Math.random() - 0.5) * 0.5;
+      const speed = 18 + Math.random() * 22;
+      defense.vfx.smoke.push({
+        x, y,
+        vx: Math.cos(ang) * speed,
+        vy: Math.sin(ang) * speed,
+        born: performance.now ? performance.now() : Date.now(),
+        life: 320 + Math.random() * 240,
+        r: 4 + Math.random() * 5
+      });
+    }
+
+    function updateDefenseVFX(defense, dtMs) {
+      if (!defense || !defense.vfx) return;
+      const now = performance.now ? performance.now() : Date.now();
+
+      const stepList = (arr, stepFn) => {
+        for (let i = arr.length - 1; i >= 0; i--) {
+          const p = arr[i];
+          const age = now - p.born;
+          if (age >= p.life) { arr.splice(i, 1); continue; }
+          stepFn(p, age);
+        }
+      };
+
+      stepList(defense.vfx.tracers, (p) => { /* static */ });
+
+      stepList(defense.vfx.dust, (p) => {
+        p.x += (p.vx * dtMs) / 1000;
+        p.y += (p.vy * dtMs) / 1000;
+        p.vx *= 0.86;
+        p.vy *= 0.86;
+      });
+
+      stepList(defense.vfx.smoke, (p) => {
+        p.x += (p.vx * dtMs) / 1000;
+        p.y += (p.vy * dtMs) / 1000;
+        p.vx *= 0.90;
+        p.vy *= 0.90;
+      });
+
+      stepList(defense.vfx.casings, (p, age) => {
+        const t = age;
+        if (t < p.groundT) {
+          // simple gravity
+          p.vy += (520 * dtMs) / 1000;
+          p.x += (p.vx * dtMs) / 1000;
+          p.y += (p.vy * dtMs) / 1000;
+          p.vx *= 0.98;
+          p.vy *= 0.98;
+          p.rot += p.vr * (dtMs / 1000);
+        } else {
+          // settled on ground: tiny drift to stop
+          p.vx *= 0.90;
+          p.vy *= 0.90;
+          p.x += (p.vx * dtMs) / 1000;
+          p.y += (p.vy * dtMs) / 1000;
+          p.rot += p.vr * (dtMs / 1000) * 0.3;
+        }
+      });
+    }
+
+    function drawDefenseVFX(ctx, defense) {
+      if (!defense || !defense.vfx) return;
+      const now = performance.now ? performance.now() : Date.now();
+
+      // Dust puffs (ground)
+      for (const p of defense.vfx.dust) {
+        const age = now - p.born;
+        const a = Math.max(0, 1 - age / p.life);
+        ctx.save();
+        ctx.globalAlpha = a * 0.25;
+        ctx.fillStyle = '#000';
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r * (1 + (1 - a) * 0.6), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // Smoke (near muzzle / drifting)
+      for (const p of defense.vfx.smoke) {
+        const age = now - p.born;
+        const a = Math.max(0, 1 - age / p.life);
+        ctx.save();
+        ctx.globalAlpha = a * 0.22;
+        ctx.fillStyle = '#000';
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r * (1 + (1 - a) * 1.2), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // Shell casings (small rotated rectangles)
+      for (const p of defense.vfx.casings) {
+        const age = now - p.born;
+        const a = Math.max(0, 1 - age / p.life);
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rot);
+        ctx.globalAlpha = 0.65 * a;
+        ctx.fillStyle = '#caa04a';
+        ctx.fillRect(-p.r, -p.r / 2, p.r * 2.2, p.r);
+        ctx.restore();
+      }
+
+      // Bullet tracers (thin quick fading lines) - draw last so they read on small screens
+      for (const t of defense.vfx.tracers) {
+        const age = now - t.born;
+        const a = Math.max(0, 1 - age / t.life);
+        ctx.save();
+        ctx.globalAlpha = a * 0.9;
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = '#fff';
+        ctx.beginPath();
+        ctx.moveTo(t.x1, t.y1);
+        ctx.lineTo(t.x2, t.y2);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+function updateTurfDefense(dt) {
       // Track call count for conditional logging
       if (!GameState.turfDefense._updateCallCount) GameState.turfDefense._updateCallCount = 0;
       GameState.turfDefense._updateCallCount++;
@@ -7038,6 +7238,10 @@ const CartoonSpriteGenerator = {
 
       const defense = GameState.turfDefense;
       const now = Date.now();
+      // VFX containers + per-frame updates (tracers/smoke/dust/casings)
+      ensureDefenseVFX(defense);
+      updateDefenseVFX(defense, dt * 1000);
+
 
       // Input safety: consume one-shot inputs to prevent stuck states
       // Ultimate is one-shot (tap once to activate)
@@ -7069,10 +7273,9 @@ const CartoonSpriteGenerator = {
             let my = rawMove.y;
             if (Math.abs(mx) < dead) mx = 0;
             if (Math.abs(my) < dead) my = 0;
-            if (mx !== 0 && my !== 0) {
-              if (Math.abs(mx) >= Math.abs(my)) my = 0;
-              else mx = 0;
-            }
+            // Normalize diagonal so movement speed stays consistent
+            const mlen = Math.hypot(mx, my);
+            if (mlen > 1) { mx /= mlen; my /= mlen; }
             const movement = { x: mx, y: my };
 
             if (!defense.playerX) defense.playerX = canvasWidth / 2;
@@ -7084,11 +7287,27 @@ const CartoonSpriteGenerator = {
             defense.playerX = Math.max(20, Math.min(canvasWidth - 20, defense.playerX));
             defense.playerY = Math.max(20, Math.min(canvasHeight - 20, defense.playerY));
 
+            // Movement dust during prep too (keeps scene alive)
+            if ((Math.abs(movement.x) > 0.05 || Math.abs(movement.y) > 0.05)) {
+              const vfxNow = (performance.now ? performance.now() : Date.now());
+              if (!defense.vfx._lastDustAt || (vfxNow - defense.vfx._lastDustAt) > 95) {
+                defense.vfx._lastDustAt = vfxNow;
+                spawnDust(defense, defense.playerX, defense.playerY + 2, movement.x, movement.y);
+              }
+            }
+
             if (defense.playerSprite) {
               const sprite = defense.playerSprite;
               const isMoving = Math.abs(movement.x) > 0.05 || Math.abs(movement.y) > 0.05;
               sprite.isMoving = isMoving;
-              if (isMoving) sprite.facingAngle = Math.atan2(movement.y, movement.x);
+              if (isMoving) sprite._targetFacingAngle = Math.atan2(movement.y, movement.x);
+              if (typeof sprite._targetFacingAngle === 'number') {
+                const target = sprite._targetFacingAngle;
+                const cur = (typeof sprite.facingAngle === 'number') ? sprite.facingAngle : target;
+                const TURN_SMOOTH_SPEED = 18;
+                const t = 1 - Math.exp(-TURN_SMOOTH_SPEED * dt);
+                sprite.facingAngle = _lerpAngle(cur, target, t);
+              }
             }
           } catch (e) {}
 
@@ -7111,7 +7330,7 @@ const CartoonSpriteGenerator = {
           const canvasHeight = mapHeight * tileSize;
 
           // Update player movement from joystick
-          // NOTE: Free-roam keeps full omni movement; Turf Defense snaps to clean 4-direction movement (Diablo-ish).
+          // NOTE: Free-roam keeps full omni movement; Turf Defense also uses omni movement (with normalized diagonal speed).
           const rawMove = TouchControls.getMovement();
           const dead = 0.18;
 
@@ -7122,14 +7341,9 @@ const CartoonSpriteGenerator = {
           if (Math.abs(mx) < dead) mx = 0;
           if (Math.abs(my) < dead) my = 0;
 
-          // Snap to cardinal direction (dominant axis)
-          if (mx !== 0 && my !== 0) {
-            if (Math.abs(mx) >= Math.abs(my)) {
-              my = 0;
-            } else {
-              mx = 0;
-            }
-          }
+          // Normalize diagonal so movement speed stays consistent (true omni movement in Turf Defense)
+	          const mlen = Math.hypot(mx, my);
+	          if (mlen > 1) { mx /= mlen; my /= mlen; }
 
           const movement = { x: mx, y: my };
 
@@ -7143,6 +7357,16 @@ const CartoonSpriteGenerator = {
           defense.playerX = Math.max(20, Math.min(canvasWidth - 20, defense.playerX));
           defense.playerY = Math.max(20, Math.min(canvasHeight - 20, defense.playerY));
 
+          // Movement dust (lightweight, throttled)
+          if ((Math.abs(movement.x) > 0.05 || Math.abs(movement.y) > 0.05)) {
+            const vfxNow = (performance.now ? performance.now() : Date.now());
+            if (!defense.vfx._lastDustAt || (vfxNow - defense.vfx._lastDustAt) > 85) {
+              defense.vfx._lastDustAt = vfxNow;
+              // Slightly behind the player to read better
+              spawnDust(defense, defense.playerX, defense.playerY + 2, movement.x, movement.y);
+            }
+          }
+
           // Update player sprite state
           if (defense.playerSprite) {
             const sprite = defense.playerSprite;
@@ -7151,7 +7375,7 @@ const CartoonSpriteGenerator = {
 
             // Face movement direction when moving (aim code below may override when shooting)
             if (isMoving) {
-              sprite.facingAngle = Math.atan2(movement.y, movement.x);
+              sprite._targetFacingAngle = Math.atan2(movement.y, movement.x);
             }
 
             // Find nearest enemy for aiming when shooting
@@ -7172,7 +7396,19 @@ const CartoonSpriteGenerator = {
             if (nearestEnemyForAim && (defense.input.shooting || defense.input.spraying)) {
               const dx = nearestEnemyForAim.x - defense.playerX;
               const dy = nearestEnemyForAim.y - defense.playerY;
-              sprite.facingAngle = Math.atan2(dy, dx);
+              sprite._targetFacingAngle = Math.atan2(dy, dx);
+            }
+
+
+            // --- Turn / rotation smoothing (keeps aim readable on mobile) ---
+            // Set desired facing in sprite._targetFacingAngle above, then smoothly converge here.
+            if (typeof sprite._targetFacingAngle === 'number') {
+              const target = sprite._targetFacingAngle;
+              const cur = (typeof sprite.facingAngle === 'number') ? sprite.facingAngle : target;
+              // Exponential smoothing: higher = snappier. Tuned for Diablo-like feel.
+              const TURN_SMOOTH_SPEED = 18; // per-second
+              const t = 1 - Math.exp(-TURN_SMOOTH_SPEED * dt);
+              sprite.facingAngle = _lerpAngle(cur, target, t);
             }
 
             // Determine animation state
@@ -7403,7 +7639,7 @@ const CartoonSpriteGenerator = {
               const sprite = defense.playerSprite;
               const isMoving = Math.abs(movement.x) > 0.05 || Math.abs(movement.y) > 0.05;
               sprite.isMoving = isMoving;
-              if (isMoving) sprite.facingAngle = Math.atan2(movement.y, movement.x);
+              if (isMoving) sprite._targetFacingAngle = Math.atan2(movement.y, movement.x);
             }
           } catch (e) {}
 
@@ -7510,6 +7746,9 @@ const CartoonSpriteGenerator = {
 
       // Clear canvas with transparency (so we can see the map below)
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // VFX layer (dust/smoke/casings/tracers)
+      try { drawDefenseVFX(ctx, defense); } catch (e) {}
 
       // Render building HP bars (only during defense)
       if (defense.structures) {
@@ -8435,7 +8674,21 @@ const CartoonSpriteGenerator = {
         // Update facing angle toward target
         const dx = x - playerX;
         const dy = y - playerY;
-        defense.playerSprite.facingAngle = Math.atan2(dy, dx);
+        const ang = Math.atan2(dy, dx);
+        defense.playerSprite._targetFacingAngle = ang;
+        // For shooting, snap the current facing to target so it feels responsive
+        defense.playerSprite.facingAngle = ang;
+
+        // --- VFX: tracer + smoke + shell casing ---
+        // Approximate muzzle point a bit in front of the player, along facing direction
+        const muzzleDist = 20;
+        const muzzleX = playerX + Math.cos(ang) * muzzleDist;
+        const muzzleY = playerY + Math.sin(ang) * muzzleDist;
+
+        // Tracer goes toward tap/aim point (clamped by range above)
+        spawnTracer(defense, muzzleX, muzzleY, x, y);
+        spawnSmoke(defense, muzzleX, muzzleY, ang);
+        spawnShellCasing(defense, playerX, playerY, ang);
       }
 
       // Check if any enemy is hit (simple radius check)
@@ -9153,6 +9406,17 @@ const CartoonSpriteGenerator = {
         y: 0
       },
 
+      // Joystick smoothing (low-pass filter)
+      movementTarget: { x: 0, y: 0 },
+      movementSmoothed: { x: 0, y: 0 },
+      // Higher alpha = snappier, lower = smoother
+      smoothing: { activeAlpha: 0.35, releaseAlpha: 0.22 },
+
+      // Dynamic (floating) joystick placement
+      dynamicJoystick: true,
+      joystickTouchZone: null,
+
+
       /**
        * Initialize and inject touch controls into DOM
        */
@@ -9210,8 +9474,27 @@ const CartoonSpriteGenerator = {
           const bottomOffset = Math.round(tabH + base);
 
           if (this.joystickContainer) {
-            this.joystickContainer.style.bottom = `${bottomOffset}px`;
-            this.joystickContainer.style.left = '20px';
+            // If using dynamic joystick and it's active, clamp to visible viewport instead of forcing a fixed corner.
+            if (this.dynamicJoystick && this.joystick && this.joystick.active) {
+              const r = 70; // half of 140px container
+              const minX = 20;
+              const maxX = Math.max(minX, w - r * 2 - 20);
+              const minY = 20;
+              const maxY = Math.max(minY, h - (tabH + 20) - r * 2);
+              // Current left/top are in px; fallback to fixed if missing
+              const curLeft = parseFloat(this.joystickContainer.style.left || '20');
+              const curTop = parseFloat(this.joystickContainer.style.top || `${maxY}`);
+              const clampedLeft = Math.min(maxX, Math.max(minX, curLeft));
+              const clampedTop = Math.min(maxY, Math.max(minY, curTop));
+              this.joystickContainer.style.left = `${Math.round(clampedLeft)}px`;
+              this.joystickContainer.style.top = `${Math.round(clampedTop)}px`;
+              this.joystickContainer.style.bottom = '';
+            } else {
+              // Default fixed placement above tab bar
+              this.joystickContainer.style.bottom = `${bottomOffset}px`;
+              this.joystickContainer.style.left = '20px';
+              this.joystickContainer.style.top = '';
+            }
           }
 
           const btn = document.getElementById('action-buttons-container');
@@ -9273,6 +9556,23 @@ const CartoonSpriteGenerator = {
        * Create virtual joystick on left side
        */
       createJoystick() {
+        // Optional: dynamic/floating joystick placement on left half of the screen
+        if (this.dynamicJoystick) {
+          this.joystickTouchZone = document.createElement('div');
+          this.joystickTouchZone.id = 'joystick-touch-zone';
+          this.joystickTouchZone.style.cssText = `
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 50vw;
+            height: 100%;
+            pointer-events: auto;
+            background: transparent;
+            touch-action: none;
+          `;
+          this.container.appendChild(this.joystickTouchZone);
+        }
+
         // Joystick container (larger hit area)
         this.joystickContainer = document.createElement('div');
         this.joystickContainer.id = 'joystick-container';
@@ -9475,18 +9775,46 @@ const CartoonSpriteGenerator = {
        * Bind joystick touch events
        */
       bindJoystickEvents() {
-        // Touch start
-        this.joystickContainer.addEventListener('touchstart', (e) => {
-          e.preventDefault();
-          const touch = e.touches[0];
+        // Touch start (dynamic placement supported)
+        const beginTouch = (touch) => {
           this.joystick.active = true;
           this.joystick.touchId = touch.identifier;
+
+          // If dynamic joystick, move the base under the finger (within bounds)
+          if (this.dynamicJoystick && this.joystickContainer) {
+            const vv = window.visualViewport;
+            const w = (vv && vv.width) ? vv.width : window.innerWidth;
+            const h = (vv && vv.height) ? vv.height : window.innerHeight;
+            const tabBar = document.getElementById('tab-bar');
+            const tabH = tabBar ? tabBar.getBoundingClientRect().height : 0;
+
+            const size = 140;
+            const minX = 20;
+            const maxX = Math.max(minX, w - size - 20);
+            const minY = 20;
+            const maxY = Math.max(minY, h - (tabH + 20) - size);
+
+            const left = Math.min(maxX, Math.max(minX, touch.clientX - size / 2));
+            const top = Math.min(maxY, Math.max(minY, touch.clientY - size / 2));
+
+            this.joystickContainer.style.left = `${Math.round(left)}px`;
+            this.joystickContainer.style.top = `${Math.round(top)}px`;
+            this.joystickContainer.style.bottom = '';
+          }
 
           const rect = this.joystickContainer.getBoundingClientRect();
           this.joystick.startX = rect.left + rect.width / 2;
           this.joystick.startY = rect.top + rect.height / 2;
 
           this.updateJoystick(touch.clientX, touch.clientY);
+        };
+
+        // Touch start on either the joystick itself or the left-side touch zone
+        const startTarget = (this.dynamicJoystick && this.joystickTouchZone) ? this.joystickTouchZone : this.joystickContainer;
+        startTarget.addEventListener('touchstart', (e) => {
+          e.preventDefault();
+          const touch = e.touches[0];
+          beginTouch(touch);
         });
 
         // Touch move
@@ -9564,9 +9892,18 @@ const CartoonSpriteGenerator = {
         // Update knob position
         this.joystickKnob.style.transform = `translate(${finalX}px, ${finalY}px)`;
 
-        // Update movement vector (normalized -1 to 1)
-        this.movement.x = finalX / this.joystick.maxDistance;
-        this.movement.y = finalY / this.joystick.maxDistance;
+        // Update movement target (normalized -1 to 1)
+        this.movementTarget.x = finalX / this.joystick.maxDistance;
+        this.movementTarget.y = finalY / this.joystick.maxDistance;
+
+        // Virtual joystick smoothing (low-pass)
+        const a = this.joystick.active ? this.smoothing.activeAlpha : this.smoothing.releaseAlpha;
+        this.movementSmoothed.x += (this.movementTarget.x - this.movementSmoothed.x) * a;
+        this.movementSmoothed.y += (this.movementTarget.y - this.movementSmoothed.y) * a;
+
+        // Expose smoothed movement
+        this.movement.x = this.movementSmoothed.x;
+        this.movement.y = this.movementSmoothed.y;
 
         // Store in GameState.turfDefense.input
         if (GameState.turfDefense && GameState.turfDefense.input) {
@@ -9590,6 +9927,10 @@ const CartoonSpriteGenerator = {
         this.joystickKnob.style.transform = 'translate(0, 0)';
         this.movement.x = 0;
         this.movement.y = 0;
+        this.movementTarget.x = 0;
+        this.movementTarget.y = 0;
+        this.movementSmoothed.x = 0;
+        this.movementSmoothed.y = 0;
 
         // Reset input state
         if (GameState.turfDefense && GameState.turfDefense.input) {
