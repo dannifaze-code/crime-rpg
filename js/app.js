@@ -6875,20 +6875,29 @@ const CartoonSpriteGenerator = {
      * @param {number} dt - Delta time in seconds since last update
      */
     function updateTurfDefense(dt) {
-      if (DEBUG_OVERLAY_ENABLED && Math.random() < 0.01) { // Log 1% of the time to avoid spam
-        console.log('⚙️ [updateTurfDefense] Called with dt:', dt);
+      // Track call count for conditional logging
+      if (!GameState.turfDefense._updateCallCount) GameState.turfDefense._updateCallCount = 0;
+      GameState.turfDefense._updateCallCount++;
+      const callCount = GameState.turfDefense._updateCallCount;
+
+      // Log first 3 calls and every 120th call (every 2 seconds at 60fps)
+      const shouldLog = callCount <= 3 || callCount % 120 === 0;
+
+      if (shouldLog) {
+        console.log(`⚙️ [updateTurfDefense] Call #${callCount}, dt: ${dt.toFixed(4)}, active: ${GameState.turfDefense.active}`);
       }
 
       if (!GameState.turfDefense.active) {
-        if (DEBUG_OVERLAY_ENABLED && Math.random() < 0.01) {
-          console.warn('⚠️ [updateTurfDefense] Returning early - turfDefense.active is FALSE');
-        }
+        console.warn(`⚠️ [updateTurfDefense] EARLY RETURN - active is FALSE (call #${callCount})`);
         return;
       }
 
       // DEBUG: Mark that update was called
       if (DEBUG_OVERLAY_ENABLED) {
         DebugOverlay.markUpdate(dt);
+        if (shouldLog) {
+          console.log(`  ✅ Update marked (call #${callCount})`);
+        }
       }
 
       const defense = GameState.turfDefense;
@@ -7128,14 +7137,20 @@ const CartoonSpriteGenerator = {
      * Handles rendering of defense-specific UI and entities
      */
     function drawTurfDefense() {
-      if (DEBUG_OVERLAY_ENABLED && Math.random() < 0.01) { // Log 1% of the time to avoid spam
-        console.log('🎨 [drawTurfDefense] Called');
+      // Track call count for conditional logging
+      if (!GameState.turfDefense._drawCallCount) GameState.turfDefense._drawCallCount = 0;
+      GameState.turfDefense._drawCallCount++;
+      const callCount = GameState.turfDefense._drawCallCount;
+
+      // Log first 3 calls and every 120th call (every 2 seconds at 60fps)
+      const shouldLog = callCount <= 3 || callCount % 120 === 0;
+
+      if (shouldLog) {
+        console.log(`🎨 [drawTurfDefense] Call #${callCount}, active: ${GameState.turfDefense.active}, canvas: ${!!TurfDefenseRenderer.canvas}, ctx: ${!!TurfDefenseRenderer.ctx}`);
       }
 
       if (!GameState.turfDefense.active) {
-        if (DEBUG_OVERLAY_ENABLED && Math.random() < 0.01) {
-          console.warn('⚠️ [drawTurfDefense] Returning early - turfDefense.active is FALSE');
-        }
+        console.warn(`⚠️ [drawTurfDefense] EARLY RETURN - active is FALSE (call #${callCount})`);
         return;
       }
 
@@ -7144,7 +7159,7 @@ const CartoonSpriteGenerator = {
       const ctx = TurfDefenseRenderer.ctx;
 
       if (!canvas || !ctx) {
-        console.warn('⚠️ [DEBUG] drawTurfDefense() called but canvas or ctx is null!');
+        console.warn(`⚠️ [drawTurfDefense] EARLY RETURN - canvas/ctx is null (call #${callCount})`);
         console.warn('  canvas:', !!canvas, 'ctx:', !!ctx);
         console.warn('  TurfDefenseRenderer.canvas:', !!TurfDefenseRenderer.canvas);
         console.warn('  TurfDefenseRenderer.ctx:', !!TurfDefenseRenderer.ctx);
@@ -7154,6 +7169,9 @@ const CartoonSpriteGenerator = {
       // DEBUG: Mark that draw was called
       if (DEBUG_OVERLAY_ENABLED) {
         DebugOverlay.markDraw();
+        if (shouldLog) {
+          console.log(`  ✅ Draw marked (call #${callCount})`);
+        }
       }
 
       // Clear canvas with transparency (so we can see the map below)
