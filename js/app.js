@@ -6787,6 +6787,15 @@ const CartoonSpriteGenerator = {
       try {
         const el = document.getElementById('freeRoamPlayer');
         if (el) {
+          // Capture the on-screen size of the free-roam sprite BEFORE hiding it.
+          // We'll use this later to match Turf Defense canvas sprite scale to free roam.
+          try {
+            const rect = el.getBoundingClientRect();
+            const px = Math.max(rect.width || 0, rect.height || 0);
+            if (!GameState.turfDefense) GameState.turfDefense = {};
+            if (px > 0) GameState.turfDefense._freeRoamSpritePx = px;
+          } catch (e) {}
+
           // Remember prior styles so we can restore after Turf Defense
           if (!GameState.turfDefense) GameState.turfDefense = {};
           GameState.turfDefense._prevFreeRoamPlayerDisplay = el.style.display;
