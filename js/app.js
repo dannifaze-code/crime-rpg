@@ -6945,7 +6945,7 @@ function applyTurfDefenseSpriteScaleMatch() {
     const ratioW = (cssW > 0 && internalW > 0) ? (internalW / cssW) : 1;
     const ratioH = (cssH > 0 && internalH > 0) ? (internalH / cssH) : ratioW;
     const pxPerCss = Math.min(ratioW, ratioH);
-    const calibration = (defense && typeof defense._spriteScaleCalibration === 'number') ? defense._spriteScaleCalibration : 0.94;
+    const calibration = (defense && typeof defense._spriteScaleCalibration === 'number') ? defense._spriteScaleCalibration : 0.96;
     const desiredInternalPx = freePxCss * pxPerCss * calibration;
 
     // Determine a reasonable "base frame" width from loaded sprites.
