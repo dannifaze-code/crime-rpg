@@ -9817,6 +9817,29 @@ function updateTurfDefense(dt) {
           beginTouch(touch);
         });
 
+
+        // Also listen on the visible joystick itself so the player can lift and re-touch without needing to tap elsewhere.
+        if (this.dynamicJoystick && this.joystickContainer && startTarget !== this.joystickContainer) {
+          const regrab = (e) => {
+            e.preventDefault();
+
+            // If a touch got stuck (e.g. missed touchend), reset before starting a new one.
+            if (this.joystick.active && this.joystick.touchId != null) {
+              this.joystick.active = false;
+              this.joystick.touchId = null;
+              this.resetJoystick();
+            }
+
+            const touch = e.touches && e.touches[0];
+            if (!touch) return;
+            beginTouch(touch);
+          };
+
+          // Bind to the base + knob so either re-engages immediately
+          this.joystickContainer.addEventListener('touchstart', regrab, { passive: false });
+          if (this.joystickKnob) this.joystickKnob.addEventListener('touchstart', regrab, { passive: false });
+        }
+
         // Touch move
         document.addEventListener('touchmove', (e) => {
           if (!this.joystick.active) return;
@@ -9835,15 +9858,43 @@ function updateTurfDefense(dt) {
         document.addEventListener('touchend', (e) => {
           if (!this.joystick.active) return;
 
+          let matched = false;
           for (let i = 0; i < e.changedTouches.length; i++) {
             const touch = e.changedTouches[i];
             if (touch.identifier === this.joystick.touchId) {
+              matched = true;
               this.joystick.active = false;
               this.joystick.touchId = null;
               this.resetJoystick();
               break;
             }
           }
+
+          // Safety: if we didn't see our touchId in changedTouches (some browsers), but the touch is no longer present, reset anyway.
+          if (!matched) {
+            let stillPresent = false;
+            if (e.touches) {
+              for (let i = 0; i < e.touches.length; i++) {
+                if (e.touches[i].identifier === this.joystick.touchId) {
+                  stillPresent = true;
+                  break;
+                }
+              }
+            }
+            if (!stillPresent) {
+              this.joystick.active = false;
+              this.joystick.touchId = null;
+              this.resetJoystick();
+            }
+          }
+        });
+
+        // Touch cancel (system gestures, app switch, etc.)
+        document.addEventListener('touchcancel', (e) => {
+          if (!this.joystick.active) return;
+          this.joystick.active = false;
+          this.joystick.touchId = null;
+          this.resetJoystick();
         });
 
         // Mouse events for desktop testing
