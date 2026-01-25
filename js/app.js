@@ -7227,6 +7227,18 @@ function scheduleTurfDefenseSpriteScaleMatch() {
       GameState.turfDefense.playerX = canvasWidth / 2;
       GameState.turfDefense.playerY = canvasHeight / 2;
 
+      // Camera: follow player + zoom-in intro (world scale stays the same; camera brings us closer)
+      GameState.turfDefense.camera = {
+        x: GameState.turfDefense.playerX,
+        y: GameState.turfDefense.playerY,
+        zoom: 1,
+        startZoom: 1,
+        targetZoom: 1.45, // "map feels larger" zoom
+        introStart: (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(),
+        introDurationMs: 520,
+        followLerp: 10 // higher = snappier follow
+      };
+
       // Initialize input state
       GameState.turfDefense.input = {
         moveX: 0,
@@ -7724,6 +7736,41 @@ function updateTurfDefense(dt) {
             defense.playerX = Math.max(20, Math.min(canvasWidth - 20, defense.playerX));
             defense.playerY = Math.max(20, Math.min(canvasHeight - 20, defense.playerY));
 
+            // Camera follow & zoom intro (purely visual; does not affect movement speed)
+            try {
+              if (!defense.camera) {
+                defense.camera = {
+                  x: defense.playerX,
+                  y: defense.playerY,
+                  zoom: 1,
+                  startZoom: 1,
+                  targetZoom: 1.45,
+                  introStart: (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(),
+                  introDurationMs: 520,
+                  followLerp: 10
+                };
+              } else {
+                // Follow smoothing
+                const cam = defense.camera;
+                const lerpK = (typeof cam.followLerp === 'number' ? cam.followLerp : 10);
+                const a = 1 - Math.exp(-lerpK * dt);
+                cam.x = (typeof cam.x === 'number' ? cam.x : defense.playerX) + (defense.playerX - (typeof cam.x === 'number' ? cam.x : defense.playerX)) * a;
+                cam.y = (typeof cam.y === 'number' ? cam.y : defense.playerY) + (defense.playerY - (typeof cam.y === 'number' ? cam.y : defense.playerY)) * a;
+
+                // Intro zoom animation (ease out)
+                const nowMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                const t0 = (typeof cam.introStart === 'number') ? cam.introStart : nowMs;
+                const dur = (typeof cam.introDurationMs === 'number' && cam.introDurationMs > 0) ? cam.introDurationMs : 520;
+                let t = (nowMs - t0) / dur;
+                if (t < 0) t = 0;
+                if (t > 1) t = 1;
+                const easeOutCubic = 1 - Math.pow(1 - t, 3);
+                const z0 = (typeof cam.startZoom === 'number') ? cam.startZoom : 1;
+                const z1 = (typeof cam.targetZoom === 'number') ? cam.targetZoom : 1.45;
+                cam.zoom = z0 + (z1 - z0) * easeOutCubic;
+              }
+            } catch (e) {}
+
             // Movement dust during prep too (keeps scene alive)
             if ((Math.abs(movement.x) > 0.05 || Math.abs(movement.y) > 0.05)) {
               const vfxNow = (performance.now ? performance.now() : Date.now());
@@ -8191,7 +8238,27 @@ function updateTurfDefense(dt) {
       // Clear canvas with transparency (so we can see the map below)
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // VFX layer (dust/smoke/casings/tracers)
+      // Camera: zoom in + follow player to make the map feel larger
+      const cam = defense.camera || (defense.camera = {
+        x: defense.playerX || 0,
+        y: defense.playerY || 0,
+        zoom: 1,
+        startZoom: 1,
+        targetZoom: 1.45,
+        introStart: (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(),
+        introDurationMs: 520,
+        followLerp: 10
+      });
+      const shake = (typeof getCameraShakeOffset === 'function') ? getCameraShakeOffset(defense) : { x: 0, y: 0 };
+      const zoom = (typeof cam.zoom === 'number' && cam.zoom > 0) ? cam.zoom : 1;
+
+      ctx.save();
+      // Center camera on player + apply shake, then zoom, then translate world
+      ctx.translate((canvas.width / 2) + (shake.x || 0), (canvas.height / 2) + (shake.y || 0));
+      ctx.scale(zoom, zoom);
+      ctx.translate(-(cam.x || 0), -(cam.y || 0));
+
+      // VFX layer (dust/smoke/casings/tracers) - in world space
       try { drawDefenseVFX(ctx, defense); } catch (e) {}
 
       // Render building HP bars (only during defense)
@@ -8223,6 +8290,9 @@ function updateTurfDefense(dt) {
 
       // Render floating damage numbers
       TurfDefenseRenderer.drawDamageNumbers(ctx, defense);
+
+      // Restore screen-space for HUD (so UI doesn't zoom with the camera)
+      try { ctx.restore(); } catch (e) {}
 
       // Render HUD
       TurfDefenseRenderer.drawHUD(ctx, defense, canvas.width, canvas.height);
@@ -10025,10 +10095,10 @@ function updateTurfDefense(dt) {
           position: absolute;
           bottom: 20px;
           left: 20px;
-          width: 115px;
-          height: 115px;
-          background: transparent;
-          border: 2px solid rgba(255, 255, 255, 0.35);
+          width: 140px;
+          height: 140px;
+          background: rgba(0, 0, 0, 0.3);
+          border: 3px solid rgba(255, 255, 255, 0.4);
           border-radius: 50%;
           pointer-events: auto;
           touch-action: none;
@@ -10041,13 +10111,13 @@ function updateTurfDefense(dt) {
         this.joystickKnob = document.createElement('div');
         this.joystickKnob.id = 'joystick-knob';
         this.joystickKnob.style.cssText = `
-          width: 46px;
-          height: 46px;
-          background: rgba(255, 255, 255, 0.85);
-          border: 2px solid rgba(255, 255, 255, 1);
+          width: 60px;
+          height: 60px;
+          background: rgba(255, 255, 255, 0.8);
+          border: 3px solid rgba(255, 255, 255, 1);
           border-radius: 50%;
           transition: transform 0.05s ease-out;
-          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
         `;
 
         this.joystickContainer.appendChild(this.joystickKnob);
@@ -10069,7 +10139,7 @@ function updateTurfDefense(dt) {
           right: 20px;
           display: flex;
           flex-direction: column;
-          gap: 12px;
+          gap: 15px;
           align-items: flex-end;
         `;
 
@@ -10090,15 +10160,15 @@ function updateTurfDefense(dt) {
         // Close button (top-right corner)
         const closeButton = document.createElement('button');
         closeButton.id = 'turf-defense-close-btn';
-        closeButton.innerHTML = `<span style="font-size: 20px;">✕</span>`;
+        closeButton.innerHTML = `<span style="font-size: 24px;">✕</span>`;
         closeButton.style.cssText = `
           position: absolute;
           top: 20px;
           right: 20px;
-          width: 44px;
-          height: 44px;
+          width: 50px;
+          height: 50px;
           background: rgba(200, 50, 50, 0.9);
-          border: 2px solid rgba(255, 255, 255, 0.6);
+          border: 3px solid rgba(255, 255, 255, 0.6);
           border-radius: 50%;
           color: white;
           font-size: 24px;
@@ -10144,12 +10214,12 @@ function updateTurfDefense(dt) {
       createButton(id, icon, color) {
         const button = document.createElement('button');
         button.id = `action-${id}`;
-        button.innerHTML = `<span style="font-size: 26px;">${icon}</span>`;
+        button.innerHTML = `<span style="font-size: 32px;">${icon}</span>`;
         button.style.cssText = `
-          width: 64px;
-          height: 64px;
+          width: 80px;
+          height: 80px;
           background: ${color};
-          border: 2px solid rgba(255, 255, 255, 0.6);
+          border: 3px solid rgba(255, 255, 255, 0.6);
           border-radius: 50%;
           color: white;
           font-size: 24px;
