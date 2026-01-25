@@ -7473,6 +7473,17 @@ const CartoonSpriteGenerator = {
         // Update position
         enemy.x += enemy.velocity.x * dt;
         enemy.y += enemy.velocity.y * dt;
+
+        // Clamp enemy to map bounds (prevent wandering outside map)
+        const mapWidth = (GameState.map && GameState.map.width) || 30;
+        const mapHeight = (GameState.map && GameState.map.height) || 30;
+        const tileSize = 30;
+        const canvasWidth = mapWidth * tileSize;
+        const canvasHeight = mapHeight * tileSize;
+        const enemyRadius = 15; // Enemy sprite radius
+
+        enemy.x = Math.max(enemyRadius, Math.min(canvasWidth - enemyRadius, enemy.x));
+        enemy.y = Math.max(enemyRadius, Math.min(canvasHeight - enemyRadius, enemy.y));
       }
     }
 
