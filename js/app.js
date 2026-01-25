@@ -7274,6 +7274,9 @@ function scheduleTurfDefenseSpriteScaleMatch() {
         console.error('❌ [TurfDefense] ERROR during TurfDefenseRenderer.init():', error);
       }
 
+      // Start DOM camera so the map itself zooms/pans with the player
+      try { TurfDefenseRenderer.startDomCamera(GameState.turfDefense); } catch (e) {}
+
       // Match Turf Defense sprite scale to Free Roam sprite (mobile-safe)
       try { scheduleTurfDefenseSpriteScaleMatch(); } catch (e) {}
 
@@ -7309,7 +7312,10 @@ function scheduleTurfDefenseSpriteScaleMatch() {
 
       const finalScore = GameState.turfDefense.totalScore;
       const finalWave = GameState.turfDefense.wave;
-      const enemiesKilled = GameState.turfDefense.enemiesKilled;
+      const enemiesKilled = GameState.turfDefense.enemiesKilled;      // Stop DOM camera + restore map pan/zoom
+      try { TurfDefenseRenderer.stopDomCamera(); } catch (e) {}
+
+
 
       // Cleanup renderer
       TurfDefenseRenderer.destroy();
@@ -8174,6 +8180,9 @@ function updateTurfDefense(dt) {
           break;
       }
 
+      // Keep DOM camera in sync every frame (map + canvas follow the player)
+      try { TurfDefenseRenderer.applyDomCamera(defense); } catch (e) {}
+
       // Debug logging (remove in production)
       if (Math.floor(now / 1000) % 10 === 0 && now % 1000 < 16) {
         console.log('[TurfDefense] Active -', 'Wave:', defense.wave, 'State:', defense.waveState, 'Enemies:', defense.enemies.length);
@@ -8238,7 +8247,7 @@ function updateTurfDefense(dt) {
       // Clear canvas with transparency (so we can see the map below)
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Camera: zoom in + follow player to make the map feel larger
+      // Camera: DOM-driven zoom/pan (map + canvas move together). Canvas draws in world-space.
       const cam = defense.camera || (defense.camera = {
         x: defense.playerX || 0,
         y: defense.playerY || 0,
@@ -8249,14 +8258,12 @@ function updateTurfDefense(dt) {
         introDurationMs: 520,
         followLerp: 10
       });
+      try { TurfDefenseRenderer.applyDomCamera(defense); } catch (e) {}
       const shake = (typeof getCameraShakeOffset === 'function') ? getCameraShakeOffset(defense) : { x: 0, y: 0 };
-      const zoom = (typeof cam.zoom === 'number' && cam.zoom > 0) ? cam.zoom : 1;
 
       ctx.save();
-      // Center camera on player + apply shake, then zoom, then translate world
-      ctx.translate((canvas.width / 2) + (shake.x || 0), (canvas.height / 2) + (shake.y || 0));
-      ctx.scale(zoom, zoom);
-      ctx.translate(-(cam.x || 0), -(cam.y || 0));
+      // Shake only (camera transform handled by DOM so map background stays perfectly aligned)
+      ctx.translate((shake.x || 0), (shake.y || 0));
 
       // VFX layer (dust/smoke/casings/tracers) - in world space
       try { drawDefenseVFX(ctx, defense); } catch (e) {}
@@ -9337,6 +9344,14 @@ function updateTurfDefense(dt) {
         // Create canvas if not exists
         if (!this.canvas) {
           const cityMap = document.getElementById('city-map');
+          const mapWorld = document.getElementById('map-world');
+          const tdParent = mapWorld || cityMap;
+          try {
+            if (tdParent && typeof getComputedStyle === 'function') {
+              const pos = getComputedStyle(tdParent).position;
+              if (!pos || pos === 'static') tdParent.style.position = 'relative';
+            }
+          } catch (e) {}
 
           if (!cityMap) {
             // Only log error once to avoid spam
@@ -9373,7 +9388,7 @@ function updateTurfDefense(dt) {
             z-index: 100;
           `;
 
-          cityMap.appendChild(this.canvas);
+          tdParent.appendChild(this.canvas);
           this.ctx = this.canvas.getContext('2d');
 
           // Add click handler for desktop shooting
@@ -9407,6 +9422,135 @@ function updateTurfDefense(dt) {
           console.log('🎨 [TurfDefenseRenderer] Canvas destroyed');
         }
       },
+      // ------------------------------------------------------------
+      // Turf Defense DOM Camera
+      // Drives #map-world transform so the map background + icons + canvas
+      // all zoom/pan together. Prevents HP bars drifting vs buildings.
+      // ------------------------------------------------------------
+      _domCamState: null,
+
+      startDomCamera(defense) {
+        try {
+          const viewport = document.getElementById('map-viewport');
+          const world = document.getElementById('map-world');
+          if (!viewport || !world) return;
+
+          // Save previous pan/zoom and sizing so we can restore perfectly
+          const prev = (typeof TurfTab !== 'undefined' && TurfTab) ? {
+            zoom: TurfTab.currentZoom,
+            panX: TurfTab.panX,
+            panY: TurfTab.panY,
+            worldBaseW: TurfTab.worldBaseW,
+            worldBaseH: TurfTab.worldBaseH,
+            worldSizeReady: TurfTab.worldSizeReady
+          } : null;
+
+          this._domCamState = {
+            prev,
+            prevWorldW: world.style.width,
+            prevWorldH: world.style.height,
+            prevViewportPE: viewport.style.pointerEvents
+          };
+
+          // Lock user pan/zoom during Turf Defense so the camera is authoritative
+          viewport.style.pointerEvents = 'none';
+
+          // Force the world coordinate system to match Turf Defense pixel space (tile map)
+          const mapWidth = (GameState.map && GameState.map.width) || 30;
+          const mapHeight = (GameState.map && GameState.map.height) || 30;
+          const tileSize = 30;
+          const w = mapWidth * tileSize;
+          const h = mapHeight * tileSize;
+
+          world.style.width = `${w}px`;
+          world.style.height = `${h}px`;
+
+          // Make TurfTab's clamp/pan math operate in the same world units
+          if (typeof TurfTab !== 'undefined' && TurfTab) {
+            TurfTab.worldBaseW = w;
+            TurfTab.worldBaseH = h;
+            TurfTab.worldSizeReady = true;
+          }
+
+          // Ensure the TD canvas is inside the world so it gets transformed with the map
+          try {
+            if (this.canvas && this.canvas.parentNode !== world) {
+              world.appendChild(this.canvas);
+            }
+          } catch (e) {}
+
+          // Apply immediately (avoids a single frame mismatch on start)
+          this.applyDomCamera(defense);
+        } catch (e) {}
+      },
+
+      stopDomCamera() {
+        try {
+          const viewport = document.getElementById('map-viewport');
+          const world = document.getElementById('map-world');
+          const state = this._domCamState;
+
+          // Restore pointer events so normal pan/zoom works again
+          if (viewport) {
+            viewport.style.pointerEvents = (state && state.prevViewportPE != null) ? state.prevViewportPE : '';
+          }
+
+          // Restore world sizing
+          if (world && state) {
+            if (state.prevWorldW != null) world.style.width = state.prevWorldW;
+            if (state.prevWorldH != null) world.style.height = state.prevWorldH;
+          }
+
+          // Restore TurfTab zoom/pan
+          if (state && state.prev && typeof TurfTab !== 'undefined' && TurfTab) {
+            TurfTab.currentZoom = (typeof state.prev.zoom === 'number') ? state.prev.zoom : 1;
+            TurfTab.panX = (typeof state.prev.panX === 'number') ? state.prev.panX : 0;
+            TurfTab.panY = (typeof state.prev.panY === 'number') ? state.prev.panY : 0;
+            TurfTab.worldBaseW = state.prev.worldBaseW;
+            TurfTab.worldBaseH = state.prev.worldBaseH;
+            TurfTab.worldSizeReady = state.prev.worldSizeReady;
+            TurfTab.applyMapTransform();
+          }
+
+          this._domCamState = null;
+        } catch (e) {}
+      },
+
+      applyDomCamera(defense) {
+        try {
+          if (!defense || !defense.active) return;
+          const cam = defense.camera;
+          if (!cam) return;
+
+          const viewport = document.getElementById('map-viewport');
+          const world = document.getElementById('map-world');
+          if (!viewport || !world) return;
+
+          // Drive TurfTab transform if available, otherwise fall back to direct style transform
+          const vw = viewport.clientWidth || viewport.getBoundingClientRect().width || 0;
+          const vh = viewport.clientHeight || viewport.getBoundingClientRect().height || 0;
+          if (vw <= 0 || vh <= 0) return;
+
+          const zoom = (typeof cam.zoom === 'number' && cam.zoom > 0) ? cam.zoom : 1;
+          const cx = (typeof cam.x === 'number') ? cam.x : (defense.playerX || 0);
+          const cy = (typeof cam.y === 'number') ? cam.y : (defense.playerY || 0);
+
+          // Center the camera on the player in world-space
+          const panX = (vw / 2) - (cx * zoom);
+          const panY = (vh / 2) - (cy * zoom);
+
+          if (typeof TurfTab !== 'undefined' && TurfTab && typeof TurfTab.applyMapTransform === 'function') {
+            TurfTab.currentZoom = zoom;
+            TurfTab.panX = panX;
+            TurfTab.panY = panY;
+            if (typeof TurfTab.clampPan === 'function') TurfTab.clampPan();
+            TurfTab.applyMapTransform();
+          } else {
+            world.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+          }
+        } catch (e) {}
+      },
+
 
       /**
        * Draw grid background
