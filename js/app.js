@@ -6928,7 +6928,17 @@ function applyTurfDefenseSpriteScaleMatch() {
     const defense = GameState && GameState.turfDefense ? GameState.turfDefense : null;
     if (!defense || !defense.active) return false;
 
-    const freePxCss = defense._freeRoamSpritePx || 0;
+    // Align Turf Defense sprite size to the same source-of-truth as Free Roam:
+    // Free Roam renders ImportedSpriteSheet frames at `scale = 4` in CSS pixels.
+    // On some mobile layouts, reading DOM sizes can be unstable; prefer the explicit sheet scale.
+    let freePxCss = 0;
+    try {
+      if (typeof ImportedSpriteSheet !== 'undefined' && ImportedSpriteSheet && ImportedSpriteSheet.spriteWidth) {
+        freePxCss = (ImportedSpriteSheet.spriteWidth * 4);
+      }
+    } catch (e) {}
+    // Fallback: use measured value if available (older builds / alternate sprite setups).
+    if (!(freePxCss > 0)) freePxCss = defense._freeRoamSpritePx || 0;
     if (!(freePxCss > 0)) return false;
 
     const canvas = (TurfDefenseRenderer && TurfDefenseRenderer.canvas) || document.getElementById('turf-defense-canvas');
@@ -6945,7 +6955,7 @@ function applyTurfDefenseSpriteScaleMatch() {
     const ratioW = (cssW > 0 && internalW > 0) ? (internalW / cssW) : 1;
     const ratioH = (cssH > 0 && internalH > 0) ? (internalH / cssH) : ratioW;
     const pxPerCss = Math.min(ratioW, ratioH);
-    const calibration = (defense && typeof defense._spriteScaleCalibration === 'number') ? defense._spriteScaleCalibration : 0.96;
+    const calibration = (defense && typeof defense._spriteScaleCalibration === 'number') ? defense._spriteScaleCalibration : 1.0;
     const desiredInternalPx = freePxCss * pxPerCss * calibration;
 
     // Determine a reasonable "base frame" width from loaded sprites.
