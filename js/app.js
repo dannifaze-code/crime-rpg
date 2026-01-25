@@ -7003,35 +7003,63 @@ function applyTurfDefenseSpriteScaleMatch() {
     const defense = GameState && GameState.turfDefense ? GameState.turfDefense : null;
     if (!defense || !defense.active) return false;
 
-    // Align Turf Defense sprite size to the same source-of-truth as Free Roam:
-    // Free Roam renders ImportedSpriteSheet frames at `scale = 4` in CSS pixels.
-    // On some mobile layouts, reading DOM sizes can be unstable; prefer the explicit sheet scale.
+    // --- Canvas stability gate -------------------------------------------------
+    // On first-run mobile, the canvas CSS box can report tiny/unstable values for a few frames,
+    // which explodes the CSS->canvas conversion and makes the sprite gigantic.
+    // We only apply scale after the canvas rect + internal size are stable for a few frames.
+    const canvas = (TurfDefenseRenderer && TurfDefenseRenderer.canvas) || document.getElementById('turf-defense-canvas');
+    if (!canvas) return false;
+
+    const rect = canvas.getBoundingClientRect ? canvas.getBoundingClientRect() : null;
+    const cssW = rect && rect.width ? rect.width : 0;
+    const cssH = rect && rect.height ? rect.height : 0;
+    const internalW = canvas.width || 0;
+    const internalH = canvas.height || 0;
+
+    // Basic readiness checks
+    if (!(cssW > 50 && cssH > 50 && internalW > 50 && internalH > 50)) {
+      defense._tdScaleStableFrames = 0;
+      defense._tdScaleLastBox = null;
+      return false;
+    }
+
+    const box = { cssW, cssH, internalW, internalH };
+    const last = defense._tdScaleLastBox || null;
+
+    if (last) {
+      const dw = Math.abs(box.cssW - last.cssW) / (last.cssW || 1);
+      const dh = Math.abs(box.cssH - last.cssH) / (last.cssH || 1);
+      const diW = Math.abs(box.internalW - last.internalW);
+      const diH = Math.abs(box.internalH - last.internalH);
+
+      const stableNow = (dw < 0.01 && dh < 0.01 && diW === 0 && diH === 0);
+      defense._tdScaleStableFrames = stableNow ? ((defense._tdScaleStableFrames || 0) + 1) : 0;
+    } else {
+      defense._tdScaleStableFrames = 0;
+    }
+
+    defense._tdScaleLastBox = box;
+
+    // Need a few stable frames before applying (first-run == second-run == Chromebook)
+    if ((defense._tdScaleStableFrames || 0) < 3) return false;
+
+    // --- Source-of-truth size (Free Roam scale = 4) ----------------------------
     let freePxCss = 0;
     try {
       if (typeof ImportedSpriteSheet !== 'undefined' && ImportedSpriteSheet && ImportedSpriteSheet.spriteWidth) {
         freePxCss = (ImportedSpriteSheet.spriteWidth * 4);
       }
     } catch (e) {}
-    // Fallback: use measured value if available (older builds / alternate sprite setups).
-    if (!(freePxCss > 0)) freePxCss = defense._freeRoamSpritePx || 0;
-    if (!(freePxCss > 0)) return false;
-
-    const canvas = (TurfDefenseRenderer && TurfDefenseRenderer.canvas) || document.getElementById('turf-defense-canvas');
-    if (!canvas) return false;
-
-    const rect = canvas.getBoundingClientRect();
-    const cssW = rect && rect.width ? rect.width : 0;
-    const cssH = rect && rect.height ? rect.height : 0;
-    const internalW = canvas.width || 0;
-    const internalH = canvas.height || 0;
+    if (!(freePxCss > 0)) return false; // no calibration hacks, no guessing
 
     // Convert desired CSS pixels into canvas internal pixels.
-    // On mobile the canvas can be scaled non-uniformly; use the smaller ratio to avoid overscaling.
-    const ratioW = (cssW > 0 && internalW > 0) ? (internalW / cssW) : 1;
-    const ratioH = (cssH > 0 && internalH > 0) ? (internalH / cssH) : ratioW;
+    // Mobile can be non-uniform; use the smaller ratio to avoid overscaling.
+    const ratioW = internalW / cssW;
+    const ratioH = internalH / cssH;
     const pxPerCss = Math.min(ratioW, ratioH);
-    const calibration = (defense && typeof defense._spriteScaleCalibration === 'number') ? defense._spriteScaleCalibration : 1.0;
-    const desiredInternalPx = freePxCss * pxPerCss * calibration;
+    if (!(pxPerCss > 0 && isFinite(pxPerCss))) return false;
+
+    const desiredInternalPx = freePxCss * pxPerCss;
 
     // Determine a reasonable "base frame" width from loaded sprites.
     let frameW = 0;
@@ -7048,14 +7076,12 @@ function applyTurfDefenseSpriteScaleMatch() {
     const newScaleRaw = desiredInternalPx / frameW;
     const newScale = Math.max(0.15, Math.min(2.0, newScaleRaw));
 
-    // Save & apply once per session unless the viewport changed.
     if (!defense._prevSpriteScale) defense._prevSpriteScale = (PlayerSpriteManager && PlayerSpriteManager.config ? PlayerSpriteManager.config.spriteScale : 0.5);
     if (PlayerSpriteManager && PlayerSpriteManager.config) PlayerSpriteManager.config.spriteScale = newScale;
 
     // Enemy scale factor (relative to default enemy radius assumptions)
     defense._enemyScaleFactor = newScale / 0.5;
 
-    // Mark applied (and stash for debugging)
     defense._spriteScaleMatched = true;
     defense._spriteScaleMatchedValue = newScale;
     defense._spriteScaleMatchedDesiredInternal = desiredInternalPx;
