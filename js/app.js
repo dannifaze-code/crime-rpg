@@ -6870,6 +6870,100 @@ const CartoonSpriteGenerator = {
     }
 
 
+// --- Turf Defense sprite scale matching (mobile-safe) ---
+// Goal: Make Turf Defense canvas-drawn player match the on-screen CSS pixel size of the free-roam DOM sprite.
+// On mobile, the canvas is often CSS-scaled to fit viewport, so we convert CSS px -> internal canvas px.
+function applyTurfDefenseSpriteScaleMatch() {
+  try {
+    const defense = GameState && GameState.turfDefense ? GameState.turfDefense : null;
+    if (!defense || !defense.active) return false;
+
+    const freePxCss = defense._freeRoamSpritePx || 0;
+    if (!(freePxCss > 0)) return false;
+
+    const canvas = (TurfDefenseRenderer && TurfDefenseRenderer.canvas) || document.getElementById('turf-defense-canvas');
+    if (!canvas) return false;
+
+    const rect = canvas.getBoundingClientRect();
+    const cssW = rect && rect.width ? rect.width : 0;
+    const internalW = canvas.width || 0;
+
+    // Convert desired CSS pixels into canvas internal pixels.
+    const pxPerCss = (cssW > 0 && internalW > 0) ? (internalW / cssW) : 1;
+    const desiredInternalPx = freePxCss * pxPerCss;
+
+    // Determine a reasonable "base frame" width from loaded sprites.
+    let frameW = 0;
+    try {
+      if (typeof PlayerSpriteManager !== 'undefined' && PlayerSpriteManager && PlayerSpriteManager.loaded) {
+        const frames = PlayerSpriteManager.getBodyFrames('idle');
+        const img = frames && frames.length ? frames[0] : null;
+        frameW = img && img.width ? img.width : 0;
+      }
+    } catch (e) {}
+    if (!(frameW > 0)) frameW = 96; // fallback
+
+    // Compute new scale and clamp to sane bounds.
+    const newScaleRaw = desiredInternalPx / frameW;
+    const newScale = Math.max(0.15, Math.min(2.0, newScaleRaw));
+
+    // Save & apply once per session unless the viewport changed.
+    if (!defense._prevSpriteScale) defense._prevSpriteScale = (PlayerSpriteManager && PlayerSpriteManager.config ? PlayerSpriteManager.config.spriteScale : 0.5);
+    if (PlayerSpriteManager && PlayerSpriteManager.config) PlayerSpriteManager.config.spriteScale = newScale;
+
+    // Enemy scale factor (relative to default enemy radius assumptions)
+    defense._enemyScaleFactor = newScale / 0.5;
+
+    // Mark applied (and stash for debugging)
+    defense._spriteScaleMatched = true;
+    defense._spriteScaleMatchedValue = newScale;
+    defense._spriteScaleMatchedDesiredInternal = desiredInternalPx;
+    defense._spriteScaleMatchedPxPerCss = pxPerCss;
+
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function scheduleTurfDefenseSpriteScaleMatch() {
+  try {
+    const defense = GameState && GameState.turfDefense ? GameState.turfDefense : null;
+    if (!defense || !defense.active) return;
+
+    // Try a few frames in a row (sprites/canvas may not be ready on mobile immediately)
+    let attempts = 0;
+    const maxAttempts = 30;
+
+    const tick = () => {
+      if (!GameState.turfDefense || !GameState.turfDefense.active) return;
+      attempts++;
+      const ok = applyTurfDefenseSpriteScaleMatch();
+
+      // If not ready yet, try again next frame
+      if (!ok && attempts < maxAttempts) {
+        requestAnimationFrame(tick);
+        return;
+      }
+
+      // Also re-apply on viewport changes while defense is active (mobile address bar / tab switching).
+      try {
+        if (!defense._scaleMatchViewportHooked) {
+          defense._scaleMatchViewportHooked = true;
+          const reapply = () => { try { applyTurfDefenseSpriteScaleMatch(); } catch (e) {} };
+          window.addEventListener('resize', reapply, { passive: true });
+          window.addEventListener('orientationchange', reapply, { passive: true });
+          if (window.visualViewport) window.visualViewport.addEventListener('resize', reapply, { passive: true });
+          defense._scaleMatchReapply = reapply;
+        }
+      } catch (e) {}
+    };
+
+    requestAnimationFrame(tick);
+  } catch (e) {}
+}
+
+
     function startTurfDefense() {
       console.log('🛡️ [TurfDefense] Starting Turf Defense mode...');
 
@@ -6960,6 +7054,9 @@ const CartoonSpriteGenerator = {
         console.error('❌ [TurfDefense] ERROR during TurfDefenseRenderer.init():', error);
       }
 
+      // Match Turf Defense sprite scale to Free Roam sprite (mobile-safe)
+      try { scheduleTurfDefenseSpriteScaleMatch(); } catch (e) {}
+
       // Initialize touch controls for mobile
       try {
         TouchControls.init();
@@ -7006,6 +7103,20 @@ const CartoonSpriteGenerator = {
 
       // Resume Free Roam (if it was enabled before) now that Turf Defense is over
       resumeFreeRoamAfterTurfDefense();
+
+// Restore sprite scaling & viewport hooks
+try {
+  const defense = GameState.turfDefense;
+  if (defense && defense._prevSpriteScale && typeof PlayerSpriteManager !== 'undefined' && PlayerSpriteManager && PlayerSpriteManager.config) {
+    PlayerSpriteManager.config.spriteScale = defense._prevSpriteScale;
+  }
+  if (defense && defense._scaleMatchViewportHooked && defense._scaleMatchReapply) {
+    window.removeEventListener('resize', defense._scaleMatchReapply);
+    window.removeEventListener('orientationchange', defense._scaleMatchReapply);
+    if (window.visualViewport) window.visualViewport.removeEventListener('resize', defense._scaleMatchReapply);
+  }
+} catch (e) {}
+
 
       // Clear enemies (ensure any runtime state is discarded)
       if (Array.isArray(GameState.turfDefense.enemies)) {
@@ -9115,7 +9226,8 @@ function updateTurfDefense(dt) {
 
         // Enemy body (circle)
         ctx.beginPath();
-        ctx.arc(enemy.x, enemy.y, 15, 0, Math.PI * 2);
+        const r = 15 * ((GameState.turfDefense && GameState.turfDefense._enemyScaleFactor) ? GameState.turfDefense._enemyScaleFactor : 1);
+        ctx.arc(enemy.x, enemy.y, r, 0, Math.PI * 2);
 
         // Color based on state
         if (enemy.state === 'attackingPlayer') {
