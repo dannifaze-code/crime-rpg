@@ -6554,10 +6554,26 @@ const CartoonSpriteGenerator = {
     }
 
     // Reset GameState to DEFAULT_STATE (used when creating new accounts)
-    function resetToDefaultState() {
-      cons
+    // Reset GameState to DEFAULT_STATE (used when creating new accounts)
 
-    // =========================================================
+function resetToDefaultState() {
+  console.log('🔄 Resetting GameState to DEFAULT_STATE');
+  try {
+    Object.keys(DEFAULT_STATE).forEach(key => {
+      if (typeof DEFAULT_STATE[key] === 'object' && DEFAULT_STATE[key] !== null) {
+        GameState[key] = JSON.parse(JSON.stringify(DEFAULT_STATE[key]));
+      } else {
+        GameState[key] = DEFAULT_STATE[key];
+      }
+    });
+    ensureGameStateSchema();
+    console.log('✅ GameState reset complete - Cash:', GameState.player?.cash, 'Level:', GameState.player?.level);
+  } catch (e) {
+    console.warn('[resetToDefaultState] failed:', e);
+  }
+}
+
+// =========================================================
     // CIA "Visitor" Intervention — Phase 1 (Systems Only, No Art)
     // =========================================================
     const CIAIntervention = (() => {
@@ -6754,7 +6770,55 @@ const CartoonSpriteGenerator = {
         return true;
       }
 
-      return { stage, maybeAutoStage, apply, end };
+      return {
+        stage,
+        maybeAutoStage,
+        apply,
+        end,
+        // Debug/Phase-1 helpers (text-only dialog + quick console commands)
+        getState: () => _ensureState(),
+        getSnapshot: () => (_ensureState().snapshot || null),
+        getOffers: () => (_ensureState().offers || null),
+        debugDialog: () => {
+          const st = _ensureState();
+          const s = st.snapshot || {};
+          const o = st.offers || {};
+          const lines = [];
+          lines.push('🕶️ CIA Visitor (Phase 1)');
+          lines.push('Reason: ' + (st.reason || 'unknown'));
+          lines.push('Cash: $' + Number(s.cash || 0));
+          lines.push('Weapons: ' + (Array.isArray(s.weapons) ? s.weapons.length : 0));
+          lines.push('Properties: ' + (Array.isArray(s.properties) ? s.properties.length : 0));
+          if (o.cash) lines.push('Offer: cash -> pay $' + o.cash.cost + ' for -' + o.cash.heatReduction + ' heat');
+          if (o.weapons) lines.push('Offer: weapons -> surrender ' + o.weapons.weaponsTaken + ' for -' + o.weapons.heatReduction + ' heat');
+          if (Array.isArray(o.properties) && o.properties.length) lines.push('Offer: property -> choose 1 of ' + o.properties.length);
+          return lines.join('\n');
+        },
+        debugPrint: () => {
+          try {
+            console.log(CIAIntervention.debugDialog());
+            console.log('[CIA] offers=', CIAIntervention.getOffers());
+          } catch (e) {}
+        },
+        applyCashOffer: () => {
+          const o = _ensureState().offers?.cash;
+          if (!o) return false;
+          return apply('cash', o);
+        },
+        applyWeaponsOffer: () => {
+          const o = _ensureState().offers?.weapons;
+          if (!o) return false;
+          return apply('weapons', o);
+        },
+        applyPropertyOffer: (propertyIdOrIndex = 0) => {
+          const list = _ensureState().offers?.properties;
+          if (!Array.isArray(list) || !list.length) return false;
+          let offer = list.find(x => String(x.propertyId) === String(propertyIdOrIndex));
+          if (!offer) offer = list[Math.max(0, Math.min(list.length - 1, Number(propertyIdOrIndex) || 0))];
+          if (!offer) return false;
+          return apply('property', offer);
+        }
+      };
     })();
 
     // Make Phase 1 helpers available in mobile console (eruda)
@@ -6762,10 +6826,16 @@ const CartoonSpriteGenerator = {
       if (typeof window !== 'undefined') {
         window.CIAIntervention = CIAIntervention;
         window.startCIAIntervention = (reason) => CIAIntervention.stage(reason || 'lockdown');
+        // common typo alias (keeps mobile console happy)
+        window.startCIAIntervension = window.startCIAIntervention;
         window.applyCIAResolution = (type, payload) => CIAIntervention.apply(type, payload);
+        window.applyCIAResoloution = window.applyCIAResolution;
         window.endCIAIntervention = () => CIAIntervention.end();
         // Friendly aliases
         window.cia = CIAIntervention;
+        window.ciaDebug = () => { try { CIAIntervention.debugPrint(); } catch(e) {} };
+        window.ciaOffers = () => { try { return CIAIntervention.getOffers(); } catch(e) { return null; } };
+        window.ciaSnapshot = () => { try { return CIAIntervention.getSnapshot(); } catch(e) { return null; } };
       }
     } catch (e) {}
 
@@ -6774,18 +6844,6 @@ const CartoonSpriteGenerator = {
       setTimeout(() => { try { CIAIntervention.maybeAutoStage(); } catch(e) {} }, 1200);
       setInterval(() => { try { CIAIntervention.maybeAutoStage(); } catch(e) {} }, 5000);
     } catch (e) {}
-
-ole.log('🔄 Resetting GameState to DEFAULT_STATE');
-      Object.keys(DEFAULT_STATE).forEach(key => {
-        if (typeof DEFAULT_STATE[key] === 'object' && DEFAULT_STATE[key] !== null) {
-          GameState[key] = JSON.parse(JSON.stringify(DEFAULT_STATE[key]));
-        } else {
-          GameState[key] = DEFAULT_STATE[key];
-        }
-      });
-      ensureGameStateSchema();
-      console.log('✅ GameState reset complete - Cash:', GameState.player.cash, 'Level:', GameState.player.level);
-    }
 
     // ========================================
     // TURF DEFENSE MODE
@@ -24614,9 +24672,11 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       },
       
       addGlobalHeat(amount, reason) {
-        if (amount <= 0) return;
-        
-        GameState.player.globalHeat = Math.min(100, GameState.player.globalHeat + amount);
+        // Allow amount=0 for logging/events (lockdown, CIA staging, etc.)
+        const delta = Number(amount || 0);
+        if (delta !== 0) {
+          GameState.player.globalHeat = Math.min(100, Number(GameState.player.globalHeat || 0) + delta);
+        }
         
         // Log heat gain
         GameState.heatLog.push({
@@ -24633,6 +24693,9 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
         // Update police activity level
         this.updatePoliceActivity();
         
+
+        // CIA Phase 1 hook: auto-stage when global heat is hot / lockdown flags are active
+        try { if (typeof CIAIntervention !== 'undefined') CIAIntervention.maybeAutoStage(); } catch(e) {}
         console.log(`Global heat +${amount}%: ${reason}`);
       },
       
