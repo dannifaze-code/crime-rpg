@@ -14716,6 +14716,42 @@ function updateTurfDefense(dt) {
       // Place buildings
       const placedBuildings = BuildingPlacer.placeBuildings(GameState.map.grid, random);
       
+      // === CUSTOM POSITION OVERRIDES ===
+      // Override specific building positions per user requirements
+      const width = GameState.map.width;
+      const height = GameState.map.height;
+      
+      // Find and reposition Gun Shop to G position (top-left)
+      const gunShop = placedBuildings.find(b => b.typeId === 'gun_shop');
+      if (gunShop) {
+        gunShop.x = 1;  // Tile coordinate
+        gunShop.y = 2;
+        gunShop.xPercent = (1 / width) * 100;  // Convert to percentage
+        gunShop.yPercent = (2 / height) * 100;
+        console.log(`✓ Repositioned Gun Shop to G position: (${gunShop.x}, ${gunShop.y})`);
+      }
+      
+      // Find and reposition Casino to C position (bottom-center)
+      const casino = placedBuildings.find(b => b.typeId === 'casino');
+      if (casino) {
+        casino.x = 17;  // Tile coordinate
+        casino.y = 29;
+        casino.xPercent = (17 / width) * 100;  // Convert to percentage
+        casino.yPercent = (29 / height) * 100;
+        console.log(`✓ Repositioned Casino to C position: (${casino.x}, ${casino.y})`);
+      }
+      
+      // Find and reposition Chop Shop (Luxury Motors) to L position (bottom-right)
+      const chopShop = placedBuildings.find(b => b.typeId === 'chop_shop');
+      if (chopShop) {
+        chopShop.x = 24;  // Tile coordinate
+        chopShop.y = 29;
+        chopShop.xPercent = (24 / width) * 100;  // Convert to percentage
+        chopShop.yPercent = (29 / height) * 100;
+        console.log(`✓ Repositioned Chop Shop (Luxury Motors) to L position: (${chopShop.x}, ${chopShop.y})`);
+      }
+      // === END CUSTOM OVERRIDES ===
+      
       // Store in GameState
       GameState.map.buildings = placedBuildings;
       
@@ -15475,6 +15511,39 @@ function ensureLandmarkProperties() {
       
 if (GameState.propertyBuildings && GameState.propertyBuildings.length > 0) {
   console.log(`Property buildings already initialized: ${GameState.propertyBuildings.length}`);
+  
+  // === FORCE UPDATE: Apply new positions to existing saved games ===
+  console.log('🔄 Applying position updates to existing properties...');
+  
+  // Update Gun Shop position
+  const gunshopProp = GameState.propertyBuildings.find(b => b.id === 'gunshop');
+  if (gunshopProp) {
+    gunshopProp.x = 3;
+    gunshopProp.y = 6;
+    console.log('✓ Updated Gun Shop position to G: (3, 6)');
+  }
+  
+  // Update Casino position
+  const casinoProp = GameState.propertyBuildings.find(b => b.id === 'casino');
+  if (casinoProp) {
+    casinoProp.x = 52;
+    casinoProp.y = 88;
+    console.log('✓ Updated Casino position to C: (52, 88)');
+  }
+  
+  // Update Luxury Motors position
+  const luxuryProp = GameState.propertyBuildings.find(b => b.id === 'dealer2');
+  if (luxuryProp) {
+    luxuryProp.x = 72;
+    luxuryProp.y = 88;
+    console.log('✓ Updated Luxury Motors position to L: (72, 88)');
+  }
+  
+  // Save the updates
+  Storage.save();
+  console.log('💾 Position updates saved!');
+  // === END FORCE UPDATE ===
+  
   // Backfill any new landmark-properties added in later updates
   try { ensureLandmarkProperties(); } catch(e) {}
   return;
