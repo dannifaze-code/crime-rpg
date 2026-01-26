@@ -15555,93 +15555,65 @@ function ensureLandmarkProperties() {
     function initPropertyBuildings() {
       console.log('=== Initializing Property Buildings ===');
       
-      // Ensure fixedPropertyPositions exists (critical for initialization)
-      if (!Array.isArray(GameState.fixedPropertyPositions) || GameState.fixedPropertyPositions.length === 0) {
-        console.log('⚠️ fixedPropertyPositions missing - restoring from DEFAULT_STATE...');
-        GameState.fixedPropertyPositions = JSON.parse(JSON.stringify(DEFAULT_STATE.fixedPropertyPositions));
-        console.log(`✅ Restored ${GameState.fixedPropertyPositions.length} fixed property positions`);
-      }
-      
       // === FORCE REFRESH FLAG: Change this version to force reload all properties ===
-      const PROPERTY_LAYOUT_VERSION = 3; // Increment this to force refresh
+      const PROPERTY_LAYOUT_VERSION = 4; // Increment this to force refresh - BUMPED TO 4
       
-      if (!GameState.propertyLayoutVersion || GameState.propertyLayoutVersion < PROPERTY_LAYOUT_VERSION) {
-        console.log(`🔄 Property layout version outdated (${GameState.propertyLayoutVersion || 0} < ${PROPERTY_LAYOUT_VERSION})`);
-        console.log('🔄 FORCING COMPLETE PROPERTY REFRESH...');
+      // Always ensure we have the canonical fixedPropertyPositions from DEFAULT_STATE
+      // This guarantees all 21 buildings are available
+      const canonicalPositions = DEFAULT_STATE.fixedPropertyPositions;
+      console.log(`📋 Canonical fixedPropertyPositions has ${canonicalPositions ? canonicalPositions.length : 0} buildings`);
+      
+      // Check if we need to force refresh (version mismatch OR wrong building count)
+      const currentCount = GameState.propertyBuildings ? GameState.propertyBuildings.length : 0;
+      const expectedCount = canonicalPositions ? canonicalPositions.length : 21;
+      const needsRefresh = !GameState.propertyLayoutVersion || 
+                          GameState.propertyLayoutVersion < PROPERTY_LAYOUT_VERSION ||
+                          currentCount !== expectedCount;
+      
+      if (needsRefresh) {
+        console.log(`🔄 Property refresh needed:`);
+        console.log(`   - Version: ${GameState.propertyLayoutVersion || 0} < ${PROPERTY_LAYOUT_VERSION}`);
+        console.log(`   - Building count: ${currentCount} !== ${expectedCount}`);
+        console.log('🔄 FORCING COMPLETE PROPERTY REFRESH FROM DEFAULT_STATE...');
         
-        // Clear existing properties
-        GameState.propertyBuildings = [];
+        // Preserve ownership status from existing buildings
+        const ownedBuildings = {};
+        if (Array.isArray(GameState.propertyBuildings)) {
+          GameState.propertyBuildings.forEach(b => {
+            if (b.owned) {
+              ownedBuildings[b.id] = {
+                owned: b.owned,
+                upgradeLevel: b.upgradeLevel || 0,
+                lastCollected: b.lastCollected
+              };
+            }
+          });
+          console.log(`   - Preserving ownership for ${Object.keys(ownedBuildings).length} owned buildings`);
+        }
+        
+        // Rebuild from DEFAULT_STATE.fixedPropertyPositions (the canonical source)
+        GameState.propertyBuildings = canonicalPositions.map(prop => ({
+          ...prop,
+          owned: ownedBuildings[prop.id]?.owned || false,
+          upgradeLevel: ownedBuildings[prop.id]?.upgradeLevel || 0,
+          lastCollected: ownedBuildings[prop.id]?.lastCollected || null
+        }));
+        
+        // Also update GameState.fixedPropertyPositions to match
+        GameState.fixedPropertyPositions = JSON.parse(JSON.stringify(canonicalPositions));
         
         // Update version
         GameState.propertyLayoutVersion = PROPERTY_LAYOUT_VERSION;
         
-        // Will fall through to re-initialization below
-      }
-      // === END FORCE REFRESH ===
-      
-      // Check if buildings already initialized (length > 0 means already has buildings)
-      
-if (GameState.propertyBuildings && GameState.propertyBuildings.length > 0) {
-  console.log(`Property buildings already initialized: ${GameState.propertyBuildings.length}`);
-  
-  // === FORCE UPDATE: Apply new positions to existing saved games ===
-  console.log('🔄 Applying position updates to existing properties...');
-  
-  // Update Gun Shop position
-  const gunshopProp = GameState.propertyBuildings.find(b => b.id === 'gunshop');
-  if (gunshopProp) {
-    gunshopProp.x = 3;
-    gunshopProp.y = 6;
-    console.log('✓ Updated Gun Shop position to G: (3, 6)');
-  }
-  
-  // Update Casino position
-  const casinoProp = GameState.propertyBuildings.find(b => b.id === 'casino');
-  if (casinoProp) {
-    casinoProp.x = 52;
-    casinoProp.y = 88;
-    console.log('✓ Updated Casino position to C: (52, 88)');
-  }
-  
-  // Update Luxury Motors position
-  const luxuryProp = GameState.propertyBuildings.find(b => b.id === 'dealer2');
-  if (luxuryProp) {
-    luxuryProp.x = 72;
-    luxuryProp.y = 88;
-    console.log('✓ Updated Luxury Motors position to L: (72, 88)');
-  }
-  
-  // Save the updates
-  Storage.save();
-  console.log('💾 Position updates saved!');
-  // === END FORCE UPDATE ===
-  
-  // Backfill any new landmark-properties added in later updates
-  try { ensureLandmarkProperties(); } catch(e) {}
-  return;
-}
-      
-      // Initialize from fixed positions (handles new saves OR old saves with empty array)
-      console.log('Creating property buildings from fixed positions...');
-      console.log('fixedPropertyPositions count:', GameState.fixedPropertyPositions ? GameState.fixedPropertyPositions.length : 0);
-      
-      if (!Array.isArray(GameState.fixedPropertyPositions) || GameState.fixedPropertyPositions.length === 0) {
-        console.error('❌ CRITICAL: No fixedPropertyPositions available!');
-        return;
+        // Save immediately
+        try { Storage.save(); } catch(e) {}
+        
+        console.log(`✅ Rebuilt ${GameState.propertyBuildings.length} property buildings from DEFAULT_STATE`);
+        console.log('Buildings:', GameState.propertyBuildings.map(b => b.name).join(', '));
+      } else {
+        console.log(`Property buildings already up to date: ${GameState.propertyBuildings.length} buildings, version ${GameState.propertyLayoutVersion}`);
       }
       
-      GameState.propertyBuildings = GameState.fixedPropertyPositions.map(prop => ({
-        ...prop,
-        owned: false,
-        upgradeLevel: 0,
-        lastCollected: null
-      }));
-      
-      try { ensureLandmarkProperties(); } catch(e) {}
-      Storage.save();
-      
-      console.log(`✅ Initialized ${GameState.propertyBuildings.length} property buildings`);
-      console.log('Buildings:', GameState.propertyBuildings.map(b => b.name).join(', '));
       console.log('========================================');
     }
 
@@ -15663,22 +15635,31 @@ if (GameState.propertyBuildings && GameState.propertyBuildings.length > 0) {
       // Remove existing property buildings (but not map icons)
       container.querySelectorAll('.property-building').forEach(el => el.remove());
       
-      // EMERGENCY FALLBACK: If propertyBuildings is empty, try to initialize it
-      if (!Array.isArray(GameState.propertyBuildings) || GameState.propertyBuildings.length === 0) {
-        console.warn('⚠️ propertyBuildings is empty - attempting emergency initialization...');
+      // EMERGENCY FALLBACK: If propertyBuildings is empty or has wrong count, rebuild from DEFAULT_STATE
+      const expectedCount = DEFAULT_STATE.fixedPropertyPositions ? DEFAULT_STATE.fixedPropertyPositions.length : 21;
+      if (!Array.isArray(GameState.propertyBuildings) || GameState.propertyBuildings.length < expectedCount) {
+        console.warn(`⚠️ propertyBuildings has ${GameState.propertyBuildings?.length || 0} buildings, expected ${expectedCount} - rebuilding...`);
         
-        // Try to use fixedPropertyPositions
-        const fixedPositions = GameState.fixedPropertyPositions || DEFAULT_STATE.fixedPropertyPositions;
-        if (Array.isArray(fixedPositions) && fixedPositions.length > 0) {
-          GameState.propertyBuildings = fixedPositions.map(prop => ({
+        // Use DEFAULT_STATE.fixedPropertyPositions as the canonical source
+        const canonicalPositions = DEFAULT_STATE.fixedPropertyPositions;
+        if (Array.isArray(canonicalPositions) && canonicalPositions.length > 0) {
+          // Preserve any existing ownership
+          const ownedBuildings = {};
+          if (Array.isArray(GameState.propertyBuildings)) {
+            GameState.propertyBuildings.forEach(b => {
+              if (b && b.owned) ownedBuildings[b.id] = b;
+            });
+          }
+          
+          GameState.propertyBuildings = canonicalPositions.map(prop => ({
             ...prop,
-            owned: false,
-            upgradeLevel: 0,
-            lastCollected: null
+            owned: ownedBuildings[prop.id]?.owned || false,
+            upgradeLevel: ownedBuildings[prop.id]?.upgradeLevel || 0,
+            lastCollected: ownedBuildings[prop.id]?.lastCollected || null
           }));
-          console.log(`✅ Emergency initialized ${GameState.propertyBuildings.length} property buildings`);
+          console.log(`✅ Rebuilt ${GameState.propertyBuildings.length} property buildings from DEFAULT_STATE`);
         } else {
-          console.error('❌ CRITICAL: No fixedPropertyPositions available for emergency init!');
+          console.error('❌ CRITICAL: DEFAULT_STATE.fixedPropertyPositions not available!');
           return;
         }
       }
