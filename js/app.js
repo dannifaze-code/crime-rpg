@@ -6271,6 +6271,10 @@ const CartoonSpriteGenerator = {
         snapshot: null,
         offers: null,
         lastToastAt: 0
+      ,
+        lastResolvedAt: 0,
+        lastResolvedLockdownId: null,
+        cooldownUntil: 0
       }
 
     };
@@ -6610,6 +6614,7 @@ const CartoonSpriteGenerator = {
     // =========================================================
     const CIAIntervention = (() => {
       const HEAT_THRESHOLD = 85;
+      const CIA_COOLDOWN_MS = 2 * 60 * 1000; // 2 minutes safety cooldown to prevent loops
 
       function _now() { return Date.now(); }
       function _clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
@@ -7304,12 +7309,28 @@ console.log('[CIA] Intervention staged (Phase 2)', st);
         const st = _ensureState();
         const heat = Number(GameState.player?.globalHeat || 0);
         const lockdown = !!GameState.cityState?.lockdown;
+
+        // If we're already mid-intervention, don't re-stage.
+        if (st.pendingChoice || st.active) return false;
+
+        // Heat-only trigger (outside lockdown)
         if (!lockdown && heat < HEAT_THRESHOLD) return false;
 
+        const now = _now();
+
+        // Global cooldown guard (prevents rapid re-trigger loops on mobile ticks)
+        if (st.cooldownUntil && now < Number(st.cooldownUntil || 0)) return false;
+
+        // If we're in a lockdown window, allow ONLY one intervention per lockdownId
         const lockdownId = String(GameState.cityState?.lockdownUntil || 'lockdown');
-        if (st.lockdownId && st.lockdownId === lockdownId && st.pendingChoice) {
-          return false; // already staged for this lockdown
+        if (lockdown) {
+          if (st.lockdownId && st.lockdownId === lockdownId) return false; // already staged for this lockdownId previously
+          if (st.lastResolvedLockdownId && st.lastResolvedLockdownId === lockdownId) return false; // already resolved for this lockdownId
+        } else {
+          // Outside lockdown: space out interventions even if heat stays high
+          if (st.lastResolvedAt && (now - Number(st.lastResolvedAt || 0) < CIA_COOLDOWN_MS)) return false;
         }
+
         return !!stage('lockdown');
       }
 
@@ -7370,6 +7391,11 @@ console.log('[CIA] Intervention staged (Phase 2)', st);
         st.pendingChoice = false;
         st.active = false;
 
+        // Mark resolved to prevent immediate re-trigger loops
+        st.lastResolvedAt = _now();
+        st.lastResolvedLockdownId = st.lockdownId;
+        st.cooldownUntil = _now() + CIA_COOLDOWN_MS;
+
                 try { _closeUI(); } catch(e) {}
 _toast('🕶️ Deal done. Heat adjusted.');
         console.log('[CIA] Resolution applied', type, payload, 'new heat=', GameState.player.globalHeat);
@@ -7380,6 +7406,12 @@ _toast('🕶️ Deal done. Heat adjusted.');
         const st = _ensureState();
         st.active = false;
         st.pendingChoice = false;
+
+        // Treat manual end as a resolution for cooldown purposes
+        st.lastResolvedAt = _now();
+        st.lastResolvedLockdownId = st.lockdownId;
+        st.cooldownUntil = _now() + CIA_COOLDOWN_MS;
+
         try { _closeUI(); } catch(e) {}
         return true;
       }
