@@ -15455,7 +15455,7 @@ function updateTurfDefense(dt) {
       warehouse: { icon: '📦', color: '#95a5a6', name: 'Warehouse' },
       factory: { icon: '🏭', color: '#7f8c8d', name: 'Factory' },
       hospital: { icon: '🏥', color: '#e74c3c', name: 'Hospital' },
-      chopShop: { icon: '🚗', color: '#d35400', name: 'Chop Shop' },
+      chopshop: { icon: '🚗', color: '#d35400', name: 'Chop Shop' },
       gunshop: { icon: '🔫', color: '#8b4513', name: 'Gun Shop' },
       ganghq: { icon: '👥', color: '#c0392b', name: 'Gang HQ' }
     };
