@@ -6122,7 +6122,7 @@ const CartoonSpriteGenerator = {
       // Optimized spacing for mobile with minimum 10% gaps to prevent overlapping
       fixedPropertyPositions: [
         // ROW 1 - Top (y: 12)
-        { id: 'gunshop', type: 'gunshop', x: 3, y: 6, name: 'Gun Shop', price: 30000, income: 800 },
+        { id: 'gunshop', type: 'gunshop', x: 5, y: 18, name: 'Gun Shop', price: 30000, income: 800 },  // Moved down to gray area
         { id: 'strip1', type: 'stripclub', x: 35, y: 12, name: 'The Golden Palace', price: 80000, income: 2000 },
         { id: 'rise1', type: 'highrise', x: 58, y: 12, name: 'Platinum Tower', price: 300000, income: 5000 },
         { id: 'rise2', type: 'highrise', x: 75, y: 12, name: 'Diamond Heights', price: 300000, income: 5000 },
@@ -15556,7 +15556,7 @@ function ensureLandmarkProperties() {
       console.log('=== Initializing Property Buildings ===');
       
       // === FORCE REFRESH FLAG: Change this version to force reload all properties ===
-      const PROPERTY_LAYOUT_VERSION = 4; // Increment this to force refresh - BUMPED TO 4
+      const PROPERTY_LAYOUT_VERSION = 5; // Increment this to force refresh - BUMPED TO 5 for gun shop position fix
       
       // Always ensure we have the canonical fixedPropertyPositions from DEFAULT_STATE
       // This guarantees all 21 buildings are available
@@ -15689,11 +15689,11 @@ function ensureLandmarkProperties() {
         el.style.top = building.y + '%';
         // Ensure visibility with inline styles
         el.style.position = 'absolute';
-        el.style.fontSize = '20px';
+        el.style.fontSize = '28px';  // Increased from 20px to match safe house size
         el.style.zIndex = '100';
         el.style.cursor = 'pointer';
         el.style.transform = 'translate(-50%, -50%)';
-        el.style.textShadow = '0 0 3px rgba(0,0,0,0.8)';
+        el.style.textShadow = '0 0 4px rgba(0,0,0,0.9)';
         el.style.pointerEvents = 'auto';
         
         // Add click handler
