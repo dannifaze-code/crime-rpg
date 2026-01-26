@@ -6808,7 +6808,28 @@ const CartoonSpriteGenerator = {
               50%{ transform: translate(-50%, -50%) scale(1.10); }
               100%{ transform: translate(-50%, -50%) scale(1.00); }
             }
-          `;
+          
+            /* Mobile + reduced motion tuning */
+            @media (max-width: 480px), (pointer: coarse) {
+              .cia-lockdown-clouds{
+                opacity:0.55;
+                filter: blur(6px);
+                inset:-12%;
+                animation-duration: 20s;
+              }
+              .cia-lockdown-dimmer{
+                background: rgba(0,0,0,0.66);
+              }
+              .cia-dialog{
+                width:min(94vw, 420px);
+              }
+            }
+            @media (prefers-reduced-motion: reduce) {
+              .cia-lockdown-clouds{ animation: none !important; }
+              .cia-dialog{ animation: none !important; opacity:1 !important; transform:none !important; }
+              .cia-btn:active{ transform:none !important; }
+            }
+`;
           document.head.appendChild(style);
         } catch (e) {}
       }
@@ -6883,8 +6904,10 @@ const CartoonSpriteGenerator = {
         try { return '$' + v.toLocaleString(); } catch(e) { return '$' + v; }
       }
 
-      function _setDialog(title, bodyHtml, actions, hintText) {
+      function _setDialog(title, bodyHtml, actions, hintText, opts) {
         _openUI();
+        const o = opts && typeof opts === 'object' ? opts : {};
+        const delayActionsMs = Math.max(0, Math.floor(Number(o.delayActionsMs || 0)));
         if (UI.titleEl) UI.titleEl.textContent = title || 'The Visitor';
         if (UI.bodyEl) UI.bodyEl.innerHTML = bodyHtml || '';
         if (UI.hintEl) UI.hintEl.textContent = hintText || '';
@@ -6895,7 +6918,18 @@ const CartoonSpriteGenerator = {
           const b = document.createElement('button');
           b.className = 'cia-btn ' + (btn.kind || '');
           b.type = 'button';
-          b.disabled = !!btn.disabled;
+
+          const origDisabled = !!btn.disabled;
+          b.dataset.ciaOrigDisabled = origDisabled ? '1' : '0';
+
+          // Pacing: optionally "hold" buttons for a beat, but preserve original disabled state.
+          if (delayActionsMs > 0) {
+            b.disabled = true;
+            b.dataset.ciaDelay = '1';
+          } else {
+            b.disabled = origDisabled;
+          }
+
           b.innerHTML = btn.html || btn.label || 'Choose';
           b.addEventListener('click', (e) => {
             e.preventDefault();
@@ -6904,9 +6938,72 @@ const CartoonSpriteGenerator = {
           });
           UI.actionsEl.appendChild(b);
         });
+
+        if (delayActionsMs > 0) {
+          setTimeout(() => {
+            try {
+              UI.actionsEl.querySelectorAll('button[data-cia-delay="1"]').forEach(b => {
+                const wasDisabled = (b.dataset.ciaOrigDisabled === '1');
+                b.disabled = wasDisabled;
+                b.removeAttribute('data-cia-delay');
+              });
+            } catch(e) {}
+          }, delayActionsMs);
+        }
       }
 
-      function _applyAndExit(type, payload) {
+      function _applyAndExit(type, payload, flavor) {
+        // Tiny pacing beat so the player can feel the choice "land"
+        try {
+          const msg = (typeof flavor === 'string' && flavor.trim()) ? flavor.trim() : 'Processing…';
+          _setDialog('The Visitor', `<div style="opacity:.92">🕶️ ${msg}</div><div style="opacity:.70; margin-top:6px;">The fog shuffles paperwork.</div>`, [], '');
+        } catch(e) {}
+        setTimeout(() => {
+          try {
+            const ok = apply(type, payload);
+            if (!ok) _toast('⚠️ Could not apply that deal.');
+          } catch(e) {
+            console.warn('[CIA UI] apply failed', e);
+            _toast('⚠️ Something went wrong.');
+          }
+        }, 260);
+      }
+
+
+      
+      function _renderIntroDialog(st) {
+        const snap = st.snapshot || {};
+        const heat = Number(snap.globalHeat || GameState.player?.globalHeat || 0);
+
+        const body = `
+          <div style="opacity:.92; margin-bottom:6px;">
+            The air gets thicker. Phones go quiet.
+          </div>
+          <div style="opacity:.82">
+            Somewhere nearby, a door you didn’t see before… <b>opens</b>.
+          </div>
+          <div style="opacity:.78; margin-top:8px;">
+            Heat: <b>${Math.floor(heat)}%</b>
+          </div>
+        `;
+
+        const actions = [
+          {
+            kind: 'primary',
+            html: `<span>😐 Continue</span><small>Hear the offer</small>`,
+            onClick: () => { try { _renderMainDialog(st); } catch(e) {} }
+          },
+          {
+            kind: 'ghost',
+            html: `<span>🧾 Skip the poetry</span><small>Show options</small>`,
+            onClick: () => { try { _renderMainDialog(st); } catch(e) {} }
+          }
+        ];
+
+        _setDialog('Lockdown', body, actions, 'No pausing. No escaping. Just choices.', { delayActionsMs: 500 });
+      }
+
+function _renderMainDialog(type, payload) {
         try {
           const ok = apply(type, payload);
           if (!ok) _toast('⚠️ Could not apply that deal.');
@@ -6929,8 +7026,8 @@ const CartoonSpriteGenerator = {
           actions.push({
             kind: 'primary',
             disabled: !canPay,
-            html: `<span>💰 Pay ${_fmtMoney(offers.cash.cost)}</span><small>−${offers.cash.heatReduction} heat</small>`,
-            onClick: () => _applyAndExit('cash', offers.cash)
+            html: `<span>💰 Pay ${_fmtMoney(offers.cash.cost)} <small style="opacity:.9">(hush money)</small></span><small>Heat −${offers.cash.heatReduction}</small>`,
+            onClick: () => _applyAndExit('cash', offers.cash, 'Payment received. Nothing personal.')
           });
         }
 
@@ -6938,8 +7035,8 @@ const CartoonSpriteGenerator = {
         if (offers.weapons) {
           actions.push({
             kind: '',
-            html: `<span>🔫 Surrender ${offers.weapons.weaponsTaken} weapon${offers.weapons.weaponsTaken === 1 ? '' : 's'}</span><small>−${offers.weapons.heatReduction} heat</small>`,
-            onClick: () => _applyAndExit('weapons', offers.weapons)
+            html: `<span>🔫 Hand over ${offers.weapons.weaponsTaken} piece${offers.weapons.weaponsTaken === 1 ? '' : 's'}</span><small>Heat −${offers.weapons.heatReduction}</small>`,
+            onClick: () => _applyAndExit('weapons', offers.weapons, 'Weapons logged. Safely “stored”.')
           });
         }
 
@@ -6948,7 +7045,7 @@ const CartoonSpriteGenerator = {
         if (propOffers.length) {
           actions.push({
             kind: 'danger',
-            html: `<span>🏢 Lease a property</span><small>Pick 1 • −${Math.max(...propOffers.map(o => Number(o.heatReduction || 0)))} max</small>`,
+            html: `<span>🏢 Let them “lease” a property</span><small>Pick 1 • Heat −${Math.max(...propOffers.map(o => Number(o.heatReduction || 0)))} max</small>`,
             onClick: () => _startPropertyPickMode(st)
           });
         }
@@ -6957,19 +7054,19 @@ const CartoonSpriteGenerator = {
         actions.push({
           kind: 'ghost',
           html: `<span>🙅 Refuse</span><small>No deal</small>`,
-          onClick: () => { _toast('The Visitor fades back into the fog.'); end(); }
+          onClick: () => { _toast('The fog closes. The Visitor is gone.'); end(); }
         });
 
         const body = `
           <div style="opacity:.92; margin-bottom:6px;">
-            Lockdown is in effect. Heat is <b>${Math.floor(heat)}%</b>.
+            Lockdown is in effect. Your Heat is <b>${Math.floor(heat)}%</b>.
           </div>
           <div style="opacity:.82">
-            A calm voice offers a way out… for a price.
+            A voice, smooth as a velvet threat: <i>“We can make this… quieter.”</i>
           </div>
         `;
 
-        _setDialog('The Visitor', body, actions, 'Pick one option to reduce Heat.');
+        _setDialog('The Visitor', body, actions, 'Choose your exit. Choose carefully.', { delayActionsMs: 420 });
       }
 
       function _clearPropertyHighlights() {
@@ -7011,14 +7108,14 @@ const CartoonSpriteGenerator = {
 
         const body = `
           <div style="opacity:.92; margin-bottom:6px;">
-            Pick a property on the map to lease for 24h.
+            Pick a property on the map. They “lease” it for 24h.
           </div>
           <div style="opacity:.80">
             Eligible properties will pulse red.
           </div>
         `;
 
-        _setDialog('Lease a Property', body, actions, 'Tap a highlighted property on the Turf map.');
+        _setDialog('Lease a Property', body, actions, 'Tap a highlighted property on the Turf map.', { delayActionsMs: 260 });
 
         // Best effort: switch to Turf tab so the player can actually see buildings
         try {
@@ -7042,8 +7139,8 @@ const CartoonSpriteGenerator = {
           if (!offer) return;
 
           _applyPropertyHighlights(eligibleIds, pid);
-          _toast('🏢 Selected: ' + (offer.propertyName || pid));
-          setTimeout(() => _applyAndExit('property', offer), 120);
+          _toast('🏢 Marked: ' + (offer.propertyName || pid));
+          setTimeout(() => _applyAndExit('property', offer, 'Lease paperwork stamped.'), 220);
         };
 
         UI.pickListener = pickHandler;
@@ -7197,7 +7294,7 @@ return {
           _toast('👤 The Visitor has arrived');
         }
 
-                try { _renderMainDialog(st); } catch(e) { console.warn('[CIA UI] render failed', e); }
+                try { _renderIntroDialog(st); } catch(e) { console.warn('[CIA UI] render failed', e); }
 
 console.log('[CIA] Intervention staged (Phase 2)', st);
         return st;
