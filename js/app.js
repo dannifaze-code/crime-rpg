@@ -15555,6 +15555,13 @@ function ensureLandmarkProperties() {
     function initPropertyBuildings() {
       console.log('=== Initializing Property Buildings ===');
       
+      // Ensure fixedPropertyPositions exists (critical for initialization)
+      if (!Array.isArray(GameState.fixedPropertyPositions) || GameState.fixedPropertyPositions.length === 0) {
+        console.log('⚠️ fixedPropertyPositions missing - restoring from DEFAULT_STATE...');
+        GameState.fixedPropertyPositions = JSON.parse(JSON.stringify(DEFAULT_STATE.fixedPropertyPositions));
+        console.log(`✅ Restored ${GameState.fixedPropertyPositions.length} fixed property positions`);
+      }
+      
       // === FORCE REFRESH FLAG: Change this version to force reload all properties ===
       const PROPERTY_LAYOUT_VERSION = 3; // Increment this to force refresh
       
@@ -15616,6 +15623,13 @@ if (GameState.propertyBuildings && GameState.propertyBuildings.length > 0) {
       
       // Initialize from fixed positions (handles new saves OR old saves with empty array)
       console.log('Creating property buildings from fixed positions...');
+      console.log('fixedPropertyPositions count:', GameState.fixedPropertyPositions ? GameState.fixedPropertyPositions.length : 0);
+      
+      if (!Array.isArray(GameState.fixedPropertyPositions) || GameState.fixedPropertyPositions.length === 0) {
+        console.error('❌ CRITICAL: No fixedPropertyPositions available!');
+        return;
+      }
+      
       GameState.propertyBuildings = GameState.fixedPropertyPositions.map(prop => ({
         ...prop,
         owned: false,
@@ -15642,25 +15656,45 @@ if (GameState.propertyBuildings && GameState.propertyBuildings.length > 0) {
       }
       
       console.log('✅ Container found:', container);
-      console.log('GameState.propertyBuildings:', GameState.propertyBuildings);
+      console.log('GameState.propertyBuildings exists:', !!GameState.propertyBuildings);
+      console.log('GameState.propertyBuildings is array:', Array.isArray(GameState.propertyBuildings));
       console.log('Number of buildings:', GameState.propertyBuildings ? GameState.propertyBuildings.length : 0);
       
-      // Remove existing property buildings
+      // Remove existing property buildings (but not map icons)
       container.querySelectorAll('.property-building').forEach(el => el.remove());
       
-      // Check if propertyBuildings exists
-      if (!GameState.propertyBuildings || GameState.propertyBuildings.length === 0) {
-        console.warn('⚠️ No property buildings to render!');
-        return;
+      // EMERGENCY FALLBACK: If propertyBuildings is empty, try to initialize it
+      if (!Array.isArray(GameState.propertyBuildings) || GameState.propertyBuildings.length === 0) {
+        console.warn('⚠️ propertyBuildings is empty - attempting emergency initialization...');
+        
+        // Try to use fixedPropertyPositions
+        const fixedPositions = GameState.fixedPropertyPositions || DEFAULT_STATE.fixedPropertyPositions;
+        if (Array.isArray(fixedPositions) && fixedPositions.length > 0) {
+          GameState.propertyBuildings = fixedPositions.map(prop => ({
+            ...prop,
+            owned: false,
+            upgradeLevel: 0,
+            lastCollected: null
+          }));
+          console.log(`✅ Emergency initialized ${GameState.propertyBuildings.length} property buildings`);
+        } else {
+          console.error('❌ CRITICAL: No fixedPropertyPositions available for emergency init!');
+          return;
+        }
       }
+      
+      // Log the first few buildings for debugging
+      console.log('First 3 buildings:', GameState.propertyBuildings.slice(0, 3).map(b => `${b.name} (${b.type}) at ${b.x},${b.y}`));
+      
+      let renderedCount = 0;
       
       // Render each property building
       GameState.propertyBuildings.forEach((building, index) => {
-        console.log(`Rendering building ${index + 1}:`, building.name, `at (${building.x}%, ${building.y}%)`);
+        console.log(`Rendering building ${index + 1}:`, building.name, `type=${building.type}`, `at (${building.x}%, ${building.y}%)`);
         
         const buildingType = PROPERTY_TYPES[building.type];
         if (!buildingType) {
-          console.error(`❌ Unknown building type: ${building.type}`);
+          console.error(`❌ Unknown building type: ${building.type} - skipping (PROPERTY_TYPES keys: ${Object.keys(PROPERTY_TYPES).join(', ')})`);
           return;
         }
         
@@ -15672,6 +15706,14 @@ if (GameState.propertyBuildings && GameState.propertyBuildings.length > 0) {
         el.innerHTML = buildingType.icon;
         el.style.left = building.x + '%';
         el.style.top = building.y + '%';
+        // Ensure visibility with inline styles
+        el.style.position = 'absolute';
+        el.style.fontSize = '20px';
+        el.style.zIndex = '100';
+        el.style.cursor = 'pointer';
+        el.style.transform = 'translate(-50%, -50%)';
+        el.style.textShadow = '0 0 3px rgba(0,0,0,0.8)';
+        el.style.pointerEvents = 'auto';
         
         // Add click handler
         el.addEventListener('click', (e) => {
@@ -15680,10 +15722,11 @@ if (GameState.propertyBuildings && GameState.propertyBuildings.length > 0) {
         });
         
         container.appendChild(el);
-        console.log(`✅ Added ${building.name} to map`);
+        renderedCount++;
       });
       
-      console.log(`✅ Rendered ${GameState.propertyBuildings.length} property buildings`);
+      console.log(`✅ Rendered ${renderedCount}/${GameState.propertyBuildings.length} property buildings`);
+      console.log('Property buildings in DOM:', container.querySelectorAll('.property-building').length);
       console.log('========================================');
     }
 
