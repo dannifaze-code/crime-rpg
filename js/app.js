@@ -28520,3 +28520,203 @@ function getCameraShakeOffset(defense) {
     return { x: 0, y: 0 };
   }
 }
+
+
+// ------------------------------------------------------------
+// CIA Intervention (GLOBAL BOOTSTRAP) - ensures console commands exist
+// If a previous injection accidentally scoped CIAIntervention inside a function,
+// this block defines a global CIAIntervention module and exports helpers.
+// ------------------------------------------------------------
+(function(){
+  try{
+    const g = (typeof globalThis !== 'undefined') ? globalThis : window;
+    // If CIAIntervention is already global, just ensure helpers exist.
+    if (g.CIAIntervention && typeof g.CIAIntervention.start === 'function') {
+      if (typeof g.startCIAIntervention !== 'function') g.startCIAIntervention = (reason)=>g.CIAIntervention.start(reason||'lockdown');
+      if (typeof g.endCIAIntervention !== 'function') g.endCIAIntervention = ()=>g.CIAIntervention.end();
+      if (typeof g.applyCIAResolution !== 'function') g.applyCIAResolution = (type,payload)=>g.CIAIntervention.applyResolution(type,payload);
+      return;
+    }
+
+    function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+
+    function toast(msg, type='info'){
+      try{
+        if (typeof AccountManager !== 'undefined' && AccountManager && typeof AccountManager.showToast === 'function'){
+          AccountManager.showToast(msg, type);
+          return;
+        }
+      }catch(e){}
+      try{
+        const id='cia_toast_fallback';
+        let el=document.getElementById(id);
+        if(!el){
+          el=document.createElement('div');
+          el.id=id;
+          el.style.position='fixed';
+          el.style.left='50%';
+          el.style.top='14px';
+          el.style.transform='translateX(-50%)';
+          el.style.zIndex=999999;
+          el.style.padding='10px 14px';
+          el.style.borderRadius='12px';
+          el.style.fontFamily='system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+          el.style.fontSize='14px';
+          el.style.fontWeight='700';
+          el.style.color='#fff';
+          el.style.background='rgba(0,0,0,0.75)';
+          el.style.backdropFilter='blur(6px)';
+          el.style.maxWidth='92vw';
+          el.style.textAlign='center';
+          el.style.pointerEvents='none';
+          el.style.opacity='0';
+          el.style.transition='opacity 160ms ease';
+          document.body.appendChild(el);
+        }
+        el.textContent=msg;
+        el.style.opacity='1';
+        clearTimeout(el._hideT);
+        el._hideT=setTimeout(()=>{ try{ el.style.opacity='0'; }catch(e){} }, 1600);
+      }catch(e){}
+    }
+
+    function ensureState(){
+      try{ if (!g.GameState) return; }catch(e){ return; }
+      if (!g.GameState.ciaIntervention){
+        g.GameState.ciaIntervention = { active:false, reason:null, snapshot:null, offers:null, lockdownId:null, pendingChoice:false };
+      } else {
+        const ci=g.GameState.ciaIntervention;
+        if (typeof ci.active!=='boolean') ci.active=false;
+        if (!('pendingChoice' in ci)) ci.pendingChoice=false;
+      }
+    }
+
+    function captureSnapshot(){
+      ensureState();
+      if (!g.GameState || !g.GameState.player) return null;
+      const p=g.GameState.player;
+      const props = (g.GameState.turf && Array.isArray(g.GameState.turf.properties))
+        ? g.GameState.turf.properties.filter(x=>x && x.owned).map(x=>({
+            id: x.id ?? x.key ?? x.name ?? String(Math.random()),
+            name: x.name || 'Property',
+            dailyIncome: x.dailyIncome || x.income || 0,
+            tier: x.tier || 1
+          }))
+        : [];
+      return {
+        cash: p.cash || 0,
+        weapons: Array.isArray(p.weapons) ? [...p.weapons] : [],
+        weaponParts: (p.weaponParts && typeof p.weaponParts==='object') ? {...p.weaponParts} : {},
+        properties: props,
+        globalHeat: g.GameState.globalHeat ?? g.GameState.heat ?? 0,
+        timestamp: Date.now()
+      };
+    }
+
+    function computeOffers(snap){
+      if (!snap) return null;
+      // cash offer: % scales with wealth, reduction scales with current heat
+      let cashOffer=null;
+      if (snap.cash > 0){
+        const pct = Math.min(0.35, 0.10 + (snap.cash/1_000_000));
+        const cost = Math.max(1, Math.floor(snap.cash * pct));
+        const heatReduction = clamp((snap.globalHeat||0) * pct, 10, 70);
+        cashOffer = { cost, pct, heatReduction };
+      }
+      let weaponsOffer=null;
+      const wCount = snap.weapons ? snap.weapons.length : 0;
+      if (wCount>0){
+        const heatReduction = clamp(wCount * 8, 10, 60);
+        weaponsOffer = { weaponsTaken: wCount, heatReduction };
+      }
+      let propertiesOffer=null;
+      if (snap.properties && snap.properties.length){
+        propertiesOffer = snap.properties.map(pr=>({
+          propertyId: pr.id,
+          name: pr.name,
+          durationHours: 24,
+          heatReduction: clamp((pr.dailyIncome||0)/10, 5, 40),
+        }));
+      }
+      return { cash: cashOffer, weapons: weaponsOffer, properties: propertiesOffer };
+    }
+
+    function start(reason='lockdown'){
+      ensureState();
+      const ci=g.GameState.ciaIntervention;
+      // Phase 1 is non-blocking: we mark pendingChoice for later UI.
+      ci.active = false;
+      ci.pendingChoice = true;
+      ci.reason = reason;
+      ci.snapshot = captureSnapshot();
+      ci.offers = computeOffers(ci.snapshot);
+      try{ console.log('[CIA] Intervention staged (Phase 1)', ci); }catch(e){}
+      toast('👤 The Visitor has arrived (Phase 1)', 'info');
+      return ci;
+    }
+
+    function end(){
+      ensureState();
+      const ci=g.GameState.ciaIntervention;
+      ci.pendingChoice=false;
+      ci.reason=null;
+      // keep snapshot/offers for debugging
+      try{ console.log('[CIA] Intervention cleared'); }catch(e){}
+    }
+
+    function reduceGlobalHeat(amount){
+      try{
+        if (!g.GameState) return;
+        const key = ('globalHeat' in g.GameState) ? 'globalHeat' : (('heat' in g.GameState) ? 'heat' : null);
+        if (!key) return;
+        g.GameState[key] = Math.max(0, (g.GameState[key]||0) - (amount||0));
+      }catch(e){}
+    }
+
+    function applyResolution(type, payload){
+      ensureState();
+      if (!g.GameState || !g.GameState.player) return;
+      const ci=g.GameState.ciaIntervention;
+      if (!ci.offers) ci.offers = computeOffers(ci.snapshot || captureSnapshot());
+      switch(type){
+        case 'cash':
+          if (!payload) payload = ci.offers && ci.offers.cash;
+          if (payload && payload.cost){
+            g.GameState.player.cash = Math.max(0, (g.GameState.player.cash||0) - payload.cost);
+            reduceGlobalHeat(payload.heatReduction||0);
+          }
+          break;
+        case 'weapons':
+          if (!payload) payload = ci.offers && ci.offers.weapons;
+          if (payload && payload.weaponsTaken){
+            if (Array.isArray(g.GameState.player.weapons)) g.GameState.player.weapons = [];
+            reduceGlobalHeat(payload.heatReduction||0);
+          }
+          break;
+        case 'property':
+          if (payload && payload.propertyId){
+            // Phase 1: mark "leased" flag on turf properties if present (no visuals yet)
+            try{
+              if (g.GameState.turf && Array.isArray(g.GameState.turf.properties)){
+                const pr = g.GameState.turf.properties.find(x => (x && (x.id===payload.propertyId || x.key===payload.propertyId || x.name===payload.propertyId)));
+                if (pr){
+                  pr._leasedToCIAUntil = Date.now() + (payload.durationHours||24)*3600*1000;
+                }
+              }
+            }catch(e){}
+            reduceGlobalHeat(payload.heatReduction||0);
+          }
+          break;
+      }
+      toast('🕶️ Deal accepted. Heat reduced.', 'success');
+      // still pendingChoice until Phase 2 UI resolves
+    }
+
+    g.CIAIntervention = { ensureState, start, end, applyResolution };
+    g.cia = g.CIAIntervention;
+    g.startCIAIntervention = (reason)=>g.CIAIntervention.start(reason||'lockdown');
+    g.endCIAIntervention = ()=>g.CIAIntervention.end();
+    g.applyCIAResolution = (type,payload)=>g.CIAIntervention.applyResolution(type,payload);
+  }catch(e){}
+})();
+
