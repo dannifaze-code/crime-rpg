@@ -27845,54 +27845,6 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       console.log('[DEBUG] Loading storage...');
       Storage.load();
       
-      // ===== NUCLEAR OPTION: FORCE PROPERTY POSITION UPDATE =====
-      console.log('💥 NUCLEAR RESET: Forcing property position updates...');
-      
-      // Force clear old property layout version
-      if (typeof GameState !== 'undefined' && GameState) {
-        GameState.propertyLayoutVersion = 0; // Force version check to fail
-        
-        // Directly update property positions if they exist
-        if (Array.isArray(GameState.propertyBuildings) && GameState.propertyBuildings.length > 0) {
-          console.log(`💥 Found ${GameState.propertyBuildings.length} existing properties - updating positions...`);
-          
-          // Update Gun Shop
-          const gunshop = GameState.propertyBuildings.find(p => p.id === 'gunshop');
-          if (gunshop) {
-            gunshop.x = 3;
-            gunshop.y = 6;
-            console.log('✅ NUCLEAR: Gun Shop → (3, 6)');
-          }
-          
-          // Update Casino
-          const casino = GameState.propertyBuildings.find(p => p.id === 'casino');
-          if (casino) {
-            casino.x = 52;
-            casino.y = 88;
-            console.log('✅ NUCLEAR: Casino → (52, 88)');
-          }
-          
-          // Update Luxury Motors
-          const luxury = GameState.propertyBuildings.find(p => p.id === 'dealer2');
-          if (luxury) {
-            luxury.x = 72;
-            luxury.y = 88;
-            console.log('✅ NUCLEAR: Luxury Motors → (72, 88)');
-          }
-          
-          // Force save immediately
-          try {
-            Storage.save();
-            console.log('💾 NUCLEAR: Position updates saved!');
-          } catch(e) {
-            console.error('❌ NUCLEAR: Save failed:', e);
-          }
-        } else {
-          console.log('💥 No existing properties - will initialize fresh');
-        }
-      }
-      // ===== END NUCLEAR OPTION =====
-      
       console.log('[DEBUG] Initializing map icons...');
       initializeMapIcons(); // After load, so it doesn't get overwritten
       
@@ -27914,6 +27866,57 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       console.log('[DEBUG] Initializing property buildings...');
       // Initialize property buildings (player-owned real estate)
       initPropertyBuildings();
+      
+      // ===== NUCLEAR OPTION: FORCE POSITION UPDATE AFTER INIT =====
+      console.log('💥💥💥 NUCLEAR RESET: Forcing property position updates AFTER init...');
+      
+      if (Array.isArray(GameState.propertyBuildings) && GameState.propertyBuildings.length > 0) {
+        console.log(`💥 Found ${GameState.propertyBuildings.length} properties - updating positions NOW...`);
+        
+        // Update Gun Shop
+        const gunshop = GameState.propertyBuildings.find(p => p.id === 'gunshop');
+        if (gunshop) {
+          console.log(`   Before: Gun Shop at (${gunshop.x}, ${gunshop.y})`);
+          gunshop.x = 3;
+          gunshop.y = 6;
+          console.log(`   ✅ After: Gun Shop at (${gunshop.x}, ${gunshop.y})`);
+        } else {
+          console.error('   ❌ Gun Shop NOT FOUND!');
+        }
+        
+        // Update Casino
+        const casino = GameState.propertyBuildings.find(p => p.id === 'casino');
+        if (casino) {
+          console.log(`   Before: Casino at (${casino.x}, ${casino.y})`);
+          casino.x = 52;
+          casino.y = 88;
+          console.log(`   ✅ After: Casino at (${casino.x}, ${casino.y})`);
+        } else {
+          console.error('   ❌ Casino NOT FOUND!');
+        }
+        
+        // Update Luxury Motors (dealer2)
+        const luxury = GameState.propertyBuildings.find(p => p.id === 'dealer2');
+        if (luxury) {
+          console.log(`   Before: Luxury Motors at (${luxury.x}, ${luxury.y})`);
+          luxury.x = 72;
+          luxury.y = 88;
+          console.log(`   ✅ After: Luxury Motors at (${luxury.x}, ${luxury.y})`);
+        } else {
+          console.error('   ❌ Luxury Motors NOT FOUND!');
+        }
+        
+        // Force save immediately
+        try {
+          Storage.save();
+          console.log('💾💾💾 NUCLEAR: Position updates SAVED!');
+        } catch(e) {
+          console.error('❌ NUCLEAR: Save failed:', e);
+        }
+      } else {
+        console.error('💥 ERROR: No properties found after init!');
+      }
+      // ===== END NUCLEAR OPTION =====
       
       console.log('[DEBUG] Initializing inmate recruitment system...');
       // Initialize inmate recruitment system (police station & hideout)
