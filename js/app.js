@@ -6562,7 +6562,10 @@ const CartoonSpriteGenerator = {
 
     // Reset GameState to DEFAULT_STATE (used when creating new accounts)
     function resetToDefaultState() {
-      cons
+      console.log('[resetToDefaultState] Resetting GameState to DEFAULT_STATE');
+      Object.assign(GameState, JSON.parse(JSON.stringify(DEFAULT_STATE)));
+      console.log('[resetToDefaultState] GameState reset complete');
+    }
 
     // =========================================================
     // CIA "Visitor" Intervention — Phase 1 (Systems Only, No Art)
@@ -6871,18 +6874,6 @@ window.ciaDebug = () => {
       setTimeout(() => { try { CIAIntervention.maybeAutoStage(); } catch(e) {} }, 1200);
       setInterval(() => { try { CIAIntervention.maybeAutoStage(); } catch(e) {} }, 5000);
     } catch (e) {}
-
-ole.log('🔄 Resetting GameState to DEFAULT_STATE');
-      Object.keys(DEFAULT_STATE).forEach(key => {
-        if (typeof DEFAULT_STATE[key] === 'object' && DEFAULT_STATE[key] !== null) {
-          GameState[key] = JSON.parse(JSON.stringify(DEFAULT_STATE[key]));
-        } else {
-          GameState[key] = DEFAULT_STATE[key];
-        }
-      });
-      ensureGameStateSchema();
-      console.log('✅ GameState reset complete - Cash:', GameState.player.cash, 'Level:', GameState.player.level);
-    }
 
     // ========================================
     // TURF DEFENSE MODE
