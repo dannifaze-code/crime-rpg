@@ -15507,6 +15507,23 @@ function ensureLandmarkProperties() {
     function initPropertyBuildings() {
       console.log('=== Initializing Property Buildings ===');
       
+      // === FORCE REFRESH FLAG: Change this version to force reload all properties ===
+      const PROPERTY_LAYOUT_VERSION = 2; // Increment this to force refresh
+      
+      if (!GameState.propertyLayoutVersion || GameState.propertyLayoutVersion < PROPERTY_LAYOUT_VERSION) {
+        console.log(`🔄 Property layout version outdated (${GameState.propertyLayoutVersion || 0} < ${PROPERTY_LAYOUT_VERSION})`);
+        console.log('🔄 FORCING COMPLETE PROPERTY REFRESH...');
+        
+        // Clear existing properties
+        GameState.propertyBuildings = [];
+        
+        // Update version
+        GameState.propertyLayoutVersion = PROPERTY_LAYOUT_VERSION;
+        
+        // Will fall through to re-initialization below
+      }
+      // === END FORCE REFRESH ===
+      
       // Check if buildings already initialized (length > 0 means already has buildings)
       
 if (GameState.propertyBuildings && GameState.propertyBuildings.length > 0) {
