@@ -6655,7 +6655,423 @@ const CartoonSpriteGenerator = {
         } catch (e) {}
       }
 
-      function _ensureState() {
+      
+      // ---------------------------
+      // Phase 2 UI: Visual Lockdown + Dialog
+      // ---------------------------
+      const UI = {
+        mounted: false,
+        overlay: null,
+        clouds: null,
+        dialog: null,
+        titleEl: null,
+        bodyEl: null,
+        actionsEl: null,
+        dimmerEl: null,
+        activeStep: 'main',
+        pickListener: null,
+        pickRefreshTimer: null
+      };
+
+      function _injectStylesOnce() {
+        try {
+          if (document.getElementById('cia-phase2-styles')) return;
+          const style = document.createElement('style');
+          style.id = 'cia-phase2-styles';
+          style.textContent = `
+            .cia-lockdown-overlay{
+              position:fixed; inset:0; z-index: 999997;
+              display:none; align-items:center; justify-content:center;
+              pointer-events:auto;
+              font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+            }
+            .cia-lockdown-overlay.cia-open{ display:flex; }
+            .cia-lockdown-dimmer{
+              position:absolute; inset:0;
+              background: rgba(0,0,0,0.62);
+              backdrop-filter: blur(2px);
+            }
+            .cia-lockdown-clouds{
+              position:absolute; inset:-20%;
+              opacity:0.75;
+              background:
+                radial-gradient(circle at 20% 30%, rgba(255,255,255,0.18) 0 30%, transparent 35%),
+                radial-gradient(circle at 60% 20%, rgba(255,255,255,0.14) 0 28%, transparent 34%),
+                radial-gradient(circle at 80% 60%, rgba(255,255,255,0.12) 0 34%, transparent 40%),
+                radial-gradient(circle at 35% 75%, rgba(255,255,255,0.10) 0 30%, transparent 36%),
+                radial-gradient(circle at 55% 55%, rgba(255,255,255,0.08) 0 35%, transparent 42%);
+              filter: blur(8px);
+              transform: translate3d(0,0,0);
+              animation: ciaCloudDrift 14s linear infinite;
+            }
+            @keyframes ciaCloudDrift{
+              0%{ transform: translate3d(-3%, -2%, 0) scale(1.02); }
+              50%{ transform: translate3d(3%, 2%, 0) scale(1.05); }
+              100%{ transform: translate3d(-3%, -2%, 0) scale(1.02); }
+            }
+            .cia-dialog{
+              position:relative;
+              width:min(92vw, 420px);
+              border-radius: 18px;
+              background: rgba(12,12,14,0.92);
+              border: 1px solid rgba(255,255,255,0.14);
+              box-shadow: 0 18px 70px rgba(0,0,0,0.55);
+              padding: 14px 14px 12px;
+              transform: translateY(10px);
+              opacity:0;
+              animation: ciaPop 220ms ease forwards;
+              z-index: 2;
+            }
+            @keyframes ciaPop{
+              to { transform: translateY(0); opacity:1; }
+            }
+            .cia-dialog .cia-badge{
+              display:flex; align-items:center; gap:8px;
+              font-size: 12px; letter-spacing: 0.12em;
+              text-transform: uppercase;
+              color: rgba(171, 216, 255, 0.92);
+              margin-bottom: 8px;
+              font-weight: 700;
+            }
+            .cia-dialog .cia-title{
+              font-size: 18px;
+              font-weight: 800;
+              color: #fff;
+              margin: 0 0 8px 0;
+              line-height: 1.2;
+            }
+            .cia-dialog .cia-body{
+              font-size: 13px;
+              color: rgba(255,255,255,0.82);
+              line-height: 1.45;
+              margin-bottom: 12px;
+            }
+            .cia-dialog .cia-actions{
+              display:flex;
+              flex-direction:column;
+              gap: 8px;
+            }
+            .cia-btn{
+              border: 1px solid rgba(255,255,255,0.14);
+              background: rgba(255,255,255,0.06);
+              color: #fff;
+              padding: 11px 12px;
+              border-radius: 14px;
+              font-size: 14px;
+              font-weight: 700;
+              cursor: pointer;
+              display:flex;
+              align-items:center;
+              justify-content:space-between;
+              gap:10px;
+              -webkit-tap-highlight-color: transparent;
+            }
+            .cia-btn:active{ transform: scale(0.99); }
+            .cia-btn small{
+              font-size: 12px;
+              color: rgba(255,255,255,0.70);
+              font-weight: 600;
+            }
+            .cia-btn[disabled]{
+              opacity: 0.45;
+              cursor: not-allowed;
+              transform: none !important;
+            }
+            .cia-btn.primary{
+              border-color: rgba(138,180,248,0.45);
+              background: rgba(138,180,248,0.16);
+            }
+            .cia-btn.danger{
+              border-color: rgba(255,90,90,0.38);
+              background: rgba(255,90,90,0.12);
+            }
+            .cia-btn.ghost{
+              background: transparent;
+            }
+            .cia-hint{
+              margin-top: 10px;
+              font-size: 11px;
+              color: rgba(255,255,255,0.62);
+              opacity: 0.95;
+            }
+            /* Property highlight system */
+            .property-building.cia-highlight{
+              filter: drop-shadow(0 0 10px rgba(255, 70, 70, 0.9));
+              animation: ciaPulseRed 950ms ease-in-out infinite;
+            }
+            .property-building.cia-selected{
+              filter: drop-shadow(0 0 14px rgba(255, 110, 110, 1));
+              animation: ciaPulseRed 650ms ease-in-out infinite;
+            }
+            @keyframes ciaPulseRed{
+              0%{ transform: translate(-50%, -50%) scale(1.00); }
+              50%{ transform: translate(-50%, -50%) scale(1.10); }
+              100%{ transform: translate(-50%, -50%) scale(1.00); }
+            }
+          `;
+          document.head.appendChild(style);
+        } catch (e) {}
+      }
+
+      function _ensureUI() {
+        if (UI.mounted) return;
+        _injectStylesOnce();
+
+        const overlay = document.createElement('div');
+        overlay.className = 'cia-lockdown-overlay';
+        overlay.id = 'cia-lockdown-overlay';
+
+        const dimmer = document.createElement('div');
+        dimmer.className = 'cia-lockdown-dimmer';
+
+        const clouds = document.createElement('div');
+        clouds.className = 'cia-lockdown-clouds';
+
+        const dialog = document.createElement('div');
+        dialog.className = 'cia-dialog';
+        dialog.setAttribute('role', 'dialog');
+        dialog.setAttribute('aria-modal', 'true');
+
+        dialog.innerHTML = `
+          <div class="cia-badge">🕶️ SPECIAL EVENT • LOCKDOWN</div>
+          <div class="cia-title" id="cia-dialog-title">The Visitor</div>
+          <div class="cia-body" id="cia-dialog-body"></div>
+          <div class="cia-actions" id="cia-dialog-actions"></div>
+          <div class="cia-hint" id="cia-dialog-hint"></div>
+        `;
+
+        overlay.appendChild(dimmer);
+        overlay.appendChild(clouds);
+        overlay.appendChild(dialog);
+        document.body.appendChild(overlay);
+
+        // Prevent taps behind the overlay on mobile
+        overlay.addEventListener('touchmove', (e) => { e.preventDefault(); }, { passive: false });
+        dimmer.addEventListener('click', (e) => {
+          // Don't allow dismiss by tapping outside during an active choice
+          e.preventDefault();
+          e.stopPropagation();
+          _toast('🕶️ The Visitor is waiting.');
+        });
+
+        UI.mounted = true;
+        UI.overlay = overlay;
+        UI.clouds = clouds;
+        UI.dialog = dialog;
+        UI.titleEl = dialog.querySelector('#cia-dialog-title');
+        UI.bodyEl = dialog.querySelector('#cia-dialog-body');
+        UI.actionsEl = dialog.querySelector('#cia-dialog-actions');
+        UI.hintEl = dialog.querySelector('#cia-dialog-hint');
+      }
+
+      function _openUI() {
+        _ensureUI();
+        try { UI.overlay.classList.add('cia-open'); } catch(e) {}
+        try { document.body.style.overflow = 'hidden'; } catch(e) {}
+      }
+
+      function _closeUI() {
+        try {
+          _stopPropertyPickMode();
+          if (UI.overlay) UI.overlay.classList.remove('cia-open');
+          document.body.style.overflow = '';
+        } catch (e) {}
+      }
+
+      function _fmtMoney(n) {
+        const v = Math.max(0, Math.floor(Number(n || 0)));
+        try { return '$' + v.toLocaleString(); } catch(e) { return '$' + v; }
+      }
+
+      function _setDialog(title, bodyHtml, actions, hintText) {
+        _openUI();
+        if (UI.titleEl) UI.titleEl.textContent = title || 'The Visitor';
+        if (UI.bodyEl) UI.bodyEl.innerHTML = bodyHtml || '';
+        if (UI.hintEl) UI.hintEl.textContent = hintText || '';
+        if (!UI.actionsEl) return;
+
+        UI.actionsEl.innerHTML = '';
+        (actions || []).forEach(btn => {
+          const b = document.createElement('button');
+          b.className = 'cia-btn ' + (btn.kind || '');
+          b.type = 'button';
+          b.disabled = !!btn.disabled;
+          b.innerHTML = btn.html || btn.label || 'Choose';
+          b.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            try { btn.onClick && btn.onClick(); } catch(err) { console.warn('[CIA UI] button click error', err); }
+          });
+          UI.actionsEl.appendChild(b);
+        });
+      }
+
+      function _applyAndExit(type, payload) {
+        try {
+          const ok = apply(type, payload);
+          if (!ok) _toast('⚠️ Could not apply that deal.');
+        } catch(e) {
+          console.warn('[CIA UI] apply failed', e);
+          _toast('⚠️ Something went wrong.');
+        }
+      }
+
+      function _renderMainDialog(st) {
+        const offers = st.offers || {};
+        const snap = st.snapshot || {};
+        const heat = Number(snap.globalHeat || GameState.player?.globalHeat || 0);
+
+        const actions = [];
+
+        // Cash
+        if (offers.cash) {
+          const canPay = Number(GameState.player?.cash || 0) >= Number(offers.cash.cost || 0);
+          actions.push({
+            kind: 'primary',
+            disabled: !canPay,
+            html: `<span>💰 Pay ${_fmtMoney(offers.cash.cost)}</span><small>−${offers.cash.heatReduction} heat</small>`,
+            onClick: () => _applyAndExit('cash', offers.cash)
+          });
+        }
+
+        // Weapons
+        if (offers.weapons) {
+          actions.push({
+            kind: '',
+            html: `<span>🔫 Surrender ${offers.weapons.weaponsTaken} weapon${offers.weapons.weaponsTaken === 1 ? '' : 's'}</span><small>−${offers.weapons.heatReduction} heat</small>`,
+            onClick: () => _applyAndExit('weapons', offers.weapons)
+          });
+        }
+
+        // Property
+        const propOffers = Array.isArray(offers.properties) ? offers.properties : [];
+        if (propOffers.length) {
+          actions.push({
+            kind: 'danger',
+            html: `<span>🏢 Lease a property</span><small>Pick 1 • −${Math.max(...propOffers.map(o => Number(o.heatReduction || 0)))} max</small>`,
+            onClick: () => _startPropertyPickMode(st)
+          });
+        }
+
+        // Refuse
+        actions.push({
+          kind: 'ghost',
+          html: `<span>🙅 Refuse</span><small>No deal</small>`,
+          onClick: () => { _toast('The Visitor fades back into the fog.'); end(); }
+        });
+
+        const body = `
+          <div style="opacity:.92; margin-bottom:6px;">
+            Lockdown is in effect. Heat is <b>${Math.floor(heat)}%</b>.
+          </div>
+          <div style="opacity:.82">
+            A calm voice offers a way out… for a price.
+          </div>
+        `;
+
+        _setDialog('The Visitor', body, actions, 'Pick one option to reduce Heat.');
+      }
+
+      function _clearPropertyHighlights() {
+        try {
+          const icons = document.getElementById('map-icons');
+          if (!icons) return;
+          icons.querySelectorAll('.property-building.cia-highlight, .property-building.cia-selected')
+            .forEach(el => { el.classList.remove('cia-highlight'); el.classList.remove('cia-selected'); });
+        } catch(e) {}
+      }
+
+      function _applyPropertyHighlights(eligibleIds, selectedId) {
+        try {
+          const icons = document.getElementById('map-icons');
+          if (!icons) return;
+          const set = new Set((eligibleIds || []).map(String));
+          icons.querySelectorAll('.property-building').forEach(el => {
+            const id = String(el.dataset.id || '');
+            if (set.has(id)) el.classList.add('cia-highlight'); else el.classList.remove('cia-highlight');
+            if (selectedId && id === String(selectedId)) el.classList.add('cia-selected'); else el.classList.remove('cia-selected');
+          });
+        } catch(e) {}
+      }
+
+      function _startPropertyPickMode(st) {
+        const offers = st.offers || {};
+        const list = Array.isArray(offers.properties) ? offers.properties : [];
+        const eligibleIds = list.map(o => String(o.propertyId));
+
+        UI.activeStep = 'pick_property';
+
+        const actions = [
+          {
+            kind: 'ghost',
+            html: `<span>⬅️ Back</span><small>Choose a different deal</small>`,
+            onClick: () => { _stopPropertyPickMode(); _renderMainDialog(st); }
+          }
+        ];
+
+        const body = `
+          <div style="opacity:.92; margin-bottom:6px;">
+            Pick a property on the map to lease for 24h.
+          </div>
+          <div style="opacity:.80">
+            Eligible properties will pulse red.
+          </div>
+        `;
+
+        _setDialog('Lease a Property', body, actions, 'Tap a highlighted property on the Turf map.');
+
+        // Best effort: switch to Turf tab so the player can actually see buildings
+        try {
+          if (typeof showTab === 'function') showTab('turf');
+        } catch(e) {}
+
+        _applyPropertyHighlights(eligibleIds, null);
+
+        // Capture clicks on properties (override modal open)
+        const pickHandler = (ev) => {
+          const t = ev.target;
+          const el = t && t.closest ? t.closest('.property-building') : null;
+          if (!el) return;
+          const pid = String(el.dataset.id || '');
+          if (!eligibleIds.includes(pid)) return;
+
+          ev.preventDefault();
+          ev.stopPropagation();
+
+          const offer = list.find(o => String(o.propertyId) === pid) || null;
+          if (!offer) return;
+
+          _applyPropertyHighlights(eligibleIds, pid);
+          _toast('🏢 Selected: ' + (offer.propertyName || pid));
+          setTimeout(() => _applyAndExit('property', offer), 120);
+        };
+
+        UI.pickListener = pickHandler;
+
+        // Use capture to beat existing handlers
+        const icons = document.getElementById('map-icons');
+        if (icons) icons.addEventListener('click', pickHandler, true);
+
+        // Re-apply highlights periodically (map can re-render on mobile tab swaps)
+        UI.pickRefreshTimer = setInterval(() => {
+          try {
+            const st2 = GameState.ciaIntervention;
+            if (!st2 || !st2.active || !st2.pendingChoice) return;
+            _applyPropertyHighlights(eligibleIds, null);
+          } catch(e) {}
+        }, 650);
+      }
+
+      function _stopPropertyPickMode() {
+        try {
+          if (UI.pickRefreshTimer) { clearInterval(UI.pickRefreshTimer); UI.pickRefreshTimer = null; }
+          const icons = document.getElementById('map-icons');
+          if (icons && UI.pickListener) icons.removeEventListener('click', UI.pickListener, true);
+          UI.pickListener = null;
+          _clearPropertyHighlights();
+        } catch(e) {}
+      }
+function _ensureState() {
         try { ensureGameStateSchema(); } catch(e) {}
         if (!GameState.ciaIntervention || typeof GameState.ciaIntervention !== 'object') {
           GameState.ciaIntervention = JSON.parse(JSON.stringify(DEFAULT_STATE.ciaIntervention));
@@ -6778,10 +7194,12 @@ return {
         // Toast rate limit
         if (_now() - (st.lastToastAt || 0) > 1500) {
           st.lastToastAt = _now();
-          _toast('👤 The Visitor has arrived (Phase 1)');
+          _toast('👤 The Visitor has arrived');
         }
 
-        console.log('[CIA] Intervention staged (Phase 1)', st);
+                try { _renderMainDialog(st); } catch(e) { console.warn('[CIA UI] render failed', e); }
+
+console.log('[CIA] Intervention staged (Phase 2)', st);
         return st;
       }
 
@@ -6855,7 +7273,8 @@ return {
         st.pendingChoice = false;
         st.active = false;
 
-        _toast('🕶️ Deal done. Heat adjusted.');
+                try { _closeUI(); } catch(e) {}
+_toast('🕶️ Deal done. Heat adjusted.');
         console.log('[CIA] Resolution applied', type, payload, 'new heat=', GameState.player.globalHeat);
         return true;
       }
@@ -6864,6 +7283,7 @@ return {
         const st = _ensureState();
         st.active = false;
         st.pendingChoice = false;
+        try { _closeUI(); } catch(e) {}
         return true;
       }
 
@@ -15680,7 +16100,7 @@ function ensureLandmarkProperties() {
         }
         
         const el = document.createElement('div');
-        el.className = 'property-building' + (building.owned ? ' owned' : '');
+        el.className = 'property-building' + (building.owned ? ' owned' : '') + ((building.heatLeasedUntil && Date.now() < building.heatLeasedUntil) ? ' cia-highlight' : '');
         el.dataset.id = building.id;
         el.dataset.type = building.type;
         el.dataset.label = `${building.name} - $${(building.price / 1000).toFixed(0)}k`;
