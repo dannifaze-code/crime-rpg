@@ -6122,7 +6122,7 @@ const CartoonSpriteGenerator = {
       // Optimized spacing for mobile with minimum 10% gaps to prevent overlapping
       fixedPropertyPositions: [
         // ROW 1 - Top (y: 12)
-        { id: 'gunshop', type: 'gunshop', x: 5, y: 18, name: 'Gun Shop', price: 30000, income: 800 },  // Moved down to gray area
+        { id: 'gunshop', type: 'gunshop', x: 5, y: 30, name: 'Gun Shop', price: 30000, income: 800 },  // Moved down further to gray building area
         { id: 'strip1', type: 'stripclub', x: 35, y: 12, name: 'The Golden Palace', price: 80000, income: 2000 },
         { id: 'rise1', type: 'highrise', x: 58, y: 12, name: 'Platinum Tower', price: 300000, income: 5000 },
         { id: 'rise2', type: 'highrise', x: 75, y: 12, name: 'Diamond Heights', price: 300000, income: 5000 },
@@ -6135,7 +6135,7 @@ const CartoonSpriteGenerator = {
 
         // ROW 3 - Middle (y: 38)
         { id: 'warehouse', type: 'warehouse', x: 8, y: 38, name: 'Warehouse', price: 160000, income: 3200 },
-        { id: 'apt2', type: 'apartment', x: 42, y: 38, name: 'Downtown Apartments', price: 20000, income: 500 },
+        { id: 'apt2', type: 'apartment', x: 18, y: 55, name: 'Downtown Apartments', price: 20000, income: 500 },  // Moved to lower area near road intersection
 
         // ROW 4 - Center (y: 52)
         { id: 'dealer2', type: 'dealership', x: 72, y: 88, name: 'Luxury Motors', price: 50000, income: 1200 },
@@ -6154,7 +6154,7 @@ const CartoonSpriteGenerator = {
 
         // ROW 7 - Bottom (y: 88)
         { id: 'bank', type: 'bank', x: 35, y: 88, name: 'Bank', price: 450000, income: 9000 },
-        { id: 'mall1', type: 'mall', x: 75, y: 88, name: 'Grand Shopping Center', price: 600000, income: 10000 }
+        { id: 'mall1', type: 'mall', x: 88, y: 80, name: 'Grand Shopping Center', price: 600000, income: 10000 }  // Moved right and up to avoid Luxury Motors overlap
       ],
       
       // NEW: Procedural map data
@@ -15556,7 +15556,7 @@ function ensureLandmarkProperties() {
       console.log('=== Initializing Property Buildings ===');
       
       // === FORCE REFRESH FLAG: Change this version to force reload all properties ===
-      const PROPERTY_LAYOUT_VERSION = 5; // Increment this to force refresh - BUMPED TO 5 for gun shop position fix
+      const PROPERTY_LAYOUT_VERSION = 6; // Increment this to force refresh - BUMPED TO 6 for position fixes
       
       // Always ensure we have the canonical fixedPropertyPositions from DEFAULT_STATE
       // This guarantees all 21 buildings are available
