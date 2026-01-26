@@ -6635,20 +6635,28 @@ function resetToDefaultState() {
         const p = GameState.player || {};
         const weapons = Array.isArray(p.weapons) ? p.weapons.slice() : [];
         const weaponParts = (p.weaponParts && typeof p.weaponParts === 'object') ? { ...p.weaponParts } : {};
-        const properties = (GameState.turf?.properties || [])
-          .filter(x => x && x.owned)
+
+        // Owned properties are the "real" candidates, but Phase 1 needs logic testable even on fresh accounts.
+        // So we also keep an "all turf properties" list as a safe fallback.
+        const turfPropsAll = (GameState.turf?.properties || [])
+          .filter(x => x)
           .map(x => ({
             id: x.id,
             name: x.name || ('Property ' + x.id),
             dailyIncome: Number(x.dailyIncome || x.income || 0),
-            tier: Number(x.tier || 1)
+            tier: Number(x.tier || 1),
+            owned: !!x.owned
           }));
+
+        const properties = turfPropsAll
+          .filter(x => x.owned);
 
         return {
           cash: Number(p.cash || 0),
           weapons,
           weaponParts,
-          properties,
+          properties,              // owned properties
+          propertiesAll: turfPropsAll, // fallback list (Phase 1 testing)
           globalHeat: Number(p.globalHeat || 0),
           timestamp: _now()
         };
@@ -6674,12 +6682,28 @@ function resetToDefaultState() {
         })() : null;
 
         // Property offer list (Phase 2 will add UI selection)
-        const propertyOffers = (snapshot.properties.length > 0) ? snapshot.properties.map(p => ({
-          propertyId: p.id,
-          propertyName: p.name,
-          durationHours: 24,
-          heatReduction: _clamp(Math.floor((p.dailyIncome || 0) / 10), 5, 40)
-        })) : null;
+        // Phase 1 fallback: if player owns nothing yet, offer a few turf properties anyway
+        // so the selection/apply logic can be tested on new accounts without crashing.
+        const baseProps = (Array.isArray(snapshot.properties) && snapshot.properties.length)
+          ? snapshot.properties
+          : (Array.isArray(snapshot.propertiesAll) ? snapshot.propertiesAll.slice(0, 3) : []);
+
+        const propertyOffers = baseProps.length ? baseProps.map(p => {
+          const income = Number(p.dailyIncome || 0);
+          const tier = Number(p.tier || 1);
+          const reduction = income > 0
+            ? _clamp(Math.floor(income / 10), 5, 40)
+            : _clamp(tier * 6, 5, 30);
+
+          return {
+            propertyId: p.id,
+            propertyName: p.name,
+            durationHours: 24,
+            heatReduction: reduction,
+            owned: !!p.owned,
+            placeholder: !p.owned
+          };
+        }) : [];
 
         return { cash: cashOffer, weapons: weaponsOffer, properties: propertyOffers };
       }
@@ -6778,7 +6802,11 @@ function resetToDefaultState() {
         // Debug/Phase-1 helpers (text-only dialog + quick console commands)
         getState: () => _ensureState(),
         getSnapshot: () => (_ensureState().snapshot || null),
-        getOffers: () => (_ensureState().offers || null),
+        getOffers: () => {
+          const o = (_ensureState().offers || {});
+          if (!Array.isArray(o.properties)) o.properties = [];
+          return o;
+        },
         debugDialog: () => {
           const st = _ensureState();
           const s = st.snapshot || {};
@@ -6834,7 +6862,7 @@ function resetToDefaultState() {
         // Friendly aliases
         window.cia = CIAIntervention;
         window.ciaDebug = () => { try { CIAIntervention.debugPrint(); } catch(e) {} };
-        window.ciaOffers = () => { try { return CIAIntervention.getOffers(); } catch(e) { return null; } };
+        window.ciaOffers = () => { try { const o = CIAIntervention.getOffers() || {}; if (!Array.isArray(o.properties)) o.properties = []; return o; } catch(e) { return { cash:null, weapons:null, properties:[] }; } };
         window.ciaSnapshot = () => { try { return CIAIntervention.getSnapshot(); } catch(e) { return null; } };
       }
     } catch (e) {}
