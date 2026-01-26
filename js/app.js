@@ -6554,26 +6554,10 @@ const CartoonSpriteGenerator = {
     }
 
     // Reset GameState to DEFAULT_STATE (used when creating new accounts)
-    // Reset GameState to DEFAULT_STATE (used when creating new accounts)
+    function resetToDefaultState() {
+      cons
 
-function resetToDefaultState() {
-  console.log('🔄 Resetting GameState to DEFAULT_STATE');
-  try {
-    Object.keys(DEFAULT_STATE).forEach(key => {
-      if (typeof DEFAULT_STATE[key] === 'object' && DEFAULT_STATE[key] !== null) {
-        GameState[key] = JSON.parse(JSON.stringify(DEFAULT_STATE[key]));
-      } else {
-        GameState[key] = DEFAULT_STATE[key];
-      }
-    });
-    ensureGameStateSchema();
-    console.log('✅ GameState reset complete - Cash:', GameState.player?.cash, 'Level:', GameState.player?.level);
-  } catch (e) {
-    console.warn('[resetToDefaultState] failed:', e);
-  }
-}
-
-// =========================================================
+    // =========================================================
     // CIA "Visitor" Intervention — Phase 1 (Systems Only, No Art)
     // =========================================================
     const CIAIntervention = (() => {
@@ -6635,28 +6619,57 @@ function resetToDefaultState() {
         const p = GameState.player || {};
         const weapons = Array.isArray(p.weapons) ? p.weapons.slice() : [];
         const weaponParts = (p.weaponParts && typeof p.weaponParts === 'object') ? { ...p.weaponParts } : {};
+        const properties = [];
+// Preferred source: propertyBuildings (real estate + optional landmark properties)
+if (Array.isArray(GameState.propertyBuildings)) {
+  GameState.propertyBuildings.forEach(b => {
+    if (!b || !b.owned) return;
+    properties.push({
+      id: b.id,
+      name: b.name || ('Property ' + b.id),
+      dailyIncome: Number(b.dailyIncome || b.income || 0),
+      tier: Number(b.tier || b.upgradeLevel || 1)
+    });
+  });
+}
 
-        // Owned properties are the "real" candidates, but Phase 1 needs logic testable even on fresh accounts.
-        // So we also keep an "all turf properties" list as a safe fallback.
-        const turfPropsAll = (GameState.turf?.properties || [])
-          .filter(x => x)
-          .map(x => ({
-            id: x.id,
-            name: x.name || ('Property ' + x.id),
-            dailyIncome: Number(x.dailyIncome || x.income || 0),
-            tier: Number(x.tier || 1),
-            owned: !!x.owned
-          }));
+// Fallbacks for older schemas
+if (properties.length === 0 && Array.isArray(GameState.turf?.properties)) {
+  GameState.turf.properties
+    .filter(x => x && x.owned)
+    .forEach(x => {
+      properties.push({
+        id: x.id,
+        name: x.name || ('Property ' + x.id),
+        dailyIncome: Number(x.dailyIncome || x.income || 0),
+        tier: Number(x.tier || 1)
+      });
+    });
+}
 
-        const properties = turfPropsAll
-          .filter(x => x.owned);
-
-        return {
+// Optional: owned landmarks (future-proof)
+try {
+  const ownership = GameState.landmarkOwnership || {};
+  if (Array.isArray(GameState.mapIcons)) {
+    GameState.mapIcons.forEach(icon => {
+      if (!icon) return;
+      const owned = !!icon.owned || !!ownership[icon.type];
+      if (!owned) return;
+      // Landmarks may not have income yet; keep it 0 for Phase 1 unless defined later
+      properties.push({
+        id: icon.type,
+        name: icon.label || icon.type,
+        dailyIncome: Number(icon.dailyIncome || icon.income || 0),
+        tier: Number(icon.tier || 1)
+      });
+    });
+  }
+} catch(e) {}
+return {
           cash: Number(p.cash || 0),
           weapons,
           weaponParts,
-          properties,              // owned properties
-          propertiesAll: turfPropsAll, // fallback list (Phase 1 testing)
+          properties,
           globalHeat: Number(p.globalHeat || 0),
           timestamp: _now()
         };
@@ -6682,28 +6695,14 @@ function resetToDefaultState() {
         })() : null;
 
         // Property offer list (Phase 2 will add UI selection)
-        // Phase 1 fallback: if player owns nothing yet, offer a few turf properties anyway
-        // so the selection/apply logic can be tested on new accounts without crashing.
-        const baseProps = (Array.isArray(snapshot.properties) && snapshot.properties.length)
-          ? snapshot.properties
-          : (Array.isArray(snapshot.propertiesAll) ? snapshot.propertiesAll.slice(0, 3) : []);
-
-        const propertyOffers = baseProps.length ? baseProps.map(p => {
-          const income = Number(p.dailyIncome || 0);
-          const tier = Number(p.tier || 1);
-          const reduction = income > 0
-            ? _clamp(Math.floor(income / 10), 5, 40)
-            : _clamp(tier * 6, 5, 30);
-
-          return {
-            propertyId: p.id,
-            propertyName: p.name,
-            durationHours: 24,
-            heatReduction: reduction,
-            owned: !!p.owned,
-            placeholder: !p.owned
-          };
-        }) : [];
+        const propertyOffers = (snapshot.properties.length > 0)
+  ? snapshot.properties.map(p => ({
+      propertyId: p.id,
+      propertyName: p.name,
+      durationHours: 24,
+      heatReduction: _clamp(Math.floor((p.dailyIncome || 0) / 10), 5, 40)
+    }))
+  : [];;
 
         return { cash: cashOffer, weapons: weaponsOffer, properties: propertyOffers };
       }
@@ -6765,14 +6764,40 @@ function resetToDefaultState() {
           // stub: remove all weapons
           if (Array.isArray(GameState.player.weapons)) GameState.player.weapons.length = 0;
           _reduceGlobalHeat(payload.heatReduction);
-        } else if (type === 'property' && payload?.propertyId != null && payload?.heatReduction != null) {
-          // stub: mark leased flag for 24h (Phase 2 will add visuals + income redirect)
-          const props = GameState.turf?.properties || [];
-          const p = props.find(x => x && x.id === payload.propertyId);
-          if (p) {
-            p.heatLeasedUntil = _now() + (Number(payload.durationHours || 24) * 3600 * 1000);
-          }
-          _reduceGlobalHeat(payload.heatReduction);
+
+} else if (type === 'property') {
+  // Allow payload to be:
+  //  - an offer object: { propertyId, heatReduction, durationHours }
+  //  - a propertyId string (we'll resolve to an offer)
+  //  - undefined (we'll auto-pick the first offer)
+  const stOffers = st.offers || {};
+  const offerList = Array.isArray(stOffers.properties) ? stOffers.properties : [];
+  let offer = null;
+
+  if (typeof payload === 'string') {
+    offer = offerList.find(o => o && o.propertyId === payload) || null;
+  } else if (payload && typeof payload === 'object') {
+    offer = payload;
+  } else {
+    offer = offerList[0] || null;
+  }
+
+  if (!offer || offer.propertyId == null || offer.heatReduction == null) {
+    console.warn('[CIA] Unknown apply type or malformed payload:', type, payload);
+    return false;
+  }
+
+  // Mark the property as temporarily "leased"/compromised (Phase 1 placeholder)
+  const pid = String(offer.propertyId);
+  const p = Array.isArray(GameState.propertyBuildings)
+    ? GameState.propertyBuildings.find(x => x && String(x.id) === pid)
+    : null;
+
+  if (p) {
+    p.heatLeasedUntil = _now() + (Number(offer.durationHours || 24) * 3600 * 1000);
+  }
+
+  _reduceGlobalHeat(offer.heatReduction);
         } else {
           console.warn('[CIA] Unknown apply type or malformed payload:', type, payload);
           return false;
@@ -6794,59 +6819,7 @@ function resetToDefaultState() {
         return true;
       }
 
-      return {
-        stage,
-        maybeAutoStage,
-        apply,
-        end,
-        // Debug/Phase-1 helpers (text-only dialog + quick console commands)
-        getState: () => _ensureState(),
-        getSnapshot: () => (_ensureState().snapshot || null),
-        getOffers: () => {
-          const o = (_ensureState().offers || {});
-          if (!Array.isArray(o.properties)) o.properties = [];
-          return o;
-        },
-        debugDialog: () => {
-          const st = _ensureState();
-          const s = st.snapshot || {};
-          const o = st.offers || {};
-          const lines = [];
-          lines.push('🕶️ CIA Visitor (Phase 1)');
-          lines.push('Reason: ' + (st.reason || 'unknown'));
-          lines.push('Cash: $' + Number(s.cash || 0));
-          lines.push('Weapons: ' + (Array.isArray(s.weapons) ? s.weapons.length : 0));
-          lines.push('Properties: ' + (Array.isArray(s.properties) ? s.properties.length : 0));
-          if (o.cash) lines.push('Offer: cash -> pay $' + o.cash.cost + ' for -' + o.cash.heatReduction + ' heat');
-          if (o.weapons) lines.push('Offer: weapons -> surrender ' + o.weapons.weaponsTaken + ' for -' + o.weapons.heatReduction + ' heat');
-          if (Array.isArray(o.properties) && o.properties.length) lines.push('Offer: property -> choose 1 of ' + o.properties.length);
-          return lines.join('\n');
-        },
-        debugPrint: () => {
-          try {
-            console.log(CIAIntervention.debugDialog());
-            console.log('[CIA] offers=', CIAIntervention.getOffers());
-          } catch (e) {}
-        },
-        applyCashOffer: () => {
-          const o = _ensureState().offers?.cash;
-          if (!o) return false;
-          return apply('cash', o);
-        },
-        applyWeaponsOffer: () => {
-          const o = _ensureState().offers?.weapons;
-          if (!o) return false;
-          return apply('weapons', o);
-        },
-        applyPropertyOffer: (propertyIdOrIndex = 0) => {
-          const list = _ensureState().offers?.properties;
-          if (!Array.isArray(list) || !list.length) return false;
-          let offer = list.find(x => String(x.propertyId) === String(propertyIdOrIndex));
-          if (!offer) offer = list[Math.max(0, Math.min(list.length - 1, Number(propertyIdOrIndex) || 0))];
-          if (!offer) return false;
-          return apply('property', offer);
-        }
-      };
+      return { stage, maybeAutoStage, apply, end };
     })();
 
     // Make Phase 1 helpers available in mobile console (eruda)
@@ -6854,16 +6827,35 @@ function resetToDefaultState() {
       if (typeof window !== 'undefined') {
         window.CIAIntervention = CIAIntervention;
         window.startCIAIntervention = (reason) => CIAIntervention.stage(reason || 'lockdown');
-        // common typo alias (keeps mobile console happy)
-        window.startCIAIntervension = window.startCIAIntervention;
         window.applyCIAResolution = (type, payload) => CIAIntervention.apply(type, payload);
-        window.applyCIAResoloution = window.applyCIAResolution;
         window.endCIAIntervention = () => CIAIntervention.end();
         // Friendly aliases
         window.cia = CIAIntervention;
-        window.ciaDebug = () => { try { CIAIntervention.debugPrint(); } catch(e) {} };
-        window.ciaOffers = () => { try { const o = CIAIntervention.getOffers() || {}; if (!Array.isArray(o.properties)) o.properties = []; return o; } catch(e) { return { cash:null, weapons:null, properties:[] }; } };
-        window.ciaSnapshot = () => { try { return CIAIntervention.getSnapshot(); } catch(e) { return null; } };
+
+window.ciaOffers = () => {
+  try { return (GameState.ciaIntervention && GameState.ciaIntervention.offers) ? GameState.ciaIntervention.offers : null; } catch(e) { return null; }
+};
+window.ciaSnapshot = () => {
+  try { return (GameState.ciaIntervention && GameState.ciaIntervention.snapshot) ? GameState.ciaIntervention.snapshot : null; } catch(e) { return null; }
+};
+window.ciaDebug = () => {
+  try {
+    const st = GameState.ciaIntervention || {};
+    const snap = st.snapshot || {};
+    const offers = st.offers || {};
+    console.log('🕶️ CIA Visitor (Phase 1)');
+    console.log('Reason:', st.reason);
+    console.log('Cash:', '$' + (snap.cash || 0));
+    console.log('Weapons:', Array.isArray(snap.weapons) ? snap.weapons.length : 0);
+    console.log('Properties:', Array.isArray(snap.properties) ? snap.properties.length : 0);
+    if (offers.cash) console.log('Offer: cash -> pay $' + offers.cash.cost + ' for -' + offers.cash.heatReduction + ' heat');
+    if (offers.weapons) console.log('Offer: weapons -> surrender ' + offers.weapons.weaponsTaken + ' for -' + offers.weapons.heatReduction + ' heat');
+    if (Array.isArray(offers.properties) && offers.properties.length) {
+      console.log('Offer: property -> lease ' + offers.properties[0].propertyName + ' for -' + offers.properties[0].heatReduction + ' heat');
+    }
+    console.log('[CIA] offers=', offers);
+  } catch(e) {}
+};
       }
     } catch (e) {}
 
@@ -6872,6 +6864,18 @@ function resetToDefaultState() {
       setTimeout(() => { try { CIAIntervention.maybeAutoStage(); } catch(e) {} }, 1200);
       setInterval(() => { try { CIAIntervention.maybeAutoStage(); } catch(e) {} }, 5000);
     } catch (e) {}
+
+ole.log('🔄 Resetting GameState to DEFAULT_STATE');
+      Object.keys(DEFAULT_STATE).forEach(key => {
+        if (typeof DEFAULT_STATE[key] === 'object' && DEFAULT_STATE[key] !== null) {
+          GameState[key] = JSON.parse(JSON.stringify(DEFAULT_STATE[key]));
+        } else {
+          GameState[key] = DEFAULT_STATE[key];
+        }
+      });
+      ensureGameStateSchema();
+      console.log('✅ GameState reset complete - Cash:', GameState.player.cash, 'Level:', GameState.player.level);
+    }
 
     // ========================================
     // TURF DEFENSE MODE
@@ -15399,17 +15403,87 @@ function updateTurfDefense(dt) {
         color: '#9b59b6',
         name: 'Shopping Mall'
       }
-    };
+    
+,
+// Landmark-properties (optional buyables)
+docks: { icon: '⚓', color: '#3498db', name: 'Docks' },
+casino: { icon: '🎰', color: '#f1c40f', name: 'Casino' },
+bank: { icon: '🏦', color: '#2ecc71', name: 'Bank' },
+nightclub: { icon: '🎵', color: '#e056fd', name: 'Night Club' },
+warehouse: { icon: '📦', color: '#95a5a6', name: 'Warehouse' },
+factory: { icon: '🏭', color: '#7f8c8d', name: 'Factory' },
+hospital: { icon: '🏥', color: '#e74c3c', name: 'Hospital' },
+chopShop: { icon: '🚗', color: '#d35400', name: 'Chop Shop' }};
 
-    // Initialize property buildings on the map
+    
+// Landmark properties (Phase 1.5): make major turf landmarks optionally buyable like other properties.
+// These share the same modal + income/upgrade placeholders.
+function ensureLandmarkProperties() {
+  // Ensure ownership container exists (future-proof)
+  if (!GameState.landmarkOwnership || typeof GameState.landmarkOwnership !== 'object') {
+    GameState.landmarkOwnership = {};
+  }
+
+  // Ensure base propertyBuildings exists
+  if (!Array.isArray(GameState.propertyBuildings)) {
+    GameState.propertyBuildings = [];
+  }
+
+  const pos = GameState.fixedLandmarkPositions || {};
+  const defs = [
+    { id: 'lm_docks',      type: 'docks',      name: 'Docks',      price: 180000, income: 3500, x: pos.docks?.x,      y: pos.docks?.y },
+    { id: 'lm_casino',     type: 'casino',     name: 'Casino',     price: 250000, income: 6000, x: pos.casino?.x,     y: pos.casino?.y },
+    { id: 'lm_bank',       type: 'bank',       name: 'Bank',       price: 450000, income: 9000, x: pos.bank?.x,       y: pos.bank?.y },
+    { id: 'lm_nightclub',  type: 'nightclub',  name: 'Night Club', price: 220000, income: 5200, x: pos.nightclub?.x,  y: pos.nightclub?.y },
+    { id: 'lm_warehouse',  type: 'warehouse',  name: 'Warehouse',  price: 160000, income: 3200, x: pos.warehouse?.x,  y: pos.warehouse?.y },
+    { id: 'lm_factory',    type: 'factory',    name: 'Factory',    price: 320000, income: 7000, x: pos.gangHQ?.x,     y: pos.gangHQ?.y }, // placeholder spot
+    { id: 'lm_hospital',   type: 'hospital',   name: 'Hospital',   price: 520000, income: 9800, x: pos.hospital?.x,   y: pos.hospital?.y },
+    { id: 'lm_chopShop',   type: 'chopShop',   name: 'Chop Shop',  price: 200000, income: 4200, x: pos.chopShop?.x,   y: pos.chopShop?.y }
+  ];
+
+  const existingIds = new Set(GameState.propertyBuildings.map(b => b && b.id).filter(Boolean));
+  let added = 0;
+
+  defs.forEach(d => {
+    // Skip if position unknown (failsafe)
+    if (d.x == null || d.y == null) return;
+    if (existingIds.has(d.id)) return;
+
+    GameState.propertyBuildings.push({
+      id: d.id,
+      type: d.type,
+      x: d.x,
+      y: d.y,
+      name: d.name,
+      price: d.price,
+      income: d.income,
+      owned: false,
+      upgradeLevel: 0,
+      lastCollected: null,
+      isLandmarkProperty: true
+    });
+    existingIds.add(d.id);
+    added++;
+  });
+
+  if (added > 0) {
+    console.log(`✅ Added ${added} landmark-properties to propertyBuildings`);
+    try { Storage.save(); } catch(e) {}
+  }
+}
+
+// Initialize property buildings on the map
     function initPropertyBuildings() {
       console.log('=== Initializing Property Buildings ===');
       
       // Check if buildings already initialized (length > 0 means already has buildings)
-      if (GameState.propertyBuildings && GameState.propertyBuildings.length > 0) {
-        console.log(`Property buildings already initialized: ${GameState.propertyBuildings.length}`);
-        return;
-      }
+      
+if (GameState.propertyBuildings && GameState.propertyBuildings.length > 0) {
+  console.log(`Property buildings already initialized: ${GameState.propertyBuildings.length}`);
+  // Backfill any new landmark-properties added in later updates
+  try { ensureLandmarkProperties(); } catch(e) {}
+  return;
+}
       
       // Initialize from fixed positions (handles new saves OR old saves with empty array)
       console.log('Creating property buildings from fixed positions...');
@@ -15420,6 +15494,7 @@ function updateTurfDefense(dt) {
         lastCollected: null
       }));
       
+      try { ensureLandmarkProperties(); } catch(e) {}
       Storage.save();
       
       console.log(`✅ Initialized ${GameState.propertyBuildings.length} property buildings`);
@@ -24700,11 +24775,9 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       },
       
       addGlobalHeat(amount, reason) {
-        // Allow amount=0 for logging/events (lockdown, CIA staging, etc.)
-        const delta = Number(amount || 0);
-        if (delta !== 0) {
-          GameState.player.globalHeat = Math.min(100, Number(GameState.player.globalHeat || 0) + delta);
-        }
+        if (amount <= 0) return;
+        
+        GameState.player.globalHeat = Math.min(100, GameState.player.globalHeat + amount);
         
         // Log heat gain
         GameState.heatLog.push({
@@ -24721,9 +24794,6 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
         // Update police activity level
         this.updatePoliceActivity();
         
-
-        // CIA Phase 1 hook: auto-stage when global heat is hot / lockdown flags are active
-        try { if (typeof CIAIntervention !== 'undefined') CIAIntervention.maybeAutoStage(); } catch(e) {}
         console.log(`Global heat +${amount}%: ${reason}`);
       },
       
