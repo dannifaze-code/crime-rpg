@@ -7170,16 +7170,8 @@ function scheduleTurfDefenseSpriteScaleMatch() {
     requestAnimationFrame(tick);
   } catch (e) {}
 }
-
-
     function startTurfDefense() {
-      // Guard: do not start Turf Defense during CIA Visitor intervention
-      try {
-        if (GameState && GameState.ciaIntervention && GameState.ciaIntervention.active) {
-          try { AccountManager && AccountManager.showToast && AccountManager.showToast('The Visitor demands your attention first.', 'warning'); } catch (e) {}
-          return;
-        }
-      } catch (e) {}
+      // NOTE: Turf Defense is allowed even if the Visitor event has been recorded.
 
       console.log('🛡️ [TurfDefense] Starting Turf Defense mode...');
 
@@ -12844,6 +12836,39 @@ const CIAIntervention = (() => {
         return;
       }
     } catch (e) {}
+    // Minimal DOM toast fallback (works even when AccountManager isn't ready)
+    try {
+      const id = 'cia_toast_fallback';
+      let el = document.getElementById(id);
+      if (!el) {
+        el = document.createElement('div');
+        el.id = id;
+        el.style.position = 'fixed';
+        el.style.left = '50%';
+        el.style.top = '14px';
+        el.style.transform = 'translateX(-50%)';
+        el.style.zIndex = 999999;
+        el.style.padding = '10px 14px';
+        el.style.borderRadius = '12px';
+        el.style.fontFamily = 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+        el.style.fontSize = '14px';
+        el.style.fontWeight = '700';
+        el.style.color = '#fff';
+        el.style.background = 'rgba(0,0,0,0.75)';
+        el.style.backdropFilter = 'blur(6px)';
+        el.style.maxWidth = '92vw';
+        el.style.textAlign = 'center';
+        el.style.pointerEvents = 'none';
+        el.style.opacity = '0';
+        el.style.transition = 'opacity 160ms ease';
+        document.body.appendChild(el);
+      }
+      el.textContent = msg;
+      el.style.opacity = '1';
+      clearTimeout(el._hideT);
+      el._hideT = setTimeout(() => { try { el.style.opacity = '0'; } catch(e){} }, 2200);
+      return;
+    } catch (e) {}
     try { console.log(msg); } catch (e) {}
   }
 
@@ -12856,11 +12881,13 @@ const CIAIntervention = (() => {
           reason: null,
           snapshot: null,
           offers: null,
-          lastLockdownIdTriggered: null
+          lastLockdownIdTriggered: null,
+          pendingChoice: false
         };
       } else {
         if (typeof GameState.ciaIntervention.active !== 'boolean') GameState.ciaIntervention.active = false;
         if (!('lastLockdownIdTriggered' in GameState.ciaIntervention)) GameState.ciaIntervention.lastLockdownIdTriggered = null;
+        if (!('pendingChoice' in GameState.ciaIntervention)) GameState.ciaIntervention.pendingChoice = false;
       }
       return GameState.ciaIntervention;
     } catch (e) {
@@ -12961,20 +12988,17 @@ const CIAIntervention = (() => {
     const state = ensureState();
     if (!state) return;
 
-    if (state.active) return;
+    // Only present once per lockdownId (handled by onLockdownStart), but keep a cheap guard too.
+    if (state.pendingChoice) return;
 
-    state.active = true;
+    state.active = false; // Phase 1 is systems-only; no modal lock yet.
+    state.pendingChoice = true;
     state.reason = reason;
     state.snapshot = capturePlayerSnapshot();
     state.offers = computeOffers(state.snapshot);
 
-    // Soft pause: stop free roam + prevent Turf Defense start while we're in the intervention.
-    try {
-      if (GameState?.character?.freeRoam) GameState.character.freeRoam = false;
-    } catch (e) {}
-
     _toast('👤 The Visitor has arrived (Phase 1)', 'info');
-    try { console.log('[CIA] Intervention started', JSON.parse(JSON.stringify(state))); } catch (e) {}
+    try { console.log('[CIA] Intervention captured', JSON.parse(JSON.stringify(state))); } catch (e) {}
     try { Storage && Storage.save && Storage.save(); } catch (e) {}
   }
 
@@ -12982,6 +13006,7 @@ const CIAIntervention = (() => {
     const state = ensureState();
     if (!state) return;
     state.active = false;
+    state.pendingChoice = false;
     state.reason = null;
     // keep snapshot/offers for debugging until overwritten next time
     try { Storage && Storage.save && Storage.save(); } catch (e) {}
@@ -12990,7 +13015,8 @@ const CIAIntervention = (() => {
 
   function applyResolution(type, payload) {
     const state = ensureState();
-    if (!state || !state.active) return;
+    if (!state) return;
+    if (!state.pendingChoice && !state.snapshot) return;
 
     try {
       if (type === 'cash' && payload && payload.cost) {
@@ -13043,9 +13069,10 @@ const CIAIntervention = (() => {
   }
 
   function maybeTriggerFromExistingLockdown() {
-    // Called on app start / tab init to handle players already in lockdown
+    // Called on app start / tab init to handle players already in lockdown OR already at heat threshold.
     try {
-      if (GameState?.cityState?.lockdown) {
+      const heat = Number(GameState?.player?.globalHeat ?? GameState?.globalHeat ?? 0);
+      if (GameState?.cityState?.lockdown || heat >= 85) {
         onLockdownStart();
       }
     } catch (e) {}
@@ -13066,6 +13093,8 @@ try {
   window.startCIAIntervention = (reason) => CIAIntervention.start(reason || 'lockdown');
   window.endCIAIntervention = () => CIAIntervention.end();
   window.applyCIAResolution = (type, payload) => CIAIntervention.applyResolution(type, payload);
+  window.CIAIntervention = CIAIntervention;
+  window.cia = CIAIntervention;
 } catch (e) {}
 
 
@@ -20764,6 +20793,10 @@ try {
             e.stopPropagation();
           }
           console.log('🎮 [TurfDefense] Test button activated!');
+          try {
+            if (window.__tdTestLock && (Date.now() - window.__tdTestLock) < 500) return;
+            window.__tdTestLock = Date.now();
+          } catch(e) {}
           try {
             // Ensure schema is valid before checking state
             if (typeof ensureGameStateSchema === 'function') {
