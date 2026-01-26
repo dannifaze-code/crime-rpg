@@ -13092,36 +13092,21 @@ function updateTurfDefense(dt) {
         GameState.mapIcons = [
     {
       id: 'safeHouse',
-      x: positions.safeHouse.x,
-      y: positions.safeHouse.y,
+      x: GameState.fixedLandmarkPositions.safeHouse.x,
+      y: GameState.fixedLandmarkPositions.safeHouse.y,
       icon: '🏠',
       type: 'safeHouse',
       name: 'Safe House',
     },
     {
       id: 'policeStation',
-      x: positions.policeStation.x,
-      y: positions.policeStation.y,
+      x: GameState.fixedLandmarkPositions.policeStation.x,
+      y: GameState.fixedLandmarkPositions.policeStation.y,
       icon: '🚓',
       type: 'policeStation',
       name: 'Police Station',
-    },
-    {
-      id: 'gunShop',
-      x: positions.gunShop.x,
-      y: positions.gunShop.y,
-      icon: '🔫',
-      type: 'gunShop',
-      name: 'Gun Shop',
-    },
-    {
-      id: 'gangHQ',
-      x: positions.gangHQ.x,
-      y: positions.gangHQ.y,
-      icon: '🏢',
-      type: 'gangHQ',
-      name: 'Gang HQ',
     }
+    // NOTE: gunShop, casino, gangHQ, etc. are now in propertyBuildings, not mapIcons
   ];
         ProceduralMapRenderer.rendered = false;
         Storage.save();
@@ -27869,6 +27854,24 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       
       // ===== NUCLEAR OPTION: FORCE POSITION UPDATE AFTER INIT =====
       console.log('💥💥💥 NUCLEAR RESET: Forcing property position updates AFTER init...');
+      
+      // FIRST: Remove properties from mapIcons (they should ONLY be in propertyBuildings)
+      if (Array.isArray(GameState.mapIcons)) {
+        const before = GameState.mapIcons.length;
+        GameState.mapIcons = GameState.mapIcons.filter(icon => 
+          icon.type !== 'gunShop' && 
+          icon.type !== 'gunshop' && 
+          icon.type !== 'casino' && 
+          icon.type !== 'gangHQ' &&
+          icon.type !== 'ganghq' &&
+          icon.type !== 'chopShop' &&
+          icon.type !== 'chopshop'
+        );
+        const after = GameState.mapIcons.length;
+        if (before !== after) {
+          console.log(`   🧹 Removed ${before - after} property icons from mapIcons`);
+        }
+      }
       
       if (Array.isArray(GameState.propertyBuildings) && GameState.propertyBuildings.length > 0) {
         console.log(`💥 Found ${GameState.propertyBuildings.length} properties - updating positions NOW...`);
