@@ -6202,16 +6202,6 @@ const CartoonSpriteGenerator = {
       playerStatus: "laying_low",
       playerStatusTransition: null,  // "entering_active" | "entering_laying_low" | null
       playerStatusTransitionEnd: null,  // timestamp when transition completes
-      // CIA Intervention: persistent state (Phase 1)
-      ciaIntervention: {
-        active: false,
-        reason: null,
-        lockdownId: null,
-        snapshot: null,
-        offers: null,
-        lastTriggeredAt: null,
-      },
-
       
       cityState: {
         lockdown: false,
@@ -7053,14 +7043,35 @@ function applyTurfDefenseSpriteScaleMatch() {
     // Need a few stable frames before applying (first-run == second-run == Chromebook)
     if ((defense._tdScaleStableFrames || 0) < 3) return false;
 
-    // --- Source-of-truth size (Free Roam scale = 4) ----------------------------
-    let freePxCss = 0;
-    try {
-      if (typeof ImportedSpriteSheet !== 'undefined' && ImportedSpriteSheet && ImportedSpriteSheet.spriteWidth) {
-        freePxCss = (ImportedSpriteSheet.spriteWidth * 4);
-      }
-    } catch (e) {}
-    if (!(freePxCss > 0)) return false; // no calibration hacks, no guessing
+    // --- Source-of-truth size: measure the actual Free Roam DOM sprite ----------
+    // We sample and cache this during pauseFreeRoamForTurfDefense(). Use it here.
+    let freePxCss = (defense && typeof defense._freeRoamSpritePx === 'number') ? defense._freeRoamSpritePx : 0;
+
+    // If cache isn't ready yet, try to measure right now (best-effort).
+    if (!(freePxCss > 0)) {
+      try {
+        const el = document.getElementById('freeRoamPlayer');
+        if (el && el.getBoundingClientRect) {
+          const r = el.getBoundingClientRect();
+          const px = Math.min(r.width || 0, r.height || 0);
+          if (px > 10 && px < 512) freePxCss = px;
+        }
+      } catch (e) {}
+    }
+
+    // Last resort fallback: match the design-time scale (sprite sheet * 4),
+    // but ONLY if it looks sane. (We still prefer the measured DOM size.)
+    if (!(freePxCss > 0)) {
+      try {
+        if (typeof ImportedSpriteSheet !== 'undefined' && ImportedSpriteSheet && ImportedSpriteSheet.spriteWidth) {
+          const fallback = (ImportedSpriteSheet.spriteWidth * 4);
+          if (fallback > 10 && fallback < 256) freePxCss = fallback;
+        }
+      } catch (e) {}
+    }
+
+    // If we still don't have a real size, keep waiting.
+    if (!(freePxCss > 0)) return false;
 
     // Convert desired CSS pixels into canvas internal pixels.
     // Mobile can be non-uniform; use the smaller ratio to avoid overscaling.
@@ -7071,7 +7082,7 @@ function applyTurfDefenseSpriteScaleMatch() {
 
     const desiredInternalPx = freePxCss * pxPerCss;
 
-    // Determine a reasonable "base frame" width from loaded sprites.
+    // Determine a "base frame" width from loaded sprites (must be real, no guessing).
     let frameW = 0;
     try {
       if (typeof PlayerSpriteManager !== 'undefined' && PlayerSpriteManager && PlayerSpriteManager.loaded) {
@@ -7080,11 +7091,18 @@ function applyTurfDefenseSpriteScaleMatch() {
         frameW = img && img.width ? img.width : 0;
       }
     } catch (e) {}
-    if (!(frameW > 0)) frameW = 96; // fallback
 
-    // Compute new scale and clamp to sane bounds.
+    // If sprites aren't loaded yet, wait (fallback widths can make us wrong).
+    if (!(frameW > 0)) return false;
+
+    // Compute the scale that makes the canvas sprite match the CSS free-roam sprite size.
     const newScaleRaw = desiredInternalPx / frameW;
-    const newScale = Math.max(0.15, Math.min(2.0, newScaleRaw));
+
+    // Safety: if scale is wildly out of bounds, treat as unstable and retry later
+    // (instead of clamping and permanently locking the wrong size).
+    if (!(newScaleRaw > 0.05 && newScaleRaw < 2.0 && isFinite(newScaleRaw))) return false;
+
+    const newScale = newScaleRaw;
 
     if (!defense._prevSpriteScale) defense._prevSpriteScale = (PlayerSpriteManager && PlayerSpriteManager.config ? PlayerSpriteManager.config.spriteScale : 0.5);
     if (PlayerSpriteManager && PlayerSpriteManager.config) PlayerSpriteManager.config.spriteScale = newScale;
@@ -7103,6 +7121,7 @@ function applyTurfDefenseSpriteScaleMatch() {
   }
 }
 
+
 function scheduleTurfDefenseSpriteScaleMatch() {
   try {
     const defense = GameState && GameState.turfDefense ? GameState.turfDefense : null;
@@ -7110,7 +7129,7 @@ function scheduleTurfDefenseSpriteScaleMatch() {
 
     // Try a few frames in a row (sprites/canvas may not be ready on mobile immediately)
     let attempts = 0;
-    const maxAttempts = 30;
+    const maxAttempts = 180;
 
     const tick = () => {
       if (!GameState.turfDefense || !GameState.turfDefense.active) return;
@@ -7154,6 +7173,14 @@ function scheduleTurfDefenseSpriteScaleMatch() {
 
 
     function startTurfDefense() {
+      // Guard: do not start Turf Defense during CIA Visitor intervention
+      try {
+        if (GameState && GameState.ciaIntervention && GameState.ciaIntervention.active) {
+          try { AccountManager && AccountManager.showToast && AccountManager.showToast('The Visitor demands your attention first.', 'warning'); } catch (e) {}
+          return;
+        }
+      } catch (e) {}
+
       console.log('🛡️ [TurfDefense] Starting Turf Defense mode...');
 
       // Get map dimensions
@@ -7208,6 +7235,18 @@ function scheduleTurfDefenseSpriteScaleMatch() {
       GameState.turfDefense.playerX = canvasWidth / 2;
       GameState.turfDefense.playerY = canvasHeight / 2;
 
+      // Camera: follow player + zoom-in intro (world scale stays the same; camera brings us closer)
+      GameState.turfDefense.camera = {
+        x: GameState.turfDefense.playerX,
+        y: GameState.turfDefense.playerY,
+        zoom: 1,
+        startZoom: 1,
+        targetZoom: 1.45, // "map feels larger" zoom
+        introStart: (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(),
+        introDurationMs: 520,
+        followLerp: 10 // higher = snappier follow
+      };
+
       // Initialize input state
       GameState.turfDefense.input = {
         moveX: 0,
@@ -7242,6 +7281,9 @@ function scheduleTurfDefenseSpriteScaleMatch() {
       } catch (error) {
         console.error('❌ [TurfDefense] ERROR during TurfDefenseRenderer.init():', error);
       }
+
+      // Start DOM camera so the map itself zooms/pans with the player
+      try { TurfDefenseRenderer.startDomCamera(GameState.turfDefense); } catch (e) {}
 
       // Match Turf Defense sprite scale to Free Roam sprite (mobile-safe)
       try { scheduleTurfDefenseSpriteScaleMatch(); } catch (e) {}
@@ -7278,7 +7320,10 @@ function scheduleTurfDefenseSpriteScaleMatch() {
 
       const finalScore = GameState.turfDefense.totalScore;
       const finalWave = GameState.turfDefense.wave;
-      const enemiesKilled = GameState.turfDefense.enemiesKilled;
+      const enemiesKilled = GameState.turfDefense.enemiesKilled;      // Stop DOM camera + restore map pan/zoom
+      try { TurfDefenseRenderer.stopDomCamera(); } catch (e) {}
+
+
 
       // Cleanup renderer
       TurfDefenseRenderer.destroy();
@@ -7705,6 +7750,41 @@ function updateTurfDefense(dt) {
             defense.playerX = Math.max(20, Math.min(canvasWidth - 20, defense.playerX));
             defense.playerY = Math.max(20, Math.min(canvasHeight - 20, defense.playerY));
 
+            // Camera follow & zoom intro (purely visual; does not affect movement speed)
+            try {
+              if (!defense.camera) {
+                defense.camera = {
+                  x: defense.playerX,
+                  y: defense.playerY,
+                  zoom: 1,
+                  startZoom: 1,
+                  targetZoom: 1.45,
+                  introStart: (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(),
+                  introDurationMs: 520,
+                  followLerp: 10
+                };
+              } else {
+                // Follow smoothing
+                const cam = defense.camera;
+                const lerpK = (typeof cam.followLerp === 'number' ? cam.followLerp : 10);
+                const a = 1 - Math.exp(-lerpK * dt);
+                cam.x = (typeof cam.x === 'number' ? cam.x : defense.playerX) + (defense.playerX - (typeof cam.x === 'number' ? cam.x : defense.playerX)) * a;
+                cam.y = (typeof cam.y === 'number' ? cam.y : defense.playerY) + (defense.playerY - (typeof cam.y === 'number' ? cam.y : defense.playerY)) * a;
+
+                // Intro zoom animation (ease out)
+                const nowMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                const t0 = (typeof cam.introStart === 'number') ? cam.introStart : nowMs;
+                const dur = (typeof cam.introDurationMs === 'number' && cam.introDurationMs > 0) ? cam.introDurationMs : 520;
+                let t = (nowMs - t0) / dur;
+                if (t < 0) t = 0;
+                if (t > 1) t = 1;
+                const easeOutCubic = 1 - Math.pow(1 - t, 3);
+                const z0 = (typeof cam.startZoom === 'number') ? cam.startZoom : 1;
+                const z1 = (typeof cam.targetZoom === 'number') ? cam.targetZoom : 1.45;
+                cam.zoom = z0 + (z1 - z0) * easeOutCubic;
+              }
+            } catch (e) {}
+
             // Movement dust during prep too (keeps scene alive)
             if ((Math.abs(movement.x) > 0.05 || Math.abs(movement.y) > 0.05)) {
               const vfxNow = (performance.now ? performance.now() : Date.now());
@@ -8108,6 +8188,9 @@ function updateTurfDefense(dt) {
           break;
       }
 
+      // Keep DOM camera in sync every frame (map + canvas follow the player)
+      try { TurfDefenseRenderer.applyDomCamera(defense); } catch (e) {}
+
       // Debug logging (remove in production)
       if (Math.floor(now / 1000) % 10 === 0 && now % 1000 < 16) {
         console.log('[TurfDefense] Active -', 'Wave:', defense.wave, 'State:', defense.waveState, 'Enemies:', defense.enemies.length);
@@ -8172,7 +8255,25 @@ function updateTurfDefense(dt) {
       // Clear canvas with transparency (so we can see the map below)
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // VFX layer (dust/smoke/casings/tracers)
+      // Camera: DOM-driven zoom/pan (map + canvas move together). Canvas draws in world-space.
+      const cam = defense.camera || (defense.camera = {
+        x: defense.playerX || 0,
+        y: defense.playerY || 0,
+        zoom: 1,
+        startZoom: 1,
+        targetZoom: 1.45,
+        introStart: (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(),
+        introDurationMs: 520,
+        followLerp: 10
+      });
+      try { TurfDefenseRenderer.applyDomCamera(defense); } catch (e) {}
+      const shake = (typeof getCameraShakeOffset === 'function') ? getCameraShakeOffset(defense) : { x: 0, y: 0 };
+
+      ctx.save();
+      // Shake only (camera transform handled by DOM so map background stays perfectly aligned)
+      ctx.translate((shake.x || 0), (shake.y || 0));
+
+      // VFX layer (dust/smoke/casings/tracers) - in world space
       try { drawDefenseVFX(ctx, defense); } catch (e) {}
 
       // Render building HP bars (only during defense)
@@ -8204,6 +8305,9 @@ function updateTurfDefense(dt) {
 
       // Render floating damage numbers
       TurfDefenseRenderer.drawDamageNumbers(ctx, defense);
+
+      // Restore screen-space for HUD (so UI doesn't zoom with the camera)
+      try { ctx.restore(); } catch (e) {}
 
       // Render HUD
       TurfDefenseRenderer.drawHUD(ctx, defense, canvas.width, canvas.height);
@@ -9248,6 +9352,14 @@ function updateTurfDefense(dt) {
         // Create canvas if not exists
         if (!this.canvas) {
           const cityMap = document.getElementById('city-map');
+          const mapWorld = document.getElementById('map-world');
+          const tdParent = mapWorld || cityMap;
+          try {
+            if (tdParent && typeof getComputedStyle === 'function') {
+              const pos = getComputedStyle(tdParent).position;
+              if (!pos || pos === 'static') tdParent.style.position = 'relative';
+            }
+          } catch (e) {}
 
           if (!cityMap) {
             // Only log error once to avoid spam
@@ -9284,7 +9396,7 @@ function updateTurfDefense(dt) {
             z-index: 100;
           `;
 
-          cityMap.appendChild(this.canvas);
+          tdParent.appendChild(this.canvas);
           this.ctx = this.canvas.getContext('2d');
 
           // Add click handler for desktop shooting
@@ -9318,6 +9430,135 @@ function updateTurfDefense(dt) {
           console.log('🎨 [TurfDefenseRenderer] Canvas destroyed');
         }
       },
+      // ------------------------------------------------------------
+      // Turf Defense DOM Camera
+      // Drives #map-world transform so the map background + icons + canvas
+      // all zoom/pan together. Prevents HP bars drifting vs buildings.
+      // ------------------------------------------------------------
+      _domCamState: null,
+
+      startDomCamera(defense) {
+        try {
+          const viewport = document.getElementById('map-viewport');
+          const world = document.getElementById('map-world');
+          if (!viewport || !world) return;
+
+          // Save previous pan/zoom and sizing so we can restore perfectly
+          const prev = (typeof TurfTab !== 'undefined' && TurfTab) ? {
+            zoom: TurfTab.currentZoom,
+            panX: TurfTab.panX,
+            panY: TurfTab.panY,
+            worldBaseW: TurfTab.worldBaseW,
+            worldBaseH: TurfTab.worldBaseH,
+            worldSizeReady: TurfTab.worldSizeReady
+          } : null;
+
+          this._domCamState = {
+            prev,
+            prevWorldW: world.style.width,
+            prevWorldH: world.style.height,
+            prevViewportPE: viewport.style.pointerEvents
+          };
+
+          // Lock user pan/zoom during Turf Defense so the camera is authoritative
+          viewport.style.pointerEvents = 'none';
+
+          // Force the world coordinate system to match Turf Defense pixel space (tile map)
+          const mapWidth = (GameState.map && GameState.map.width) || 30;
+          const mapHeight = (GameState.map && GameState.map.height) || 30;
+          const tileSize = 30;
+          const w = mapWidth * tileSize;
+          const h = mapHeight * tileSize;
+
+          world.style.width = `${w}px`;
+          world.style.height = `${h}px`;
+
+          // Make TurfTab's clamp/pan math operate in the same world units
+          if (typeof TurfTab !== 'undefined' && TurfTab) {
+            TurfTab.worldBaseW = w;
+            TurfTab.worldBaseH = h;
+            TurfTab.worldSizeReady = true;
+          }
+
+          // Ensure the TD canvas is inside the world so it gets transformed with the map
+          try {
+            if (this.canvas && this.canvas.parentNode !== world) {
+              world.appendChild(this.canvas);
+            }
+          } catch (e) {}
+
+          // Apply immediately (avoids a single frame mismatch on start)
+          this.applyDomCamera(defense);
+        } catch (e) {}
+      },
+
+      stopDomCamera() {
+        try {
+          const viewport = document.getElementById('map-viewport');
+          const world = document.getElementById('map-world');
+          const state = this._domCamState;
+
+          // Restore pointer events so normal pan/zoom works again
+          if (viewport) {
+            viewport.style.pointerEvents = (state && state.prevViewportPE != null) ? state.prevViewportPE : '';
+          }
+
+          // Restore world sizing
+          if (world && state) {
+            if (state.prevWorldW != null) world.style.width = state.prevWorldW;
+            if (state.prevWorldH != null) world.style.height = state.prevWorldH;
+          }
+
+          // Restore TurfTab zoom/pan
+          if (state && state.prev && typeof TurfTab !== 'undefined' && TurfTab) {
+            TurfTab.currentZoom = (typeof state.prev.zoom === 'number') ? state.prev.zoom : 1;
+            TurfTab.panX = (typeof state.prev.panX === 'number') ? state.prev.panX : 0;
+            TurfTab.panY = (typeof state.prev.panY === 'number') ? state.prev.panY : 0;
+            TurfTab.worldBaseW = state.prev.worldBaseW;
+            TurfTab.worldBaseH = state.prev.worldBaseH;
+            TurfTab.worldSizeReady = state.prev.worldSizeReady;
+            TurfTab.applyMapTransform();
+          }
+
+          this._domCamState = null;
+        } catch (e) {}
+      },
+
+      applyDomCamera(defense) {
+        try {
+          if (!defense || !defense.active) return;
+          const cam = defense.camera;
+          if (!cam) return;
+
+          const viewport = document.getElementById('map-viewport');
+          const world = document.getElementById('map-world');
+          if (!viewport || !world) return;
+
+          // Drive TurfTab transform if available, otherwise fall back to direct style transform
+          const vw = viewport.clientWidth || viewport.getBoundingClientRect().width || 0;
+          const vh = viewport.clientHeight || viewport.getBoundingClientRect().height || 0;
+          if (vw <= 0 || vh <= 0) return;
+
+          const zoom = (typeof cam.zoom === 'number' && cam.zoom > 0) ? cam.zoom : 1;
+          const cx = (typeof cam.x === 'number') ? cam.x : (defense.playerX || 0);
+          const cy = (typeof cam.y === 'number') ? cam.y : (defense.playerY || 0);
+
+          // Center the camera on the player in world-space
+          const panX = (vw / 2) - (cx * zoom);
+          const panY = (vh / 2) - (cy * zoom);
+
+          if (typeof TurfTab !== 'undefined' && TurfTab && typeof TurfTab.applyMapTransform === 'function') {
+            TurfTab.currentZoom = zoom;
+            TurfTab.panX = panX;
+            TurfTab.panY = panY;
+            if (typeof TurfTab.clampPan === 'function') TurfTab.clampPan();
+            TurfTab.applyMapTransform();
+          } else {
+            world.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+          }
+        } catch (e) {}
+      },
+
 
       /**
        * Draw grid background
@@ -12588,6 +12829,245 @@ function updateTurfDefense(dt) {
       };
 
       function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+
+// ------------------------------------------------------------
+// CIA Intervention (Phase 1 - systems only, no art)
+// Triggered by City Lockdown (global heat >= 85%).
+// ------------------------------------------------------------
+const CIAIntervention = (() => {
+  function _ciaClamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+
+  function _toast(msg, type = 'info') {
+    try {
+      if (typeof AccountManager !== 'undefined' && AccountManager && typeof AccountManager.showToast === 'function') {
+        AccountManager.showToast(msg, type);
+        return;
+      }
+    } catch (e) {}
+    try { console.log(msg); } catch (e) {}
+  }
+
+  function ensureState() {
+    try {
+      if (!window.GameState) return null;
+      if (!GameState.ciaIntervention || typeof GameState.ciaIntervention !== 'object') {
+        GameState.ciaIntervention = {
+          active: false,
+          reason: null,
+          snapshot: null,
+          offers: null,
+          lastLockdownIdTriggered: null
+        };
+      } else {
+        if (typeof GameState.ciaIntervention.active !== 'boolean') GameState.ciaIntervention.active = false;
+        if (!('lastLockdownIdTriggered' in GameState.ciaIntervention)) GameState.ciaIntervention.lastLockdownIdTriggered = null;
+      }
+      return GameState.ciaIntervention;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function capturePlayerSnapshot() {
+    const snap = {
+      cash: 0,
+      weapons: [],
+      weaponParts: {},
+      properties: [],
+      globalHeat: 0,
+      timestamp: Date.now()
+    };
+
+    try { snap.cash = Number(GameState?.player?.cash || 0); } catch (e) {}
+    try { snap.globalHeat = Number(GameState?.player?.globalHeat || 0); } catch (e) {}
+
+    // Weapons (owned list)
+    try {
+      const w = GameState?.player?.weapons;
+      if (Array.isArray(w)) snap.weapons = w.slice();
+    } catch (e) {}
+
+    // Weapon parts inventory (top-level in this codebase)
+    try {
+      const parts = GameState?.weaponParts;
+      if (parts && typeof parts === 'object') snap.weaponParts = JSON.parse(JSON.stringify(parts));
+    } catch (e) {}
+
+    // Owned properties are stored on GameState.propertyBuildings (objects mutated with .owned=true)
+    try {
+      const pb = GameState?.propertyBuildings;
+      if (Array.isArray(pb)) {
+        snap.properties = pb.filter(p => p && p.owned).map(p => ({
+          id: p.id,
+          name: p.name,
+          income: Number(p.income || 0),
+          price: Number(p.price || 0),
+          type: p.type || 'property'
+        }));
+      }
+    } catch (e) {}
+
+    return snap;
+  }
+
+  function computeCashOffer(snapshot) {
+    const cash = Number(snapshot?.cash || 0);
+    const heat = Number(snapshot?.globalHeat || 0);
+    if (!(cash > 0) || !(heat > 0)) return null;
+
+    // Fair scaling: richer players pay a higher %, but never absurd.
+    // pct ranges roughly 10% .. 30%
+    const pct = _ciaClamp(0.10 + (cash / 500000) * 0.05, 0.10, 0.30);
+    const cost = Math.max(1, Math.floor(cash * pct));
+
+    // Heat reduction tied to current heat and the pct, clamped to 10..70 for phase 1 testing.
+    const heatReduction = _ciaClamp(Math.round(heat * pct), 10, 70);
+
+    return { kind: 'cash', pct, cost, heatReduction };
+  }
+
+  function computeWeaponOffer(snapshot) {
+    const weapons = snapshot?.weapons;
+    if (!Array.isArray(weapons) || weapons.length === 0) return null;
+
+    // Simple phase 1 heuristic: each weapon is leverage
+    const heatReduction = _ciaClamp(weapons.length * 8, 10, 60);
+    return { kind: 'weapons', weaponsTaken: weapons.length, heatReduction };
+  }
+
+  function computePropertyOffers(snapshot) {
+    const props = snapshot?.properties;
+    if (!Array.isArray(props) || props.length === 0) return null;
+
+    // Each property can be selected later (Phase 2 UI). For Phase 1 we compute per-property value.
+    return props.map(p => ({
+      kind: 'property',
+      propertyId: p.id,
+      name: p.name,
+      durationHours: 24,
+      heatReduction: _ciaClamp(Math.round((Number(p.income || 0)) / 10), 5, 40)
+    }));
+  }
+
+  function computeOffers(snapshot) {
+    return {
+      cash: computeCashOffer(snapshot),
+      weapons: computeWeaponOffer(snapshot),
+      properties: computePropertyOffers(snapshot)
+    };
+  }
+
+  function start(reason = 'lockdown') {
+    const state = ensureState();
+    if (!state) return;
+
+    if (state.active) return;
+
+    state.active = true;
+    state.reason = reason;
+    state.snapshot = capturePlayerSnapshot();
+    state.offers = computeOffers(state.snapshot);
+
+    // Soft pause: stop free roam + prevent Turf Defense start while we're in the intervention.
+    try {
+      if (GameState?.character?.freeRoam) GameState.character.freeRoam = false;
+    } catch (e) {}
+
+    _toast('👤 The Visitor has arrived (Phase 1)', 'info');
+    try { console.log('[CIA] Intervention started', JSON.parse(JSON.stringify(state))); } catch (e) {}
+    try { Storage && Storage.save && Storage.save(); } catch (e) {}
+  }
+
+  function end() {
+    const state = ensureState();
+    if (!state) return;
+    state.active = false;
+    state.reason = null;
+    // keep snapshot/offers for debugging until overwritten next time
+    try { Storage && Storage.save && Storage.save(); } catch (e) {}
+    try { console.log('[CIA] Intervention ended'); } catch (e) {}
+  }
+
+  function applyResolution(type, payload) {
+    const state = ensureState();
+    if (!state || !state.active) return;
+
+    try {
+      if (type === 'cash' && payload && payload.cost) {
+        GameState.player.cash = Math.max(0, Number(GameState.player.cash || 0) - Number(payload.cost || 0));
+        GameState.player.globalHeat = Math.max(0, Number(GameState.player.globalHeat || 0) - Number(payload.heatReduction || 0));
+      } else if (type === 'weapons' && payload) {
+        // remove all weapons for now (phase 1)
+        if (Array.isArray(GameState.player.weapons)) GameState.player.weapons = [];
+        GameState.player.globalHeat = Math.max(0, Number(GameState.player.globalHeat || 0) - Number(payload.heatReduction || 0));
+      } else if (type === 'property' && payload && payload.propertyId) {
+        // Phase 1: mark leasedUntil on the property building
+        const pb = GameState.propertyBuildings;
+        if (Array.isArray(pb)) {
+          const prop = pb.find(p => p && p.id === payload.propertyId);
+          if (prop) {
+            prop.leasedUntil = Date.now() + (Number(payload.durationHours || 24) * 60 * 60 * 1000);
+            prop.leasedToCIA = true;
+          }
+        }
+        GameState.player.globalHeat = Math.max(0, Number(GameState.player.globalHeat || 0) - Number(payload.heatReduction || 0));
+      }
+      try { Storage && Storage.save && Storage.save(); } catch (e) {}
+    } catch (e) {}
+
+    end();
+  }
+
+  function _ensureLockdownId() {
+    try {
+      if (!GameState.cityState) GameState.cityState = {};
+      if (!GameState.cityState.lockdownId) {
+        const base = GameState.cityState.lockdownUntil ? String(GameState.cityState.lockdownUntil) : String(Date.now());
+        GameState.cityState.lockdownId = base + '_' + Math.floor(Math.random() * 1e9);
+      }
+      return GameState.cityState.lockdownId;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function onLockdownStart() {
+    const state = ensureState();
+    if (!state) return;
+    const id = _ensureLockdownId();
+    if (!id) return;
+    if (state.lastLockdownIdTriggered === id) return;
+
+    state.lastLockdownIdTriggered = id;
+    start('lockdown');
+  }
+
+  function maybeTriggerFromExistingLockdown() {
+    // Called on app start / tab init to handle players already in lockdown
+    try {
+      if (GameState?.cityState?.lockdown) {
+        onLockdownStart();
+      }
+    } catch (e) {}
+  }
+
+  return {
+    ensureState,
+    start,
+    end,
+    applyResolution,
+    onLockdownStart,
+    maybeTriggerFromExistingLockdown
+  };
+})();
+
+// Expose simple dev commands for testing (Phase 1)
+try {
+  window.startCIAIntervention = (reason) => CIAIntervention.start(reason || 'lockdown');
+  window.endCIAIntervention = () => CIAIntervention.end();
+  window.applyCIAResolution = (type, payload) => CIAIntervention.applyResolution(type, payload);
+} catch (e) {}
+
 
       function rgbToHsv(r, g, b) {
         r/=255; g/=255; b/=255;
@@ -20410,9 +20890,7 @@ function updateTurfDefense(dt) {
         // Check for active lockdown/manhunt on init
         if (GameState.cityState.lockdown) {
           this.showLockdownState();
-        
-        // Phase 1: CIA Intervention trigger (systems-only)
-        try { CIAIntervention && CIAIntervention.maybeTriggerFromCurrentLockdown && CIAIntervention.maybeTriggerFromCurrentLockdown(); } catch (_) {}}
+        }
         
         // Check for ongoing transition on init
         if (GameState.playerStatusTransition && GameState.playerStatusTransitionEnd) {
@@ -22928,8 +23406,18 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
           }
         }, 10000); // Every 10 seconds
 
-        // Also run once immediately so existing high-heat saves trigger without waiting.
-        try { CIAIntervention && CIAIntervention.maybeTriggerFromCurrentLockdown && CIAIntervention.maybeTriggerFromCurrentLockdown(); } catch (_) {}
+        // Immediate check on start (handles players already >= 85% or already in lockdown)
+        try {
+          const heatNow = GameState.player.globalHeat;
+          if (heatNow >= 85 && !GameState.cityState.lockdown) {
+            this.initilateLockdown();
+          } else {
+            // If lockdown is already active from a previous session, ensure Visitor triggers.
+            if (typeof CIAIntervention !== 'undefined' && CIAIntervention && CIAIntervention.maybeTriggerFromExistingLockdown) {
+              CIAIntervention.maybeTriggerFromExistingLockdown();
+            }
+          }
+        } catch (e) {}
       },
       
       startSuspicionDecay() {
@@ -24220,8 +24708,13 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       initilateLockdown() {
         GameState.cityState.lockdown = true;
         GameState.cityState.lockdownUntil = Date.now() + (2 * 60 * 1000); // 2 minutes
-        // Unique id for this lockdown (used for one-shot event triggers)
-        GameState.cityState.lockdownId = Date.now();
+        // Unique id for this lockdown (used to trigger Visitor once per lockdown)
+        if (!GameState.cityState.lockdownId) {
+          GameState.cityState.lockdownId = String(GameState.cityState.lockdownUntil) + '_' + Math.floor(Math.random() * 1e9);
+        }
+
+        // Phase 1: trigger CIA Visitor
+        try { CIAIntervention && CIAIntervention.onLockdownStart && CIAIntervention.onLockdownStart(); } catch (e) {}
         
         // Force stop free roam
         if (GameState.character.freeRoam) {
@@ -24279,9 +24772,7 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
         GameState.cityState.lockdown = false;
         GameState.cityState.lockdownUntil = null;
         
-        
-        GameState.cityState.lockdownId = null;
-// Remove visual elements
+        // Remove visual elements
         const overlay = document.getElementById('lockdown-overlay');
         if (overlay) overlay.remove();
         
@@ -27996,128 +28487,3 @@ function getCameraShakeOffset(defense) {
     return { x: 0, y: 0 };
   }
 }
-
-
-/* === CIA INTERVENTION (PHASE 1) === */
-const CIAIntervention = {
-  ensureState() {
-    if (!GameState) return;
-    if (!GameState.ciaIntervention || typeof GameState.ciaIntervention !== 'object') {
-      GameState.ciaIntervention = { active:false, reason:null, lockdownId:null, snapshot:null, offers:null, lastTriggeredAt:null };
-    } else {
-      const s = GameState.ciaIntervention;
-      if (typeof s.active !== 'boolean') s.active = false;
-      if (!('reason' in s)) s.reason = null;
-      if (!('lockdownId' in s)) s.lockdownId = null;
-      if (!('snapshot' in s)) s.snapshot = null;
-      if (!('offers' in s)) s.offers = null;
-      if (!('lastTriggeredAt' in s)) s.lastTriggeredAt = null;
-    }
-  },
-
-  _clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); },
-
-  captureSnapshot() {
-    this.ensureState();
-    const p = (GameState && GameState.player) ? GameState.player : {};
-    const weapons = Array.isArray(p.weapons) ? p.weapons.slice() : [];
-    const weaponParts = (p.weaponParts && typeof p.weaponParts === 'object') ? Object.assign({}, p.weaponParts) : {};
-
-    const properties = (GameState && GameState.turf && Array.isArray(GameState.turf.properties))
-      ? GameState.turf.properties.filter(pr => pr && pr.owned).map(pr => ({
-          id: pr.id,
-          name: pr.name || pr.title || 'Property',
-          dailyIncome: Number(pr.dailyIncome || pr.income || 0) || 0,
-          tier: Number(pr.tier || 1) || 1,
-        }))
-      : [];
-
-    return {
-      cash: Number(p.cash || 0) || 0,
-      weapons,
-      weaponParts,
-      properties,
-      globalHeat: Number(p.globalHeat || 0) || 0,
-      timestamp: Date.now(),
-    };
-  },
-
-  computeOffers(snapshot) {
-    const heat = this._clamp(Number(snapshot.globalHeat || 0) || 0, 0, 100);
-    const cash = Math.max(0, Number(snapshot.cash || 0) || 0);
-
-    let cashOffer = null;
-    if (cash > 0) {
-      const pct = Math.min(0.35, 0.10 + (cash / 1000000)); // 10% + scaling, capped
-      const cost = Math.floor(cash * pct);
-      const reduction = this._clamp(Math.round(heat * pct), 10, 70);
-      cashOffer = { type: 'cash', cost, pct, heatReduction: reduction };
-    }
-
-    let weaponsOffer = null;
-    const wCount = Array.isArray(snapshot.weapons) ? snapshot.weapons.length : 0;
-    if (wCount > 0) {
-      const reduction = this._clamp(8 * wCount, 10, 60);
-      weaponsOffer = { type: 'weapons', weaponsTaken: wCount, heatReduction: reduction };
-    }
-
-    let propertyOffers = null;
-    const props = Array.isArray(snapshot.properties) ? snapshot.properties : [];
-    if (props.length > 0) {
-      propertyOffers = props.map(p => ({
-        type: 'property',
-        propertyId: p.id,
-        name: p.name,
-        dailyIncome: p.dailyIncome,
-        durationHours: 24,
-        heatReduction: this._clamp(Math.round((p.dailyIncome || 0) / 10), 5, 40),
-      }));
-    }
-
-    return { cash: cashOffer, weapons: weaponsOffer, properties: propertyOffers };
-  },
-
-  maybeTriggerFromCurrentLockdown() {
-    this.ensureState();
-    // Lockdown is the canonical trigger
-    const inLockdown = !!(GameState && GameState.cityState && GameState.cityState.lockdown);
-    const heat = Number(GameState?.player?.globalHeat || 0) || 0;
-    if (!inLockdown && heat < 85) return;
-
-    // Create / reuse a lockdownId so we can trigger once per lockdown, even across reloads.
-    if (GameState && GameState.cityState) {
-      if (!GameState.cityState.lockdownId) {
-        GameState.cityState.lockdownId = Date.now();
-      }
-    }
-    const lockdownId = GameState?.cityState?.lockdownId || null;
-
-    const s = GameState.ciaIntervention;
-    if (s.active) return;
-    if (lockdownId && s.lockdownId === lockdownId) return; // already handled for this lockdown
-
-    this.start('lockdown', lockdownId);
-  },
-
-  start(reason, lockdownId) {
-    this.ensureState();
-    const s = GameState.ciaIntervention;
-    s.active = true;
-    s.reason = reason || 'lockdown';
-    s.lockdownId = lockdownId || GameState?.cityState?.lockdownId || Date.now();
-    s.snapshot = this.captureSnapshot();
-    s.offers = this.computeOffers(s.snapshot);
-    s.lastTriggeredAt = Date.now();
-
-    console.log('[CIA] Intervention started', s);
-
-    // Minimal Phase 1: small visible toast so mobile testers *see* it without devtools.
-    try {
-      if (typeof TurfTab !== 'undefined' && TurfTab && TurfTab.showTemporaryNotification) {
-        TurfTab.showTemporaryNotification('👤 The Visitor has arrived (Phase 1)');
-      }
-    } catch (_) {}
-
-    try { Storage && Storage.save && Storage.save(); } catch (_) {}
-  },
-};
