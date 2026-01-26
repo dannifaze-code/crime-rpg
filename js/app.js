@@ -6403,6 +6403,44 @@ const CartoonSpriteGenerator = {
         // Map icons
         if (!Array.isArray(GameState.mapIcons)) GameState.mapIcons = JSON.parse(JSON.stringify(DEFAULT_STATE.mapIcons || []));
 
+        // Property Buildings (purchasable real estate)
+        if (!Array.isArray(GameState.propertyBuildings)) {
+          // Initialize from fixedPropertyPositions if available
+          if (Array.isArray(GameState.fixedPropertyPositions) && GameState.fixedPropertyPositions.length > 0) {
+            GameState.propertyBuildings = GameState.fixedPropertyPositions.map(prop => ({
+              ...prop,
+              owned: false,
+              upgradeLevel: 0,
+              lastCollected: null
+            }));
+            console.log(`[SCHEMA] Initialized ${GameState.propertyBuildings.length} property buildings from fixedPropertyPositions`);
+          } else if (Array.isArray(DEFAULT_STATE.fixedPropertyPositions) && DEFAULT_STATE.fixedPropertyPositions.length > 0) {
+            GameState.propertyBuildings = DEFAULT_STATE.fixedPropertyPositions.map(prop => ({
+              ...prop,
+              owned: false,
+              upgradeLevel: 0,
+              lastCollected: null
+            }));
+            console.log(`[SCHEMA] Initialized ${GameState.propertyBuildings.length} property buildings from DEFAULT_STATE.fixedPropertyPositions`);
+          } else {
+            GameState.propertyBuildings = [];
+            console.warn('[SCHEMA] No fixedPropertyPositions available - propertyBuildings will be empty');
+          }
+        }
+
+        // Ensure fixedPropertyPositions exists
+        if (!Array.isArray(GameState.fixedPropertyPositions)) {
+          GameState.fixedPropertyPositions = JSON.parse(JSON.stringify(DEFAULT_STATE.fixedPropertyPositions || []));
+        }
+
+        // Ensure fixedLandmarkPositions exists
+        if (!GameState.fixedLandmarkPositions || typeof GameState.fixedLandmarkPositions !== 'object') {
+          GameState.fixedLandmarkPositions = JSON.parse(JSON.stringify(DEFAULT_STATE.fixedLandmarkPositions || {
+            safeHouse: { x: 12, y: 45 },
+            policeStation: { x: 50, y: 30 }
+          }));
+        }
+
         // Character
         if (!GameState.character.position || typeof GameState.character.position !== 'object') {
           GameState.character.position = JSON.parse(JSON.stringify((DEFAULT_STATE.character && DEFAULT_STATE.character.position) ? DEFAULT_STATE.character.position : { x: 20, y: 45 }));
@@ -6970,18 +7008,24 @@ window.ciaDebug = () => {
      */
     function getFootprintForType(type) {
       const footprints = {
-        // Landmarks
+        // Landmarks (camelCase and lowercase variants)
         'safeHouse': { width: 3, height: 3 },
+        'safehouse': { width: 3, height: 3 },
         'policeStation': { width: 4, height: 4 },
+        'policestation': { width: 4, height: 4 },
         'hospital': { width: 4, height: 4 },
         'gunShop': { width: 2, height: 2 },
+        'gunshop': { width: 2, height: 2 },
         'chopShop': { width: 3, height: 3 },
+        'chopshop': { width: 3, height: 3 },
         'casino': { width: 4, height: 4 },
         'nightclub': { width: 3, height: 3 },
         'bank': { width: 4, height: 4 },
         'warehouse': { width: 5, height: 5 },
         'docks': { width: 6, height: 4 },
         'gangHQ': { width: 4, height: 4 },
+        'ganghq': { width: 4, height: 4 },
+        'factory': { width: 4, height: 4 },
 
         // Properties
         'apartment': { width: 3, height: 3 },
@@ -7001,11 +7045,30 @@ window.ciaDebug = () => {
      */
     function getIconForPropertyType(type) {
       const icons = {
+        // Standard properties
         'apartment': '🏢',
         'highrise': '🏙️',
         'dealership': '🚗',
         'stripclub': '💃',
-        'mall': '🏬'
+        'mall': '🏬',
+        // Landmark-properties (purchasable buildings)
+        'gunshop': '🔫',
+        'gunShop': '🔫',
+        'hospital': '🏥',
+        'warehouse': '📦',
+        'docks': '⚓',
+        'nightclub': '🎵',
+        'bank': '🏦',
+        'casino': '🎰',
+        'chopshop': '🚗',
+        'chopShop': '🚗',
+        'ganghq': '👥',
+        'gangHQ': '👥',
+        'factory': '🏭',
+        'safeHouse': '🏠',
+        'safehouse': '🏠',
+        'policeStation': '👮',
+        'policestation': '👮'
       };
 
       return icons[type] || '🏗️';
@@ -7075,7 +7138,7 @@ window.ciaDebug = () => {
         console.log(`   Pixel coords: (${x}, ${y}), Size: ${w}x${h} ${nearEdge ? '[NEAR EDGE]' : '[SAFE]'}`);
 
         // Determine if this is the main base (safehouse = critical)
-        const isCritical = building.typeId === 'safehouse';
+        const isCritical = building.typeId === 'safehouse' || building.typeId === 'safeHouse';
         const hpMax = isCritical ? 1000 : 500;
 
         const structure = {
@@ -15493,7 +15556,7 @@ function ensureLandmarkProperties() {
       console.log('=== Initializing Property Buildings ===');
       
       // === FORCE REFRESH FLAG: Change this version to force reload all properties ===
-      const PROPERTY_LAYOUT_VERSION = 2; // Increment this to force refresh
+      const PROPERTY_LAYOUT_VERSION = 3; // Increment this to force refresh
       
       if (!GameState.propertyLayoutVersion || GameState.propertyLayoutVersion < PROPERTY_LAYOUT_VERSION) {
         console.log(`🔄 Property layout version outdated (${GameState.propertyLayoutVersion || 0} < ${PROPERTY_LAYOUT_VERSION})`);
@@ -19514,18 +19577,25 @@ if (GameState.propertyBuildings && GameState.propertyBuildings.length > 0) {
     // CORE: Initialize Map Icons
     // ========================================
     function initializeMapIcons() {
-      if (GameState.mapIcons.length === 0) {
+      // Only initialize if mapIcons is empty and fixedLandmarkPositions exists
+      // Note: Non-purchasable landmarks only (safeHouse, policeStation)
+      // All purchasable buildings are in propertyBuildings via fixedPropertyPositions
+      if (!GameState.mapIcons || GameState.mapIcons.length === 0) {
+        const positions = GameState.fixedLandmarkPositions || DEFAULT_STATE.fixedLandmarkPositions || {
+          safeHouse: { x: 12, y: 45 },
+          policeStation: { x: 50, y: 30 }
+        };
+        
         GameState.mapIcons = [
-          { type: "safeHouse", icon: "🏠", x: 30, y: 50, state: "active", label: "Safe House" },
-          { type: "hospital", icon: "🏥", x: 75, y: 25, state: "dormant", label: "Hospital" },
-          { type: "dealer", icon: "💰", x: 20, y: 75, state: "dormant", label: "Dealer" },
-          { type: "gang", icon: "👥", x: 70, y: 60, state: "dormant", label: "Gang HQ" },
-          { type: "police", icon: "🚓", x: 50, y: 20, state: "dormant", label: "Police Station" }
+          { type: 'safeHouse', x: positions.safeHouse.x, y: positions.safeHouse.y, icon: '🏠', label: '🏠 Safe House', state: 'active' },
+          { type: 'policeStation', x: positions.policeStation.x, y: positions.policeStation.y, icon: '👮', label: '👮 Police Station', state: 'active' }
         ];
         
         // Update character and safe house positions to match safe house icon
-        GameState.character.position = { x: 30, y: 50 };
-        GameState.safeHouse.position = { x: 30, y: 50 };
+        GameState.character.position = { x: positions.safeHouse.x, y: positions.safeHouse.y };
+        GameState.safeHouse.position = { x: positions.safeHouse.x, y: positions.safeHouse.y };
+        
+        console.log(`[initializeMapIcons] Created ${GameState.mapIcons.length} landmark icons (safeHouse, policeStation)`);
       }
     }
 
@@ -27873,6 +27943,20 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
         }
       }
       
+      // FALLBACK: If propertyBuildings is empty, reinitialize it from fixedPropertyPositions
+      if (!Array.isArray(GameState.propertyBuildings) || GameState.propertyBuildings.length === 0) {
+        console.log('💥 propertyBuildings empty - reinitializing from fixedPropertyPositions...');
+        if (Array.isArray(GameState.fixedPropertyPositions)) {
+          GameState.propertyBuildings = GameState.fixedPropertyPositions.map(prop => ({
+            ...prop,
+            owned: false,
+            upgradeLevel: 0,
+            lastCollected: null
+          }));
+          console.log(`💥 Reinitialized ${GameState.propertyBuildings.length} properties`);
+        }
+      }
+      
       if (Array.isArray(GameState.propertyBuildings) && GameState.propertyBuildings.length > 0) {
         console.log(`💥 Found ${GameState.propertyBuildings.length} properties - updating positions NOW...`);
         
@@ -27884,7 +27968,7 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
           gunshop.y = 6;
           console.log(`   ✅ After: Gun Shop at (${gunshop.x}, ${gunshop.y})`);
         } else {
-          console.error('   ❌ Gun Shop NOT FOUND!');
+          console.warn('   ⚠️ Gun Shop not found in propertyBuildings (may be expected for new saves)');
         }
         
         // Update Casino
@@ -27895,7 +27979,7 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
           casino.y = 88;
           console.log(`   ✅ After: Casino at (${casino.x}, ${casino.y})`);
         } else {
-          console.error('   ❌ Casino NOT FOUND!');
+          console.warn('   ⚠️ Casino not found in propertyBuildings (may be expected for new saves)');
         }
         
         // Update Luxury Motors (dealer2)
@@ -27906,7 +27990,7 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
           luxury.y = 88;
           console.log(`   ✅ After: Luxury Motors at (${luxury.x}, ${luxury.y})`);
         } else {
-          console.error('   ❌ Luxury Motors NOT FOUND!');
+          console.warn('   ⚠️ Luxury Motors not found in propertyBuildings (may be expected for new saves)');
         }
         
         // Force save immediately
@@ -27917,7 +28001,7 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
           console.error('❌ NUCLEAR: Save failed:', e);
         }
       } else {
-        console.error('💥 ERROR: No properties found after init!');
+        console.warn('💥 WARNING: No properties found after init - this may indicate an issue');
       }
       // ===== END NUCLEAR OPTION =====
       
