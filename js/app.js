@@ -27845,6 +27845,54 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       console.log('[DEBUG] Loading storage...');
       Storage.load();
       
+      // ===== NUCLEAR OPTION: FORCE PROPERTY POSITION UPDATE =====
+      console.log('💥 NUCLEAR RESET: Forcing property position updates...');
+      
+      // Force clear old property layout version
+      if (typeof GameState !== 'undefined' && GameState) {
+        GameState.propertyLayoutVersion = 0; // Force version check to fail
+        
+        // Directly update property positions if they exist
+        if (Array.isArray(GameState.propertyBuildings) && GameState.propertyBuildings.length > 0) {
+          console.log(`💥 Found ${GameState.propertyBuildings.length} existing properties - updating positions...`);
+          
+          // Update Gun Shop
+          const gunshop = GameState.propertyBuildings.find(p => p.id === 'gunshop');
+          if (gunshop) {
+            gunshop.x = 3;
+            gunshop.y = 6;
+            console.log('✅ NUCLEAR: Gun Shop → (3, 6)');
+          }
+          
+          // Update Casino
+          const casino = GameState.propertyBuildings.find(p => p.id === 'casino');
+          if (casino) {
+            casino.x = 52;
+            casino.y = 88;
+            console.log('✅ NUCLEAR: Casino → (52, 88)');
+          }
+          
+          // Update Luxury Motors
+          const luxury = GameState.propertyBuildings.find(p => p.id === 'dealer2');
+          if (luxury) {
+            luxury.x = 72;
+            luxury.y = 88;
+            console.log('✅ NUCLEAR: Luxury Motors → (72, 88)');
+          }
+          
+          // Force save immediately
+          try {
+            Storage.save();
+            console.log('💾 NUCLEAR: Position updates saved!');
+          } catch(e) {
+            console.error('❌ NUCLEAR: Save failed:', e);
+          }
+        } else {
+          console.log('💥 No existing properties - will initialize fresh');
+        }
+      }
+      // ===== END NUCLEAR OPTION =====
+      
       console.log('[DEBUG] Initializing map icons...');
       initializeMapIcons(); // After load, so it doesn't get overwritten
       
