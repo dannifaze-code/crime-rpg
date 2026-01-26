@@ -6122,7 +6122,7 @@ const CartoonSpriteGenerator = {
       // Optimized spacing for mobile with minimum 10% gaps to prevent overlapping
       fixedPropertyPositions: [
         // ROW 1 - Top (y: 12)
-        { id: 'gunshop', type: 'gunshop', x: 10, y: 20, name: 'Gun Shop', price: 30000, income: 800 },
+        { id: 'gunshop', type: 'gunshop', x: 3, y: 6, name: 'Gun Shop', price: 30000, income: 800 },
         { id: 'strip1', type: 'stripclub', x: 35, y: 12, name: 'The Golden Palace', price: 80000, income: 2000 },
         { id: 'rise1', type: 'highrise', x: 58, y: 12, name: 'Platinum Tower', price: 300000, income: 5000 },
         { id: 'rise2', type: 'highrise', x: 75, y: 12, name: 'Diamond Heights', price: 300000, income: 5000 },
@@ -6138,7 +6138,7 @@ const CartoonSpriteGenerator = {
         { id: 'apt2', type: 'apartment', x: 42, y: 38, name: 'Downtown Apartments', price: 20000, income: 500 },
 
         // ROW 4 - Center (y: 52)
-        { id: 'dealer2', type: 'dealership', x: 77, y: 48, name: 'Luxury Motors', price: 50000, income: 1200 },
+        { id: 'dealer2', type: 'dealership', x: 72, y: 88, name: 'Luxury Motors', price: 50000, income: 1200 },
         { id: 'chopshop', type: 'chopshop', x: 75, y: 52, name: 'Chop Shop', price: 200000, income: 4200 },
 
         // ROW 5 - Lower-middle (y: 65)
@@ -6150,7 +6150,7 @@ const CartoonSpriteGenerator = {
         { id: 'nightclub', type: 'nightclub', x: 15, y: 78, name: 'Nightclub', price: 220000, income: 5200 },
         { id: 'factory', type: 'factory', x: 45, y: 78, name: 'Factory', price: 320000, income: 7000 },
         { id: 'rise3', type: 'highrise', x: 70, y: 78, name: 'Empire Building', price: 300000, income: 5000 },
-        { id: 'casino', type: 'casino', x: 68, y: 70, name: 'Casino', price: 250000, income: 6000 },
+        { id: 'casino', type: 'casino', x: 52, y: 88, name: 'Casino', price: 250000, income: 6000 },
 
         // ROW 7 - Bottom (y: 88)
         { id: 'bank', type: 'bank', x: 35, y: 88, name: 'Bank', price: 450000, income: 9000 },
