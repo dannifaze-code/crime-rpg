@@ -6122,7 +6122,7 @@ const CartoonSpriteGenerator = {
       // Optimized spacing for mobile with minimum 10% gaps to prevent overlapping
       fixedPropertyPositions: [
         // ROW 1 - Top (y: 12)
-        { id: 'gunshop', type: 'gunshop', x: 5, y: 30, name: 'Gun Shop', price: 30000, income: 800 },  // Moved down further to gray building area
+        { id: 'gunshop', type: 'gunshop', x: 18, y: 42, name: 'Gun Shop', price: 30000, income: 800 },  // Moved to gray building area
         { id: 'strip1', type: 'stripclub', x: 35, y: 12, name: 'The Golden Palace', price: 80000, income: 2000 },
         { id: 'rise1', type: 'highrise', x: 58, y: 12, name: 'Platinum Tower', price: 300000, income: 5000 },
         { id: 'rise2', type: 'highrise', x: 75, y: 12, name: 'Diamond Heights', price: 300000, income: 5000 },
@@ -15556,7 +15556,7 @@ function ensureLandmarkProperties() {
       console.log('=== Initializing Property Buildings ===');
       
       // === FORCE REFRESH FLAG: Change this version to force reload all properties ===
-      const PROPERTY_LAYOUT_VERSION = 6; // Increment this to force refresh - BUMPED TO 6 for position fixes
+      const PROPERTY_LAYOUT_VERSION = 7; // Increment this to force refresh - BUMPED TO 7 for gun shop position
       
       // Always ensure we have the canonical fixedPropertyPositions from DEFAULT_STATE
       // This guarantees all 21 buildings are available
