@@ -6113,12 +6113,13 @@ const CartoonSpriteGenerator = {
         safeHouse: { x: 20, y: 45 },      // Left side, gray building with more space
         policeStation: { x: 50, y: 35 },  // Center-top, gray building with clearance
         hospital: { x: 85, y: 15 },       // Top-right, gray building with spacing
-        gunShop: { x: 35, y: 20 },        // Upper-left, gray building isolated
+        gunShop: { x: 18, y: 38 },        // Upper-left, gray building isolated
         chopShop: { x: 75, y: 50 },       // Right-center, gray building with room
         casino: { x: 80, y: 75 },         // Lower-right, gray building spread out
         nightclub: { x: 15, y: 80 },      // Bottom-left, gray building with clearance
         bank: { x: 45, y: 85 },           // Bottom-center, gray building isolated
-        warehouse: { x: 8, y: 35 },       // Far left, gray building with space
+        warehouse: { x: 8, y: 35 },        // Far left, gray building with space
+        factory: { x: 84, y: 78 },       // Moved off Gang HQ
         docks: { x: 90, y: 55 },          // Right side, gray building spread out
         gangHQ: { x: 60, y: 70 }          // Gang Headquarters - center-right area
       },
@@ -6141,7 +6142,7 @@ const CartoonSpriteGenerator = {
         
         // CAR DEALERSHIPS (2) - Mid-tier properties, $50k each
         { id: 'dealer1', type: 'dealership', x: 15, y: 28, name: 'Premium Auto Sales', price: 50000, income: 1200 },
-        { id: 'dealer2', type: 'dealership', x: 68, y: 65, name: 'Luxury Motors', price: 50000, income: 1200 },
+        { id: 'dealer2', type: 'dealership', x: 78, y: 56, name: 'Luxury Motors', price: 50000, income: 1200 },
         
         // STRIP CLUB (1) - $80k
         { id: 'strip1', type: 'stripclub', x: 32, y: 22, name: 'The Golden Palace', price: 80000, income: 2000 },
@@ -13091,7 +13092,40 @@ function updateTurfDefense(dt) {
         GameState.map.grid = null;
         GameState.map.seed = null;
         GameState.map.generatedAt = null;
-        GameState.mapIcons = [];
+        GameState.mapIcons = [
+    {
+      id: 'safeHouse',
+      x: positions.safeHouse.x,
+      y: positions.safeHouse.y,
+      icon: '🏠',
+      type: 'safeHouse',
+      name: 'Safe House',
+    },
+    {
+      id: 'policeStation',
+      x: positions.policeStation.x,
+      y: positions.policeStation.y,
+      icon: '🚓',
+      type: 'policeStation',
+      name: 'Police Station',
+    },
+    {
+      id: 'gunShop',
+      x: positions.gunShop.x,
+      y: positions.gunShop.y,
+      icon: '🔫',
+      type: 'gunShop',
+      name: 'Gun Shop',
+    },
+    {
+      id: 'gangHQ',
+      x: positions.gangHQ.x,
+      y: positions.gangHQ.y,
+      icon: '🏢',
+      type: 'gangHQ',
+      name: 'Gang HQ',
+    }
+  ];
         ProceduralMapRenderer.rendered = false;
         Storage.save();
         console.log('Cache cleared');
@@ -15436,7 +15470,7 @@ function ensureLandmarkProperties() {
     { id: 'lm_bank',       type: 'bank',       name: 'Bank',       price: 450000, income: 9000, x: pos.bank?.x,       y: pos.bank?.y },
     { id: 'lm_nightclub',  type: 'nightclub',  name: 'Night Club', price: 220000, income: 5200, x: pos.nightclub?.x,  y: pos.nightclub?.y },
     { id: 'lm_warehouse',  type: 'warehouse',  name: 'Warehouse',  price: 160000, income: 3200, x: pos.warehouse?.x,  y: pos.warehouse?.y },
-    { id: 'lm_factory',    type: 'factory',    name: 'Factory',    price: 320000, income: 7000, x: pos.gangHQ?.x,     y: pos.gangHQ?.y }, // placeholder spot
+    { id: 'lm_factory',    type: 'factory',    name: 'Factory',    price: 320000, income: 7000, x: (pos.factory?.x ?? pos.warehouse?.x ?? pos.gangHQ?.x),     y: (pos.factory?.y ?? pos.warehouse?.y ?? pos.gangHQ?.y) }, // placeholder spot
     { id: 'lm_hospital',   type: 'hospital',   name: 'Hospital',   price: 520000, income: 9800, x: pos.hospital?.x,   y: pos.hospital?.y },
     { id: 'lm_chopShop',   type: 'chopShop',   name: 'Chop Shop',  price: 200000, income: 4200, x: pos.chopShop?.x,   y: pos.chopShop?.y }
   ];
