@@ -6673,10 +6673,124 @@ const CartoonSpriteGenerator = {
         bodyEl: null,
         actionsEl: null,
         dimmerEl: null,
+        portraitWrapEl: null,
+        portraitImgEl: null,
+        agentSprite: null,
         activeStep: 'main',
         pickListener: null,
         pickRefreshTimer: null
       };
+
+// ---------------------------
+// Phase 3: CIA Operative Sprite (PNG frame animation, DOM-based)
+// ---------------------------
+const CIA_SPRITE_PATH = {
+  idle: [
+    'sprites/cia-agent-pngs/idle_01.png',
+    'sprites/cia-agent-pngs/idle_02.png'
+  ],
+  talk: [
+    'sprites/cia-agent-pngs/talk_01.png',
+    'sprites/cia-agent-pngs/talk_02.png',
+    'sprites/cia-agent-pngs/talk_03.png',
+    'sprites/cia-agent-pngs/talk_04.png'
+  ]
+};
+
+class CIAAgentSprite {
+  constructor(imgEl) {
+    this.imgEl = imgEl || null;
+    this.mode = 'idle';
+    this.frame = 0;
+    this.timer = null;
+    this.preloaded = new Set();
+    this.failed = new Set();
+    this._lastSrc = '';
+    this._ensureImgHandlers();
+    this.setMode('idle');
+  }
+
+  _ensureImgHandlers() {
+    if (!this.imgEl) return;
+    this.imgEl.addEventListener('error', () => {
+      try {
+        const src = this.imgEl?.src || '';
+        if (src) this.failed.add(src);
+      } catch(e) {}
+    });
+  }
+
+  preloadAll() {
+    try {
+      const all = [...CIA_SPRITE_PATH.idle, ...CIA_SPRITE_PATH.talk];
+      all.forEach(src => this._preload(src));
+    } catch(e) {}
+  }
+
+  _preload(src) {
+    if (!src || this.preloaded.has(src) || this.failed.has(src)) return;
+    this.preloaded.add(src);
+    try {
+      const im = new Image();
+      im.onload = () => {};
+      im.onerror = () => { try { this.failed.add(src); } catch(e) {} };
+      im.src = src;
+    } catch(e) {}
+  }
+
+  setMode(mode) {
+    const next = (mode === 'talk') ? 'talk' : 'idle';
+    this.mode = next;
+    this.frame = 0;
+
+    const ms = (this.mode === 'talk') ? 220 : 520;
+
+    this.stop();
+    this._tick();
+    this.timer = setInterval(() => this._tick(), ms);
+  }
+
+  _tick() {
+    if (!this.imgEl) return;
+    const frames = CIA_SPRITE_PATH[this.mode] || CIA_SPRITE_PATH.idle;
+    if (!frames || !frames.length) return;
+
+    const src = frames[this.frame % frames.length];
+    this.frame = (this.frame + 1) % frames.length;
+
+    const nextSrc = frames[this.frame % frames.length];
+    this._preload(nextSrc);
+
+    if (src && src !== this._lastSrc && !this.failed.has(src)) {
+      this._lastSrc = src;
+      try {
+        this.imgEl.classList.remove('cia-sprite-ready');
+        const onload = () => {
+          try { this.imgEl.classList.add('cia-sprite-ready'); } catch(e) {}
+        };
+        this.imgEl.addEventListener('load', onload, { once: true });
+        this.imgEl.src = src;
+      } catch(e) {}
+    }
+  }
+
+  stop() {
+    if (this.timer) { try { clearInterval(this.timer); } catch(e) {} }
+    this.timer = null;
+  }
+
+  destroy() {
+    this.stop();
+    try {
+      if (this.imgEl) {
+        this.imgEl.classList.remove('cia-sprite-ready');
+        this.imgEl.removeAttribute('src');
+      }
+    } catch(e) {}
+  }
+}
+
+
 
       function _injectStylesOnce() {
         try {
@@ -6751,6 +6865,32 @@ const CartoonSpriteGenerator = {
               line-height: 1.45;
               margin-bottom: 12px;
             }
+
+.cia-portrait-row{
+  display:flex; align-items:center; justify-content:center;
+  margin: 10px 0 8px;
+}
+.cia-portrait-frame{
+  width: min(78vw, 340px);
+  max-width: 340px;
+  aspect-ratio: 1 / 1;
+  border-radius: 16px;
+  overflow:hidden;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.12);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.25);
+  display:flex; align-items:center; justify-content:center;
+}
+.cia-portrait-row img{
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  image-rendering: pixelated;
+  transform: translateZ(0);
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+.cia-portrait-row img.cia-sprite-ready{ opacity: 1; }
             .cia-dialog .cia-actions{
               display:flex;
               flex-direction:column;
@@ -6861,6 +7001,7 @@ const CartoonSpriteGenerator = {
         dialog.innerHTML = `
           <div class="cia-badge">🕶️ SPECIAL EVENT • LOCKDOWN</div>
           <div class="cia-title" id="cia-dialog-title">The Visitor</div>
+          <div class=\"cia-portrait-row\" id=\"cia-portrait-row\"><div class=\"cia-portrait-frame\"><img id=\"cia-portrait-img\" alt=\"CIA operative\" /></div></div>
           <div class="cia-body" id="cia-dialog-body"></div>
           <div class="cia-actions" id="cia-dialog-actions"></div>
           <div class="cia-hint" id="cia-dialog-hint"></div>
@@ -6888,6 +7029,12 @@ const CartoonSpriteGenerator = {
         UI.bodyEl = dialog.querySelector('#cia-dialog-body');
         UI.actionsEl = dialog.querySelector('#cia-dialog-actions');
         UI.hintEl = dialog.querySelector('#cia-dialog-hint');
+        UI.portraitWrapEl = dialog.querySelector('#cia-portrait-row');
+        UI.portraitImgEl = dialog.querySelector('#cia-portrait-img');
+        if (!UI.agentSprite) {
+          try { UI.agentSprite = new CIAAgentSprite(UI.portraitImgEl); } catch(e) { UI.agentSprite = null; }
+        }
+
       }
 
       function _openUI() {
@@ -6900,6 +7047,11 @@ const CartoonSpriteGenerator = {
         try {
           _stopPropertyPickMode();
           if (UI.overlay) UI.overlay.classList.remove('cia-open');
+          // Phase 3: fade out agent sprite then destroy to stop timers.
+          try {
+            if (UI.portraitImgEl) UI.portraitImgEl.classList.remove('cia-sprite-ready');
+            if (UI.agentSprite) setTimeout(() => { try { UI.agentSprite.destroy(); } catch(e) {} }, 180);
+          } catch(e) {}
           document.body.style.overflow = '';
         } catch (e) {}
       }
@@ -6916,6 +7068,19 @@ const CartoonSpriteGenerator = {
         if (UI.titleEl) UI.titleEl.textContent = title || 'The Visitor';
         if (UI.bodyEl) UI.bodyEl.innerHTML = bodyHtml || '';
         if (UI.hintEl) UI.hintEl.textContent = hintText || '';
+        // Phase 3 sprite behavior:
+        // talk while dialog is "landing" (before choices), idle once choices are visible.
+        try {
+          if (UI.agentSprite) {
+            UI.agentSprite.preloadAll();
+            const force = (o && typeof o.spriteMode === 'string') ? o.spriteMode : '';
+            if (force === 'talk' || force === 'idle') {
+              UI.agentSprite.setMode(force);
+            } else {
+              UI.agentSprite.setMode(delayActionsMs > 0 ? 'talk' : 'idle');
+            }
+          }
+        } catch(e) {}
         if (!UI.actionsEl) return;
 
         UI.actionsEl.innerHTML = '';
@@ -6953,6 +7118,8 @@ const CartoonSpriteGenerator = {
                 b.removeAttribute('data-cia-delay');
               });
             } catch(e) {}
+            // Phase 3: once choices are active, go idle.
+            try { if (UI.agentSprite) UI.agentSprite.setMode('idle'); } catch(e) {}
           }, delayActionsMs);
         }
       }
@@ -6961,7 +7128,7 @@ const CartoonSpriteGenerator = {
         // Tiny pacing beat so the player can feel the choice "land"
         try {
           const msg = (typeof flavor === 'string' && flavor.trim()) ? flavor.trim() : 'Processing…';
-          _setDialog('The Visitor', `<div style="opacity:.92">🕶️ ${msg}</div><div style="opacity:.70; margin-top:6px;">The fog shuffles paperwork.</div>`, [], '');
+          _setDialog('The Visitor', `<div style="opacity:.92">🕶️ ${msg}</div><div style="opacity:.70; margin-top:6px;">The fog shuffles paperwork.</div>`, [], '', { spriteMode: 'talk' });
         } catch(e) {}
         setTimeout(() => {
           try {
