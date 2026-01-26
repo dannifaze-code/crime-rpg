@@ -6109,46 +6109,52 @@ const CartoonSpriteGenerator = {
       // FIXED LANDMARK POSITIONS (aligned with gray buildings on static map)
       // Map dimensions: 612x367 pixels (aspect ratio 9:16 scaled)
       // Coordinates are percentages (0-100) for responsive positioning
+      // ONLY non-purchasable landmarks here - purchasable properties go in fixedPropertyPositions
       fixedLandmarkPositions: {
-        safeHouse: { x: 20, y: 45 },      // Left side, gray building with more space
-        policeStation: { x: 50, y: 35 },  // Center-top, gray building with clearance
-        hospital: { x: 85, y: 15 },       // Top-right, gray building with spacing
-        gunShop: { x: 18, y: 38 },        // Upper-left, gray building isolated
-        chopShop: { x: 75, y: 50 },       // Right-center, gray building with room
-        casino: { x: 80, y: 75 },         // Lower-right, gray building spread out
-        nightclub: { x: 15, y: 80 },      // Bottom-left, gray building with clearance
-        bank: { x: 45, y: 85 },           // Bottom-center, gray building isolated
-        warehouse: { x: 8, y: 35 },        // Far left, gray building with space
-        factory: { x: 84, y: 78 },       // Moved off Gang HQ
-        docks: { x: 90, y: 55 },          // Right side, gray building spread out
-        gangHQ: { x: 60, y: 70 }          // Gang Headquarters - center-right area
+        safeHouse: { x: 12, y: 45 },      // Left side - Player's home (non-purchasable)
+        policeStation: { x: 50, y: 30 }   // Center-top - Story landmark (non-purchasable)
       },
       
       // PROPERTY BUILDINGS - Player-owned real estate (fixed positions on gray buildings)
       propertyBuildings: [],
       
-      // FIXED PROPERTY BUILDING POSITIONS (all on gray building spots)
+      // FIXED PROPERTY BUILDING POSITIONS (all 21 purchasable properties)
+      // Optimized spacing for mobile with minimum 10% gaps to prevent overlapping
       fixedPropertyPositions: [
-        // APARTMENT BUILDINGS (4) - Starting properties, $20k each
-        { id: 'apt1', type: 'apartment', x: 28, y: 35, name: 'Riverside Apartments', price: 20000, income: 500 },
-        { id: 'apt2', type: 'apartment', x: 42, y: 58, name: 'Downtown Apartments', price: 20000, income: 500 },
-        { id: 'apt3', type: 'apartment', x: 65, y: 42, name: 'Eastside Apartments', price: 20000, income: 500 },
-        { id: 'apt4', type: 'apartment', x: 22, y: 68, name: 'Southside Apartments', price: 20000, income: 500 },
-        
-        // HIGH-RISE BUILDINGS (3) - End-game properties, $300k each
-        { id: 'rise1', type: 'highrise', x: 58, y: 18, name: 'Platinum Tower', price: 300000, income: 5000 },
-        { id: 'rise2', type: 'highrise', x: 72, y: 28, name: 'Diamond Heights', price: 300000, income: 5000 },
-        { id: 'rise3', type: 'highrise', x: 38, y: 78, name: 'Empire Building', price: 300000, income: 5000 },
-        
-        // CAR DEALERSHIPS (2) - Mid-tier properties, $50k each
-        { id: 'dealer1', type: 'dealership', x: 15, y: 28, name: 'Premium Auto Sales', price: 50000, income: 1200 },
-        { id: 'dealer2', type: 'dealership', x: 78, y: 56, name: 'Luxury Motors', price: 50000, income: 1200 },
-        
-        // STRIP CLUB (1) - $80k
-        { id: 'strip1', type: 'stripclub', x: 32, y: 22, name: 'The Golden Palace', price: 80000, income: 2000 },
-        
-        // MALL (1) - End-game property, $600k
-        { id: 'mall1', type: 'mall', x: 85, y: 82, name: 'Grand Shopping Center', price: 600000, income: 10000 }
+        // ROW 1 - Top (y: 12)
+        { id: 'gunshop', type: 'gunshop', x: 18, y: 12, name: 'Gun Shop', price: 30000, income: 800 },
+        { id: 'strip1', type: 'stripclub', x: 35, y: 12, name: 'The Golden Palace', price: 80000, income: 2000 },
+        { id: 'rise1', type: 'highrise', x: 58, y: 12, name: 'Platinum Tower', price: 300000, income: 5000 },
+        { id: 'rise2', type: 'highrise', x: 75, y: 12, name: 'Diamond Heights', price: 300000, income: 5000 },
+        { id: 'hospital', type: 'hospital', x: 88, y: 12, name: 'Hospital', price: 520000, income: 9800 },
+
+        // ROW 2 - Upper-middle (y: 25)
+        { id: 'dealer1', type: 'dealership', x: 8, y: 25, name: 'Premium Auto Sales', price: 50000, income: 1200 },
+        { id: 'apt1', type: 'apartment', x: 28, y: 25, name: 'Riverside Apartments', price: 20000, income: 500 },
+        { id: 'apt3', type: 'apartment', x: 65, y: 25, name: 'Eastside Apartments', price: 20000, income: 500 },
+
+        // ROW 3 - Middle (y: 38)
+        { id: 'warehouse', type: 'warehouse', x: 8, y: 38, name: 'Warehouse', price: 160000, income: 3200 },
+        { id: 'apt2', type: 'apartment', x: 42, y: 38, name: 'Downtown Apartments', price: 20000, income: 500 },
+
+        // ROW 4 - Center (y: 52)
+        { id: 'dealer2', type: 'dealership', x: 55, y: 52, name: 'Luxury Motors', price: 50000, income: 1200 },
+        { id: 'chopshop', type: 'chopshop', x: 75, y: 52, name: 'Chop Shop', price: 200000, income: 4200 },
+
+        // ROW 5 - Lower-middle (y: 65)
+        { id: 'apt4', type: 'apartment', x: 22, y: 65, name: 'Southside Apartments', price: 20000, income: 500 },
+        { id: 'ganghq', type: 'ganghq', x: 60, y: 65, name: 'Gang HQ', price: 400000, income: 8000 },
+        { id: 'docks', type: 'docks', x: 88, y: 65, name: 'Docks', price: 180000, income: 3500 },
+
+        // ROW 6 - Lower (y: 78)
+        { id: 'nightclub', type: 'nightclub', x: 15, y: 78, name: 'Nightclub', price: 220000, income: 5200 },
+        { id: 'factory', type: 'factory', x: 45, y: 78, name: 'Factory', price: 320000, income: 7000 },
+        { id: 'rise3', type: 'highrise', x: 70, y: 78, name: 'Empire Building', price: 300000, income: 5000 },
+        { id: 'casino', type: 'casino', x: 88, y: 78, name: 'Casino', price: 250000, income: 6000 },
+
+        // ROW 7 - Bottom (y: 88)
+        { id: 'bank', type: 'bank', x: 35, y: 88, name: 'Bank', price: 450000, income: 9000 },
+        { id: 'mall1', type: 'mall', x: 75, y: 88, name: 'Grand Shopping Center', price: 600000, income: 10000 }
       ],
       
       // NEW: Procedural map data
@@ -15372,20 +15378,12 @@ function updateTurfDefense(dt) {
       }
       
       const positions = GameState.fixedLandmarkPositions;
-      
-      // Create landmark icons using fixed positions
+
+      // Create landmark icons using fixed positions (ONLY non-purchasable landmarks)
+      // All purchasable properties are in fixedPropertyPositions to avoid duplicates
       GameState.mapIcons = [
         { type: 'safeHouse', x: positions.safeHouse.x, y: positions.safeHouse.y, icon: '🏠', label: '🏠 Safe House', state: 'active' },
-        { type: 'policeStation', x: positions.policeStation.x, y: positions.policeStation.y, icon: '👮', label: '👮 Police Station', state: 'active' },
-        { type: 'hospital', x: positions.hospital.x, y: positions.hospital.y, icon: '🏥', label: '🏥 Hospital', state: 'active' },
-        { type: 'gunShop', x: positions.gunShop.x, y: positions.gunShop.y, icon: '🔫', label: '🔫 Gun Shop', state: 'active' },
-        { type: 'chopShop', x: positions.chopShop.x, y: positions.chopShop.y, icon: '🚗', label: '🚗 Chop Shop', state: 'active' },
-        { type: 'casino', x: positions.casino.x, y: positions.casino.y, icon: '🎰', label: '🎰 Casino', state: 'active' },
-        { type: 'nightclub', x: positions.nightclub.x, y: positions.nightclub.y, icon: '🎵', label: '🎵 Nightclub', state: 'active' },
-        { type: 'bank', x: positions.bank.x, y: positions.bank.y, icon: '🏦', label: '🏦 Bank', state: 'active' },
-        { type: 'warehouse', x: positions.warehouse.x, y: positions.warehouse.y, icon: '📦', label: '📦 Warehouse', state: 'active' },
-        { type: 'docks', x: positions.docks.x, y: positions.docks.y, icon: '⚓', label: '⚓ Docks', state: 'active' },
-        { type: 'gangHQ', x: positions.gangHQ.x, y: positions.gangHQ.y, icon: '👥', label: '👥 Gang HQ', state: 'active' }
+        { type: 'policeStation', x: positions.policeStation.x, y: positions.policeStation.y, icon: '👮', label: '👮 Police Station', state: 'active' }
       ];
       
       // Set character at safe house
@@ -15432,22 +15430,23 @@ function updateTurfDefense(dt) {
         color: '#ff1493',
         name: 'Strip Club'
       },
-      mall: { 
-        icon: '🏬', 
+      mall: {
+        icon: '🏬',
         color: '#9b59b6',
         name: 'Shopping Mall'
-      }
-    
-,
-// Landmark-properties (optional buyables)
-docks: { icon: '⚓', color: '#3498db', name: 'Docks' },
-casino: { icon: '🎰', color: '#f1c40f', name: 'Casino' },
-bank: { icon: '🏦', color: '#2ecc71', name: 'Bank' },
-nightclub: { icon: '🎵', color: '#e056fd', name: 'Night Club' },
-warehouse: { icon: '📦', color: '#95a5a6', name: 'Warehouse' },
-factory: { icon: '🏭', color: '#7f8c8d', name: 'Factory' },
-hospital: { icon: '🏥', color: '#e74c3c', name: 'Hospital' },
-chopShop: { icon: '🚗', color: '#d35400', name: 'Chop Shop' }};
+      },
+      // Landmark-properties (optional buyables)
+      docks: { icon: '⚓', color: '#3498db', name: 'Docks' },
+      casino: { icon: '🎰', color: '#f1c40f', name: 'Casino' },
+      bank: { icon: '🏦', color: '#2ecc71', name: 'Bank' },
+      nightclub: { icon: '🎵', color: '#e056fd', name: 'Night Club' },
+      warehouse: { icon: '📦', color: '#95a5a6', name: 'Warehouse' },
+      factory: { icon: '🏭', color: '#7f8c8d', name: 'Factory' },
+      hospital: { icon: '🏥', color: '#e74c3c', name: 'Hospital' },
+      chopShop: { icon: '🚗', color: '#d35400', name: 'Chop Shop' },
+      gunshop: { icon: '🔫', color: '#8b4513', name: 'Gun Shop' },
+      ganghq: { icon: '👥', color: '#c0392b', name: 'Gang HQ' }
+    };
 
     
 // Landmark properties (Phase 1.5): make major turf landmarks optionally buyable like other properties.
@@ -15463,45 +15462,16 @@ function ensureLandmarkProperties() {
     GameState.propertyBuildings = [];
   }
 
-  const pos = GameState.fixedLandmarkPositions || {};
-  const defs = [
-    { id: 'lm_docks',      type: 'docks',      name: 'Docks',      price: 180000, income: 3500, x: pos.docks?.x,      y: pos.docks?.y },
-    { id: 'lm_casino',     type: 'casino',     name: 'Casino',     price: 250000, income: 6000, x: pos.casino?.x,     y: pos.casino?.y },
-    { id: 'lm_bank',       type: 'bank',       name: 'Bank',       price: 450000, income: 9000, x: pos.bank?.x,       y: pos.bank?.y },
-    { id: 'lm_nightclub',  type: 'nightclub',  name: 'Night Club', price: 220000, income: 5200, x: pos.nightclub?.x,  y: pos.nightclub?.y },
-    { id: 'lm_warehouse',  type: 'warehouse',  name: 'Warehouse',  price: 160000, income: 3200, x: pos.warehouse?.x,  y: pos.warehouse?.y },
-    { id: 'lm_factory',    type: 'factory',    name: 'Factory',    price: 320000, income: 7000, x: (pos.factory?.x ?? pos.warehouse?.x ?? pos.gangHQ?.x),     y: (pos.factory?.y ?? pos.warehouse?.y ?? pos.gangHQ?.y) }, // placeholder spot
-    { id: 'lm_hospital',   type: 'hospital',   name: 'Hospital',   price: 520000, income: 9800, x: pos.hospital?.x,   y: pos.hospital?.y },
-    { id: 'lm_chopShop',   type: 'chopShop',   name: 'Chop Shop',  price: 200000, income: 4200, x: pos.chopShop?.x,   y: pos.chopShop?.y }
-  ];
+  // Clean up old landmark properties (with 'lm_' prefix) to prevent duplicates
+  // All properties are now in fixedPropertyPositions instead
+  const oldLandmarkIds = ['lm_docks', 'lm_casino', 'lm_bank', 'lm_nightclub', 'lm_warehouse', 'lm_factory', 'lm_hospital', 'lm_chopShop'];
+  const initialLength = GameState.propertyBuildings.length;
 
-  const existingIds = new Set(GameState.propertyBuildings.map(b => b && b.id).filter(Boolean));
-  let added = 0;
+  GameState.propertyBuildings = GameState.propertyBuildings.filter(b => !oldLandmarkIds.includes(b.id));
 
-  defs.forEach(d => {
-    // Skip if position unknown (failsafe)
-    if (d.x == null || d.y == null) return;
-    if (existingIds.has(d.id)) return;
-
-    GameState.propertyBuildings.push({
-      id: d.id,
-      type: d.type,
-      x: d.x,
-      y: d.y,
-      name: d.name,
-      price: d.price,
-      income: d.income,
-      owned: false,
-      upgradeLevel: 0,
-      lastCollected: null,
-      isLandmarkProperty: true
-    });
-    existingIds.add(d.id);
-    added++;
-  });
-
-  if (added > 0) {
-    console.log(`✅ Added ${added} landmark-properties to propertyBuildings`);
+  const removed = initialLength - GameState.propertyBuildings.length;
+  if (removed > 0) {
+    console.log(`🧹 Removed ${removed} old landmark-properties to prevent duplicates`);
     try { Storage.save(); } catch(e) {}
   }
 }
