@@ -18355,69 +18355,76 @@ function ensureLandmarkProperties() {
           }
         }
         
-        // Render cards with live data
+        // Calculate XP percentage for progress bar
+        const xpRequired = LevelingSystem.getXPRequiredForLevel(player.level);
+        const xpPercent = Math.min(100, (player.xp / xpRequired) * 100);
+        
+        // Render cards with live data - Using new UI icons
         crimeBoard.innerHTML = `
           <div class="crime-card card-profile" id="main-profile-card">
             <div class="profile-card-avatar">${player.name.charAt(0).toUpperCase()}</div>
             <div class="profile-card-content">
               <div class="profile-card-name">${player.name}</div>
               <div class="profile-card-row">
-                <span class="profile-card-label">Level ${player.level}</span>
-                <span class="profile-card-value">${player.xp} / ${LevelingSystem.getXPRequiredForLevel(player.level)} XP</span>
+                <span class="profile-card-label">LEVEL ${player.level}</span>
+                <span class="profile-card-value">${player.xp} / ${xpRequired} XP</span>
+              </div>
+              <div class="profile-xp-bar">
+                <div class="profile-xp-fill" style="width: ${xpPercent}%"></div>
               </div>
               <div class="profile-card-row">
-                <span class="profile-card-label">💵 Cash</span>
-                <span class="profile-card-value">$${player.cash.toLocaleString()}</span>
+                <span class="profile-card-label">CASH</span>
+                <span class="profile-card-value" style="color: #4ade80;">$${player.cash.toLocaleString()}</span>
               </div>
               <div class="profile-card-row">
-                <span class="profile-card-label">👑 Rep</span>
-                <span class="profile-card-value">${player.reputation}</span>
+                <span class="profile-card-label">REP</span>
+                <span class="profile-card-value" style="color: #fbbf24;">${player.reputation}</span>
               </div>
               <div class="profile-card-row">
-                <span class="profile-card-label">🔥 Heat</span>
-                <span class="profile-card-value">${Math.round(player.heat)}%</span>
+                <span class="profile-card-label">HEAT</span>
+                <span class="profile-card-value" style="color: #f87171;">${Math.round(player.heat)}%</span>
               </div>
             </div>
           </div>
           
           <div class="crime-card card-cash">
-            <div class="crime-card-icon">💵</div>
+            <div class="crime-card-icon"></div>
             <div class="crime-card-label">Cash</div>
             <div class="crime-card-value">$${player.cash.toLocaleString()}</div>
           </div>
           
           <div class="crime-card card-xp">
-            <div class="crime-card-icon">⭐</div>
+            <div class="crime-card-icon"></div>
             <div class="crime-card-label">Level ${player.level}</div>
-            <div class="crime-card-value">${player.xp} / ${LevelingSystem.getXPRequiredForLevel(player.level)} XP</div>
+            <div class="crime-card-value">${player.xp} / ${xpRequired} XP</div>
           </div>
           
           <div class="crime-card card-rep">
-            <div class="crime-card-icon">👑</div>
+            <div class="crime-card-icon"></div>
             <div class="crime-card-label">Reputation</div>
             <div class="crime-card-value">${player.reputation}</div>
           </div>
           
           <div class="crime-card card-heat">
-            <div class="crime-card-icon">🔥</div>
+            <div class="crime-card-icon"></div>
             <div class="crime-card-label">Heat</div>
             <div class="crime-card-value">${Math.round(player.heat)}%</div>
           </div>
           
-          <div class="crime-card">
-            <div class="crime-card-icon">🚨</div>
+          <div class="crime-card card-global-heat">
+            <div class="crime-card-icon"></div>
             <div class="crime-card-label">Global Heat</div>
-            <div class="crime-card-value" style="color: #f28b82;">${Math.round(player.globalHeat)}%</div>
+            <div class="crime-card-value">${Math.round(player.globalHeat)}%</div>
           </div>
           
           <div class="crime-card card-leaderboard" id="leaderboard-card">
-            <div class="crime-card-icon">🏆</div>
+            <div class="crime-card-icon"></div>
             <div class="crime-card-label">Leaderboard</div>
             <div class="crime-card-value">Top Players</div>
           </div>
           
           <div class="crime-card card-players-online" id="players-online-card">
-            <div class="crime-card-icon">👥</div>
+            <div class="crime-card-icon"></div>
             <div class="crime-card-label">Players</div>
             <div class="crime-card-value">
               <span class="online-indicator"></span>
@@ -18426,7 +18433,7 @@ function ensureLandmarkProperties() {
           </div>
           
           <div class="crime-card card-stats" id="stats-card">
-            <div class="crime-card-icon">💪</div>
+            <div class="crime-card-icon"></div>
             <div class="crime-card-label">Stats</div>
             <div class="crime-card-stats">
               ${(() => {
@@ -18473,13 +18480,13 @@ function ensureLandmarkProperties() {
           </div>
           
           <div class="crime-card card-heat-log" id="heat-log-card">
-            <div class="crime-card-icon">📋</div>
+            <div class="crime-card-icon"></div>
             <div class="crime-card-label">Heat Log</div>
             <div class="crime-card-value">${GameState.heatLog.length} Events</div>
           </div>
           
           <div class="crime-card card-expense-log" id="expense-log-card">
-            <div class="crime-card-icon">💸</div>
+            <div class="crime-card-icon"></div>
             <div class="crime-card-label">Expenses</div>
             <div class="crime-card-value">${GameState.drainLog.length} Transactions</div>
           </div>
