@@ -18366,22 +18366,34 @@ function ensureLandmarkProperties() {
             <div class="profile-card-content">
               <div class="profile-card-name">${player.name}</div>
               <div class="profile-card-row">
-                <span class="profile-card-label">LEVEL ${player.level}</span>
+                <span class="profile-card-label">
+                  <img class="profile-row-icon" src="sprites/ui-new/PlayerProfile/playerLevelEmblemProfile.png" alt="">
+                  LEVEL ${player.level}
+                </span>
                 <span class="profile-card-value">${player.xp} / ${xpRequired} XP</span>
               </div>
               <div class="profile-xp-bar">
                 <div class="profile-xp-fill" style="width: ${xpPercent}%"></div>
               </div>
               <div class="profile-card-row">
-                <span class="profile-card-label">CASH</span>
+                <span class="profile-card-label">
+                  <img class="profile-row-icon" src="sprites/ui-new/PlayerProfile/playercashProfile.png" alt="">
+                  CASH
+                </span>
                 <span class="profile-card-value" style="color: #4ade80;">$${player.cash.toLocaleString()}</span>
               </div>
               <div class="profile-card-row">
-                <span class="profile-card-label">REP</span>
+                <span class="profile-card-label">
+                  <img class="profile-row-icon" src="sprites/ui-new/PlayerProfile/leaderboardsCrownProfile.png" alt="">
+                  REP
+                </span>
                 <span class="profile-card-value" style="color: #fbbf24;">${player.reputation}</span>
               </div>
               <div class="profile-card-row">
-                <span class="profile-card-label">HEAT</span>
+                <span class="profile-card-label">
+                  <img class="profile-row-icon" src="sprites/ui-new/PlayerProfile/playerHeatProfile.png" alt="">
+                  HEAT
+                </span>
                 <span class="profile-card-value" style="color: #f87171;">${Math.round(player.heat)}%</span>
               </div>
             </div>
@@ -18437,12 +18449,11 @@ function ensureLandmarkProperties() {
             <div class="crime-card-label">Stats</div>
             <div class="crime-card-stats">
               ${(() => {
-                const combinedStats = InmateSystem.getCombinedStats();
                 const inmateStats = InmateSystem.getWorkingInmatesStats();
-                const hasBonus = inmateStats.power > 0 || inmateStats.stealth > 0 || inmateStats.strength > 0 || inmateStats.intelligence > 0;
                 
                 return `
                   <div class="crime-card-stat-row">
+                    <div class="stat-icon strength"></div>
                     <span class="crime-card-stat-label">STR</span>
                     <span class="crime-card-stat-value">
                       ${player.stats.strength}
@@ -18450,6 +18461,7 @@ function ensureLandmarkProperties() {
                     </span>
                   </div>
                   <div class="crime-card-stat-row">
+                    <div class="stat-icon intelligence"></div>
                     <span class="crime-card-stat-label">INT</span>
                     <span class="crime-card-stat-value">
                       ${player.stats.intelligence}
@@ -18457,10 +18469,12 @@ function ensureLandmarkProperties() {
                     </span>
                   </div>
                   <div class="crime-card-stat-row">
+                    <div class="stat-icon charisma"></div>
                     <span class="crime-card-stat-label">CHA</span>
                     <span class="crime-card-stat-value">${player.stats.charisma}</span>
                   </div>
                   <div class="crime-card-stat-row">
+                    <div class="stat-icon stealth"></div>
                     <span class="crime-card-stat-label">STE</span>
                     <span class="crime-card-stat-value">
                       ${player.stats.stealth}
