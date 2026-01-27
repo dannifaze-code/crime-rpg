@@ -5467,148 +5467,148 @@
   }
   #spriteDebugPanel b{ font-weight: 700; }
 
+
 /* =====================================================
-   PROFILE TAB UI UPGRADE - Cinematic Crime Theme
+   PROFILE TAB UI UPGRADE V2 - Using ChatGPT Assets
    ===================================================== */
 
-/* Body background with cinematic city gradient */
+/* Global Background for ALL tabs */
 body {
-  background: linear-gradient(180deg, 
-    #0a0808 0%, 
-    #1a1210 30%, 
-    #2a1a15 60%,
-    #1a0f0a 100%) !important;
-  background-attachment: fixed !important;
+  background: url('../sprites/ui-new/PlayerProfile/background.png') no-repeat center center fixed !important;
+  background-size: cover !important;
 }
 
-/* Profile Tab Background */
-#profile-tab {
-  background: linear-gradient(180deg, 
-    rgba(10, 8, 8, 0.95) 0%, 
-    rgba(26, 18, 16, 0.9) 50%,
-    rgba(42, 26, 21, 0.85) 100%);
-  min-height: 100vh;
+#app {
+  background: transparent;
+}
+
+#content {
+  background: transparent;
+}
+
+/* All tab backgrounds use the same image */
+.tab-content {
+  background: transparent !important;
   position: relative;
 }
 
-#profile-tab::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: 
-    radial-gradient(ellipse at 20% 80%, rgba(255, 120, 50, 0.08) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 20%, rgba(255, 100, 50, 0.05) 0%, transparent 40%);
-  pointer-events: none;
-  z-index: 0;
+#profile-tab,
+#turf-tab,
+#crimes-tab,
+#safehouse-tab,
+#gang-tab {
+  background: transparent !important;
 }
 
-/* Page Header - "Profile" title */
-#profile-tab .page-header {
+/* Page Header */
+.page-header {
   font-family: 'Cinzel', serif;
-  font-size: 28px;
+  font-size: 26px;
   font-weight: 600;
   color: #ffffff;
-  text-shadow: 0 2px 8px rgba(0,0,0,0.8);
-  padding: 16px 20px;
-  position: relative;
-  z-index: 1;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.9);
+  padding: 16px 20px 8px;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  position: relative;
+  z-index: 10;
 }
 
-/* Header action buttons (chat, inventory) */
-.profile-header-actions {
+/* Header buttons container */
+.profile-header-buttons {
   display: flex;
-  gap: 12px;
+  gap: 10px;
 }
 
 .profile-header-btn {
-  width: 48px;
-  height: 48px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 180, 100, 0.3);
-  background: linear-gradient(135deg, rgba(40, 30, 25, 0.9) 0%, rgba(25, 20, 15, 0.95) 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: none;
+  background: transparent;
   cursor: pointer;
-  transition: all 0.2s ease;
+  padding: 0;
+  transition: transform 0.2s, filter 0.2s;
 }
 
 .profile-header-btn:hover {
-  border-color: rgba(255, 180, 100, 0.6);
-  box-shadow: 0 0 15px rgba(255, 150, 50, 0.3);
+  transform: scale(1.1);
+  filter: brightness(1.2);
+}
+
+.profile-header-btn:active {
+  transform: scale(0.95);
 }
 
 .profile-header-btn img {
-  width: 28px;
-  height: 28px;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
 }
 
-/* Crime Board - Card Grid Container */
+/* Crime Board Grid */
 .crime-board {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-  padding: 0 16px 16px;
+  gap: 10px;
+  padding: 8px 12px 20px;
   position: relative;
-  z-index: 1;
+  z-index: 5;
 }
 
-/* Main Profile Card - Full width */
+/* =====================================================
+   MAIN PROFILE CARD (Full width, player info)
+   ===================================================== */
 .crime-card.card-profile {
   grid-column: 1 / -1;
+  background: url('../sprites/ui-new/PlayerProfile/PlayerOnlyUiSquare.png') no-repeat center center;
+  background-size: 100% 100%;
+  border: none;
+  border-radius: 0;
+  min-height: 140px;
+  padding: 16px 20px;
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 16px 20px;
-  background: linear-gradient(135deg, 
-    rgba(20, 35, 60, 0.85) 0%, 
-    rgba(15, 25, 45, 0.9) 50%,
-    rgba(10, 20, 35, 0.95) 100%);
-  border: 1px solid rgba(100, 160, 220, 0.4);
-  border-radius: 12px;
-  box-shadow: 
-    0 4px 20px rgba(0, 0, 0, 0.5),
-    inset 0 1px 0 rgba(100, 160, 220, 0.2),
-    0 0 30px rgba(80, 140, 200, 0.1);
-  min-height: auto;
   cursor: pointer;
-  transition: all 0.25s ease;
+  transition: transform 0.2s, filter 0.2s;
+  box-shadow: none;
 }
 
 .crime-card.card-profile:hover {
-  border-color: rgba(100, 180, 255, 0.6);
-  box-shadow: 
-    0 6px 25px rgba(0, 0, 0, 0.6),
-    inset 0 1px 0 rgba(100, 160, 220, 0.3),
-    0 0 40px rgba(80, 160, 220, 0.2);
-  transform: translateY(-2px);
+  transform: scale(1.02);
+  filter: brightness(1.1);
 }
 
-/* Avatar circle */
+.crime-card.card-profile::before,
+.crime-card.card-profile::after {
+  display: none;
+}
+
+/* Player Avatar Circle */
 .profile-card-avatar {
-  width: 72px;
-  height: 72px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #4a90d9 0%, #2a5a9a 100%);
-  border: 3px solid rgba(100, 180, 255, 0.5);
-  box-shadow: 0 0 20px rgba(80, 150, 220, 0.4);
+  width: 70px;
+  height: 70px;
+  background: url('../sprites/ui-new/PlayerProfile/nameplateforplayer.png') no-repeat center center;
+  background-size: contain;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 700;
-  color: #fff;
-  text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+  color: #1a3a5c;
+  text-shadow: none;
   flex-shrink: 0;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .profile-card-content {
   flex: 1;
-  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .profile-card-name {
@@ -5616,158 +5616,202 @@ body {
   font-size: 20px;
   font-weight: 600;
   color: #fff;
-  margin-bottom: 8px;
-  text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+  text-shadow: 0 2px 4px rgba(0,0,0,0.8);
 }
 
 .profile-card-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 4px 0;
-  border-bottom: 1px solid rgba(100, 160, 220, 0.15);
+  padding: 2px 0;
 }
 
-.profile-card-row:last-child {
-  border-bottom: none;
-}
-
-.profile-card-label {
-  font-size: 13px;
-  color: rgba(180, 200, 220, 0.9);
+.profile-card-row .profile-card-label {
+  font-size: 12px;
+  color: rgba(200, 200, 200, 0.9);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.profile-card-value {
+.profile-card-row .profile-card-value {
   font-size: 14px;
   font-weight: 600;
   color: #7ec8ff;
 }
 
-/* XP Progress bar in profile card */
+/* Small icons in profile card rows */
+.profile-row-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+/* XP Progress Bar */
 .profile-xp-bar {
   width: 100%;
-  height: 8px;
+  height: 6px;
   background: rgba(0, 0, 0, 0.5);
-  border-radius: 4px;
-  margin-top: 6px;
+  border-radius: 3px;
   overflow: hidden;
+  margin-top: 4px;
 }
 
 .profile-xp-fill {
   height: 100%;
   background: linear-gradient(90deg, #4a90d9 0%, #7ec8ff 100%);
-  border-radius: 4px;
+  border-radius: 3px;
   transition: width 0.3s ease;
 }
 
-/* Standard Crime Cards */
+/* =====================================================
+   STANDARD CRIME CARDS (Grid squares)
+   ===================================================== */
 .crime-card {
-  background: linear-gradient(180deg, 
-    rgba(35, 25, 20, 0.85) 0%, 
-    rgba(25, 18, 14, 0.9) 50%,
-    rgba(18, 12, 10, 0.95) 100%);
-  border: 1px solid rgba(180, 130, 80, 0.35);
-  border-radius: 10px;
-  padding: 14px;
-  min-height: 130px;
+  background-size: 100% 100% !important;
+  background-repeat: no-repeat !important;
+  background-position: center center !important;
+  border: none !important;
+  border-radius: 0 !important;
+  min-height: 110px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
-  position: relative;
-  overflow: hidden;
+  justify-content: flex-end;
+  align-items: flex-start;
   cursor: pointer;
-  transition: all 0.25s ease;
-  box-shadow: 
-    0 4px 15px rgba(0, 0, 0, 0.4),
-    inset 0 1px 0 rgba(255, 200, 150, 0.08);
+  transition: transform 0.2s, filter 0.2s;
+  box-shadow: none !important;
+  position: relative;
 }
 
-.crime-card::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, 
-    transparent 0%, 
-    rgba(255, 180, 100, 0.5) 50%, 
-    transparent 100%);
-}
-
+.crime-card::before,
 .crime-card::after {
-  content: '';
-  position: absolute;
-  bottom: 0; left: 0; right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, 
-    transparent 0%, 
-    rgba(255, 150, 50, 0.3) 50%, 
-    transparent 100%);
+  display: none !important;
 }
 
 .crime-card:hover {
-  border-color: rgba(255, 180, 100, 0.6);
-  box-shadow: 
-    0 6px 20px rgba(0, 0, 0, 0.5),
-    0 0 25px rgba(255, 150, 50, 0.15),
-    inset 0 1px 0 rgba(255, 200, 150, 0.15);
-  transform: translateY(-2px);
+  transform: scale(1.03);
+  filter: brightness(1.1);
 }
 
 .crime-card:active {
-  transform: translateY(0);
+  transform: scale(0.98);
 }
 
-/* Card Icon */
+/* Card backgrounds by type */
+.crime-card.card-cash {
+  background-image: url('../sprites/ui-new/PlayerProfile/CashUiSquare.png');
+}
+
+.crime-card.card-xp {
+  background-image: url('../sprites/ui-new/PlayerProfile/LevelUiSquare.png');
+}
+
+.crime-card.card-rep {
+  background-image: url('../sprites/ui-new/PlayerProfile/ReputationUiSquare.png');
+}
+
+.crime-card.card-heat {
+  background-image: url('../sprites/ui-new/PlayerProfile/HeatUiSquare.png');
+}
+
+.crime-card.card-global-heat {
+  background-image: url('../sprites/ui-new/PlayerProfile/GlobalHeatUiSquare.png');
+}
+
+.crime-card.card-leaderboard {
+  background-image: url('../sprites/ui-new/PlayerProfile/LeaderboardsUiSquare.png');
+}
+
+.crime-card.card-players-online {
+  background-image: url('../sprites/ui-new/PlayerProfile/PlayersOnlineSquare.png');
+}
+
+.crime-card.card-stats {
+  background-image: url('../sprites/ui-new/PlayerProfile/StatsSquare.png');
+  min-height: 140px;
+}
+
+.crime-card.card-skill-tree {
+  background-image: url('../sprites/ui-new/PlayerProfile/SkillTreeSquare.png');
+}
+
+.crime-card.card-heat-log {
+  background-image: url('../sprites/ui-new/PlayerProfile/HeatlogSquare.png');
+}
+
+.crime-card.card-expense-log {
+  background-image: url('../sprites/ui-new/PlayerProfile/ExpenseLogSquare.png');
+}
+
+/* Card Icon - positioned at top left */
 .crime-card-icon {
-  width: 56px;
-  height: 56px;
-  margin-bottom: 8px;
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  width: 40px;
+  height: 40px;
   background-size: contain;
   background-repeat: no-repeat;
   background-position: center;
-  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
 }
 
-/* Icon backgrounds for each card type */
+/* Icon images by card type */
 .crime-card.card-cash .crime-card-icon {
-  background-image: url('../sprites/ui-icons/icon-cash.png');
+  background-image: url('../sprites/ui-new/PlayerProfile/playercashProfile.png');
 }
 
 .crime-card.card-xp .crime-card-icon {
-  background-image: url('../sprites/ui-icons/icon-level.png');
+  background-image: url('../sprites/ui-new/PlayerProfile/playerLevelEmblemProfile.png');
 }
 
 .crime-card.card-rep .crime-card-icon {
-  background-image: url('../sprites/ui-icons/icon-reputation.png');
+  background-image: url('../sprites/ui-new/PlayerProfile/leaderboardsCrownProfile.png');
+  width: 45px;
+  height: 45px;
 }
 
 .crime-card.card-heat .crime-card-icon {
-  background-image: url('../sprites/ui-icons/icon-heat.png');
+  background-image: url('../sprites/ui-new/PlayerProfile/playerHeatProfile.png');
 }
 
 .crime-card.card-global-heat .crime-card-icon {
-  background-image: url('../sprites/ui-icons/icon-global-heat.png');
+  background-image: url('../sprites/ui-new/PlayerProfile/GlobalHeatSiren.png');
+  width: 45px;
+  height: 45px;
 }
 
 .crime-card.card-leaderboard .crime-card-icon {
-  background-image: url('../sprites/ui-icons/icon-leaderboard.png');
+  background-image: url('../sprites/ui-new/PlayerProfile/PlayerTrophyIconProfile.png');
+  width: 45px;
+  height: 45px;
 }
 
 .crime-card.card-players-online .crime-card-icon {
-  background-image: url('../sprites/ui-icons/icon-players.png');
+  background-image: url('../sprites/ui-new/PlayerProfile/PlayersOnlineIconProfile.png');
+  width: 50px;
+  height: 50px;
 }
 
-.crime-card.card-stats .crime-card-icon {
-  background-image: url('../sprites/ui-icons/icon-stats-combo.png');
+.crime-card.card-skill-tree .crime-card-icon {
+  background-image: url('../sprites/ui-new/PlayerProfile/SkillTreeIcon.png');
+  width: 50px;
+  height: 50px;
 }
 
 .crime-card.card-heat-log .crime-card-icon {
-  background-image: url('../sprites/ui-icons/icon-heatlog.png');
+  background-image: url('../sprites/ui-new/PlayerProfile/HeatLogClipboardIcon.png');
+  width: 40px;
+  height: 40px;
 }
 
 .crime-card.card-expense-log .crime-card-icon {
-  background-image: url('../sprites/ui-icons/icon-moneybags.png');
+  background-image: url('../sprites/ui-new/PlayerProfile/ExpensesIcon.png');
+  width: 45px;
+  height: 45px;
 }
 
 /* Card Label */
@@ -5775,8 +5819,9 @@ body {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 1px;
-  color: rgba(200, 180, 160, 0.85);
-  margin-bottom: 4px;
+  color: rgba(220, 200, 180, 0.9);
+  margin-bottom: 2px;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
 }
 
 /* Card Value */
@@ -5785,7 +5830,7 @@ body {
   font-size: 18px;
   font-weight: 600;
   color: #fff;
-  text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+  text-shadow: 0 2px 4px rgba(0,0,0,0.8);
 }
 
 /* Colored values */
@@ -5801,128 +5846,131 @@ body {
   color: #fbbf24;
 }
 
-.crime-card.card-heat .crime-card-value {
-  color: #f87171;
-}
-
-/* Global Heat card - red theme */
-.crime-card.card-global-heat {
-  background: linear-gradient(180deg, 
-    rgba(60, 20, 20, 0.85) 0%, 
-    rgba(40, 15, 15, 0.9) 50%,
-    rgba(25, 10, 10, 0.95) 100%);
-  border-color: rgba(220, 80, 80, 0.4);
-}
-
-.crime-card.card-global-heat:hover {
-  border-color: rgba(255, 100, 100, 0.6);
-  box-shadow: 
-    0 6px 20px rgba(0, 0, 0, 0.5),
-    0 0 25px rgba(255, 80, 50, 0.2);
-}
-
+.crime-card.card-heat .crime-card-value,
 .crime-card.card-global-heat .crime-card-value {
   color: #f87171;
-}
-
-/* Leaderboard card - gold theme */
-.crime-card.card-leaderboard {
-  background: linear-gradient(180deg, 
-    rgba(50, 40, 20, 0.85) 0%, 
-    rgba(35, 28, 15, 0.9) 50%,
-    rgba(25, 18, 10, 0.95) 100%);
-  border-color: rgba(220, 180, 80, 0.4);
-}
-
-.crime-card.card-leaderboard:hover {
-  border-color: rgba(255, 200, 100, 0.6);
-  box-shadow: 
-    0 6px 20px rgba(0, 0, 0, 0.5),
-    0 0 25px rgba(255, 200, 50, 0.15);
 }
 
 .crime-card.card-leaderboard .crime-card-value {
   color: #fbbf24;
 }
 
-/* Players Online card - green accent */
-.crime-card.card-players-online {
-  background: linear-gradient(180deg, 
-    rgba(20, 40, 35, 0.85) 0%, 
-    rgba(15, 30, 25, 0.9) 50%,
-    rgba(10, 20, 18, 0.95) 100%);
-  border-color: rgba(80, 180, 120, 0.4);
+.crime-card.card-players-online .crime-card-value {
+  color: #4ade80;
 }
 
-.crime-card.card-players-online:hover {
-  border-color: rgba(100, 220, 150, 0.6);
-}
-
+/* Online indicator */
 .online-indicator {
   display: inline-block;
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   background: #4ade80;
   border-radius: 50%;
   margin-right: 6px;
-  box-shadow: 0 0 8px rgba(74, 222, 128, 0.6);
+  box-shadow: 0 0 8px rgba(74, 222, 128, 0.8);
   animation: pulse-glow 2s ease-in-out infinite;
 }
 
 @keyframes pulse-glow {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
+  0%, 100% { opacity: 1; box-shadow: 0 0 8px rgba(74, 222, 128, 0.8); }
+  50% { opacity: 0.7; box-shadow: 0 0 4px rgba(74, 222, 128, 0.4); }
 }
 
-/* Stats card */
+/* =====================================================
+   STATS CARD - Special layout with stat icons
+   ===================================================== */
 .crime-card.card-stats {
-  min-height: 160px;
+  justify-content: flex-start;
+  padding-top: 14px;
+}
+
+.crime-card.card-stats .crime-card-icon {
+  display: none;
+}
+
+.crime-card.card-stats .crime-card-label {
+  margin-bottom: 8px;
 }
 
 .crime-card-stats {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  margin-top: auto;
+  width: 100%;
 }
 
 .crime-card-stat-row {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 3px 0;
-  border-bottom: 1px solid rgba(180, 130, 80, 0.15);
+  gap: 8px;
+  padding: 2px 0;
 }
 
-.crime-card-stat-row:last-child {
-  border-bottom: none;
+.stat-icon {
+  width: 24px;
+  height: 24px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  flex-shrink: 0;
+}
+
+.stat-icon.strength {
+  background-image: url('../sprites/ui-new/PlayerProfile/StrengthStatIconProfile.png');
+}
+
+.stat-icon.intelligence {
+  background-image: url('../sprites/ui-new/PlayerProfile/IntellectStatIcon.png');
+}
+
+.stat-icon.charisma {
+  background-image: url('../sprites/ui-new/PlayerProfile/CharismaStatIcon.png');
+}
+
+.stat-icon.stealth {
+  background-image: url('../sprites/ui-new/PlayerProfile/StealthStatIcon.png');
 }
 
 .crime-card-stat-label {
-  font-size: 11px;
-  color: rgba(200, 180, 160, 0.8);
+  font-size: 10px;
+  color: rgba(200, 180, 160, 0.9);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  flex: 1;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.8);
 }
 
 .crime-card-stat-value {
   font-size: 14px;
   font-weight: 600;
   color: #7ec8ff;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
 }
 
 /* =====================================================
-   TAB BAR UPGRADE
+   SKILL TREE CARD - Special layout
    ===================================================== */
+.crime-card.card-skill-tree .crime-card-subvalue {
+  font-size: 10px;
+  color: rgba(200, 180, 160, 0.8);
+  margin-top: 2px;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+}
 
+/* =====================================================
+   TAB BAR - Bottom Navigation
+   ===================================================== */
 #tab-bar {
   background: linear-gradient(180deg, 
-    rgba(20, 15, 12, 0.98) 0%, 
-    rgba(15, 10, 8, 0.99) 100%);
+    rgba(15, 12, 10, 0.98) 0%, 
+    rgba(10, 8, 6, 0.99) 100%);
   border-top: 1px solid rgba(180, 130, 80, 0.3);
-  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.6);
   height: 72px;
   padding-bottom: env(safe-area-inset-bottom, 0);
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
 }
 
 .tab {
@@ -5932,55 +5980,56 @@ body {
   align-items: center;
   justify-content: center;
   gap: 4px;
-  padding: 8px 4px;
+  padding: 6px 4px;
   cursor: pointer;
   transition: all 0.2s ease;
   position: relative;
 }
 
 .tab-icon {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   background-size: contain;
   background-repeat: no-repeat;
   background-position: center;
   opacity: 0.5;
   transition: all 0.2s ease;
-  font-size: 0; /* Hide emoji text */
+  font-size: 0 !important; /* Hide emoji */
+  color: transparent !important;
 }
 
-/* Tab icons using sprites */
+/* Tab icons using new assets */
 .tab[data-tab="profile"] .tab-icon {
-  background-image: url('../sprites/ui-icons/tab-profile.png');
+  background-image: url('../sprites/ui-new/BottomScreenMainTabIcons/profileTabButton.png');
 }
 
 .tab[data-tab="turf"] .tab-icon {
-  background-image: url('../sprites/ui-icons/tab-turf.png');
+  background-image: url('../sprites/ui-new/BottomScreenMainTabIcons/TurfTabTurfIcon.png');
 }
 
 .tab[data-tab="crimes"] .tab-icon {
-  background-image: url('../sprites/ui-icons/tab-crimes.png');
+  background-image: url('../sprites/ui-new/BottomScreenMainTabIcons/CrimesTabIcon.png');
 }
 
 .tab[data-tab="safehouse"] .tab-icon {
-  background-image: url('../sprites/ui-icons/tab-safehouse.png');
+  background-image: url('../sprites/ui-new/BottomScreenMainTabIcons/SafehouseTabIcon.png');
 }
 
 .tab[data-tab="gang"] .tab-icon {
-  background-image: url('../sprites/ui-icons/tab-gang.png');
+  background-image: url('../sprites/ui-new/BottomScreenMainTabIcons/PlayerGangTab.png');
 }
 
 .tab-label {
   font-size: 9px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: rgba(200, 180, 160, 0.6);
+  color: rgba(200, 180, 160, 0.5);
   transition: all 0.2s ease;
 }
 
 .tab.active .tab-icon {
   opacity: 1;
-  filter: drop-shadow(0 0 8px rgba(100, 180, 255, 0.5));
+  filter: drop-shadow(0 0 6px rgba(100, 180, 255, 0.6));
 }
 
 .tab.active .tab-label {
@@ -5990,182 +6039,60 @@ body {
 .tab.active::after {
   content: '';
   position: absolute;
-  bottom: 0;
+  bottom: 2px;
   left: 50%;
   transform: translateX(-50%);
-  width: 40px;
-  height: 3px;
+  width: 30px;
+  height: 2px;
   background: linear-gradient(90deg, transparent, #7ec8ff, transparent);
-  border-radius: 2px;
+  border-radius: 1px;
 }
 
 .tab:active {
-  transform: scale(0.95);
-}
-
-/* =====================================================
-   HEAT LOG & EXPENSE LOG OVERLAYS
-   ===================================================== */
-
-.log-overlay {
-  position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: linear-gradient(180deg, 
-    rgba(15, 10, 8, 0.97) 0%,
-    rgba(25, 15, 12, 0.98) 50%,
-    rgba(35, 20, 15, 0.97) 100%);
-  z-index: 9000;
-  display: flex;
-  flex-direction: column;
-  animation: fadeIn 0.3s ease;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-.log-container {
-  flex: 1;
-  overflow-y: auto;
-  padding: 20px 16px 100px;
-}
-
-.log-section {
-  background: linear-gradient(135deg, 
-    rgba(40, 25, 20, 0.7) 0%, 
-    rgba(30, 20, 15, 0.8) 100%);
-  border: 1px solid rgba(180, 130, 80, 0.35);
-  border-radius: 12px;
-  padding: 20px;
-  margin-bottom: 20px;
-}
-
-.log-title {
-  font-family: 'Cinzel', serif;
-  font-size: 18px;
-  font-weight: 600;
-  color: #f28b82;
-  text-transform: uppercase;
-  letter-spacing: 2px;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid rgba(242, 139, 130, 0.3);
-}
-
-.log-title.expense {
-  color: #fbbf24;
-  border-bottom-color: rgba(251, 191, 36, 0.3);
-}
-
-.log-entry {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  padding: 12px 0;
-  border-bottom: 1px solid rgba(180, 130, 80, 0.15);
-}
-
-.log-entry:last-child {
-  border-bottom: none;
-}
-
-.log-entry-content {
-  flex: 1;
-}
-
-.log-entry-title {
-  font-size: 14px;
-  color: #fff;
-  margin-bottom: 4px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.log-entry-title .icon {
-  width: 20px;
-  height: 20px;
-}
-
-.log-entry-date {
-  font-size: 11px;
-  color: rgba(200, 180, 160, 0.6);
-}
-
-.log-entry-value {
-  font-family: 'Cinzel', serif;
-  font-size: 14px;
-  font-weight: 600;
-  padding: 6px 12px;
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.3);
-}
-
-.log-entry-value.heat {
-  color: #f28b82;
-}
-
-.log-entry-value.expense {
-  color: #f28b82;
-}
-
-/* Close button for overlays */
-.log-close-btn {
-  position: fixed;
-  bottom: 90px;
-  right: 20px;
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: rgba(40, 30, 25, 0.9);
-  border: 1px solid rgba(180, 130, 80, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  z-index: 9001;
-  transition: all 0.2s ease;
-}
-
-.log-close-btn:hover {
-  background: rgba(60, 40, 30, 0.95);
-  border-color: rgba(255, 180, 100, 0.6);
-}
-
-.log-close-btn img {
-  width: 28px;
-  height: 28px;
-  opacity: 0.8;
+  transform: scale(0.92);
 }
 
 /* =====================================================
    RESPONSIVE ADJUSTMENTS
    ===================================================== */
-
 @media (max-width: 380px) {
+  .crime-board {
+    gap: 8px;
+    padding: 6px 10px 16px;
+  }
+  
   .crime-card {
-    min-height: 115px;
-    padding: 12px;
+    min-height: 100px;
+    padding: 10px;
   }
   
   .crime-card-icon {
-    width: 48px;
-    height: 48px;
+    width: 32px;
+    height: 32px;
   }
   
   .crime-card-value {
     font-size: 16px;
   }
   
+  .crime-card.card-profile {
+    min-height: 120px;
+    padding: 12px 16px;
+  }
+  
   .profile-card-avatar {
-    width: 60px;
-    height: 60px;
-    font-size: 26px;
+    width: 55px;
+    height: 55px;
+    font-size: 22px;
   }
   
   .profile-card-name {
-    font-size: 18px;
+    font-size: 17px;
+  }
+  
+  .tab-icon {
+    width: 30px;
+    height: 30px;
   }
 }
 
@@ -6176,95 +6103,8 @@ body {
   }
 }
 
-
-/* =====================================================
-   ADDITIONAL CARD ICON STYLES
-   ===================================================== */
-
-/* Skill Tree card */
-.crime-card.card-skill-tree {
-  background: linear-gradient(180deg, 
-    rgba(35, 30, 25, 0.85) 0%, 
-    rgba(28, 22, 18, 0.9) 50%,
-    rgba(20, 15, 12, 0.95) 100%);
-  border-color: rgba(180, 150, 100, 0.4);
-}
-
-.crime-card.card-skill-tree .crime-card-icon {
-  background-image: url('../sprites/ui-icons/icon-vest.png');
-  width: 64px;
-  height: 64px;
-}
-
-.crime-card.card-skill-tree:hover {
-  border-color: rgba(220, 180, 120, 0.6);
-  box-shadow: 
-    0 6px 20px rgba(0, 0, 0, 0.5),
-    0 0 25px rgba(200, 160, 80, 0.15);
-}
-
-.crime-card-subvalue {
-  font-size: 11px;
-  color: rgba(200, 180, 160, 0.7);
-  margin-top: 4px;
-  letter-spacing: 0.5px;
-}
-
-/* Heat Log card styling */
-.crime-card.card-heat-log {
-  background: linear-gradient(180deg, 
-    rgba(50, 25, 20, 0.85) 0%, 
-    rgba(35, 18, 15, 0.9) 50%,
-    rgba(25, 12, 10, 0.95) 100%);
-  border-color: rgba(220, 100, 80, 0.4);
-}
-
-.crime-card.card-heat-log:hover {
-  border-color: rgba(255, 120, 100, 0.6);
-  box-shadow: 
-    0 6px 20px rgba(0, 0, 0, 0.5),
-    0 0 25px rgba(255, 100, 70, 0.15);
-}
-
-.crime-card.card-heat-log .crime-card-value {
-  color: #f28b82;
-}
-
-/* Expense Log card styling */
-.crime-card.card-expense-log {
-  background: linear-gradient(180deg, 
-    rgba(40, 35, 20, 0.85) 0%, 
-    rgba(30, 25, 15, 0.9) 50%,
-    rgba(22, 18, 10, 0.95) 100%);
-  border-color: rgba(200, 170, 80, 0.4);
-}
-
-.crime-card.card-expense-log:hover {
-  border-color: rgba(240, 200, 100, 0.6);
-  box-shadow: 
-    0 6px 20px rgba(0, 0, 0, 0.5),
-    0 0 25px rgba(230, 180, 50, 0.15);
-}
-
-.crime-card.card-expense-log .crime-card-value {
-  color: #fbbf24;
-}
-
-/* Players card icon adjustment */
-.crime-card.card-players-online .crime-card-icon {
-  width: 64px;
-  height: 64px;
-}
-
-.crime-card.card-players-online .crime-card-value {
-  display: flex;
-  align-items: center;
-  color: #4ade80;
-}
-
-/* Ensure all card icons have minimum sizing */
-.crime-card .crime-card-icon {
-  min-width: 48px;
-  min-height: 48px;
+/* Hide old stat-grid */
+.stat-grid {
+  display: none !important;
 }
 
