@@ -6884,11 +6884,11 @@ class CIAAgentSprite {
 .cia-portrait-row img{
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  image-rendering: pixelated;
+  object-fit: contain;
+  image-rendering: auto;
   transform: translateZ(0);
   opacity: 0;
-  transition: opacity 140ms ease;
+  transition: opacity 200ms ease-in-out;
 }
 .cia-portrait-row img.cia-sprite-ready{ opacity: 1; }
             .cia-dialog .cia-actions{
