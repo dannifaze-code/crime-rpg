@@ -6684,65 +6684,18 @@ const CartoonSpriteGenerator = {
 // ---------------------------
 // Phase 3: CIA Operative Sprite (PNG frame animation, DOM-based)
 // ---------------------------
-const CIA_SPRITE_BASE = 'sprites/cia-agent-pngs/';
-const CIA_SPRITE_MAX_FRAMES = 200;
-
-function _ciaPad2(n) {
-  try { return String(n).padStart(2, '0'); } catch(e) { return (n < 10 ? ('0' + n) : String(n)); }
-}
-
-function _ciaBuildSeq(prefix, count) {
-  const out = [];
-  for (let i = 1; i <= count; i++) out.push(CIA_SPRITE_BASE + prefix + _ciaPad2(i) + '.png');
-  return out;
-}
-
-// Defaults (Option 2 pack ships with 6 idle + 8 talk frames; probing below will auto-expand)
-const CIA_SPRITE_FRAMES = {
-  idle: _ciaBuildSeq('idle_', 6),
-  talk: _ciaBuildSeq('talk_', 8)
+const CIA_SPRITE_PATH = {
+  idle: [
+    'sprites/cia-agent-pngs/idle_01.png',
+    'sprites/cia-agent-pngs/idle_02.png'
+  ],
+  talk: [
+    'sprites/cia-agent-pngs/talk_01.png',
+    'sprites/cia-agent-pngs/talk_02.png',
+    'sprites/cia-agent-pngs/talk_03.png',
+    'sprites/cia-agent-pngs/talk_04.png'
+  ]
 };
-
-// Probe for frames (idle_01..N / talk_01..N) so you can drop more PNGs later with zero code changes.
-function _ciaProbeFrames(mode, prefix) {
-  try {
-    _ciaProbeFrames._inflight = _ciaProbeFrames._inflight || {};
-    if (_ciaProbeFrames._inflight[mode]) return;
-    _ciaProbeFrames._inflight[mode] = true;
-
-    const found = [];
-    let idx = 1;
-    const max = CIA_SPRITE_MAX_FRAMES;
-
-    const finish = () => {
-      try {
-        if (found.length) CIA_SPRITE_FRAMES[mode] = found;
-      } catch(e) {}
-      _ciaProbeFrames._inflight[mode] = false;
-    };
-
-    const step = () => {
-      if (idx > max) return finish();
-      const src = CIA_SPRITE_BASE + prefix + _ciaPad2(idx) + '.png';
-      const im = new Image();
-      im.onload = () => { found.push(src); idx++; step(); };
-      im.onerror = () => { 
-        // Stop at first missing file after we’ve found at least one.
-        // If the very first file is missing, keep defaults.
-        return finish();
-      };
-      im.src = src;
-    };
-
-    step();
-  } catch (e) {
-    try { _ciaProbeFrames._inflight[mode] = false; } catch(_) {}
-  }
-}
-
-// Kick off probing early (non-blocking)
-try { _ciaProbeFrames('idle', 'idle_'); } catch(e) {}
-try { _ciaProbeFrames('talk', 'talk_'); } catch(e) {}
 
 class CIAAgentSprite {
   constructor(imgEl) {
@@ -6769,7 +6722,7 @@ class CIAAgentSprite {
 
   preloadAll() {
     try {
-      const all = [...CIA_SPRITE_FRAMES.idle, ...CIA_SPRITE_FRAMES.talk];
+      const all = [...CIA_SPRITE_PATH.idle, ...CIA_SPRITE_PATH.talk];
       all.forEach(src => this._preload(src));
     } catch(e) {}
   }
@@ -6799,7 +6752,7 @@ class CIAAgentSprite {
 
   _tick() {
     if (!this.imgEl) return;
-    const frames = CIA_SPRITE_FRAMES[this.mode] || CIA_SPRITE_FRAMES.idle;
+    const frames = CIA_SPRITE_PATH[this.mode] || CIA_SPRITE_PATH.idle;
     if (!frames || !frames.length) return;
 
     const src = frames[this.frame % frames.length];
@@ -6917,45 +6870,27 @@ class CIAAgentSprite {
   display:flex; align-items:center; justify-content:center;
   margin: 10px 0 8px;
 }
-
-.cia-portrait{
-  position: relative;
+.cia-portrait-frame{
   width: min(78vw, 340px);
   max-width: 340px;
   aspect-ratio: 1 / 1;
   border-radius: 16px;
-  overflow: hidden;
-  background: transparent;
+  overflow:hidden;
+  background: rgba(255,255,255,0.04);
   border: 1px solid rgba(255,255,255,0.12);
   box-shadow: inset 0 0 0 1px rgba(0,0,0,0.25);
+  display:flex; align-items:center; justify-content:center;
 }
-
-/* Live cloud layer behind transparent PNGs (Option 2) */
-.cia-portrait-clouds{
-  position:absolute; inset:-20%;
-  background:
-    radial-gradient(circle at 30% 30%, rgba(255,255,255,.25), transparent 55%),
-    radial-gradient(circle at 70% 60%, rgba(255,255,255,.18), transparent 55%),
-    linear-gradient(180deg, rgba(255,255,255,.08), rgba(0,0,0,.05));
-  filter: blur(6px);
-  opacity: .55;
-  transform: translate3d(0,0,0);
-  animation: ciaCloudDrift 10s linear infinite;
-}
-
-/* The agent sprite sits above the clouds */
-.cia-agent-sprite{
-  position: relative;
+.cia-portrait-row img{
   width: 100%;
   height: 100%;
-  object-fit: cover; /* fill the bubble */
+  object-fit: cover;
   image-rendering: pixelated;
-  transform: translateZ(0) scale(1.08); /* slight dominance */
+  transform: translateZ(0);
   opacity: 0;
   transition: opacity 140ms ease;
 }
-.cia-agent-sprite.cia-sprite-ready{ opacity: 1; }
-
+.cia-portrait-row img.cia-sprite-ready{ opacity: 1; }
             .cia-dialog .cia-actions{
               display:flex;
               flex-direction:column;
@@ -7066,7 +7001,7 @@ class CIAAgentSprite {
         dialog.innerHTML = `
           <div class="cia-badge">🕶️ SPECIAL EVENT • LOCKDOWN</div>
           <div class="cia-title" id="cia-dialog-title">The Visitor</div>
-          <div class="cia-portrait-row" id="cia-portrait-row"><div class="cia-portrait"><div class="cia-portrait-clouds"></div><img id="cia-portrait-img" class="cia-agent-sprite" alt="CIA operative" /></div></div>
+          <div class=\"cia-portrait-row\" id=\"cia-portrait-row\"><div class=\"cia-portrait-frame\"><img id=\"cia-portrait-img\" alt=\"CIA operative\" /></div></div>
           <div class="cia-body" id="cia-dialog-body"></div>
           <div class="cia-actions" id="cia-dialog-actions"></div>
           <div class="cia-hint" id="cia-dialog-hint"></div>
