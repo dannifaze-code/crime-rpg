@@ -5518,17 +5518,18 @@ body {
 /* Header buttons container */
 .profile-header-buttons {
   display: flex;
-  gap: 10px;
+  gap: 12px;
 }
 
 .profile-header-btn {
-  width: 44px;
-  height: 44px;
-  border: none;
-  background: transparent;
+  width: 50px;
+  height: 50px;
+  border: none !important;
+  background: transparent !important;
   cursor: pointer;
   padding: 0;
   transition: transform 0.2s, filter 0.2s;
+  outline: none;
 }
 
 .profile-header-btn:hover {
@@ -5544,14 +5545,23 @@ body {
   width: 100%;
   height: 100%;
   object-fit: contain;
+  display: block;
+}
+
+/* Force header button images to show */
+#global-chat-btn,
+#logout-btn {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
 }
 
 /* Crime Board Grid */
 .crime-board {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
-  padding: 8px 12px 20px;
+  gap: 8px;
+  padding: 8px 8px 20px;
   position: relative;
   z-index: 5;
 }
@@ -5565,11 +5575,13 @@ body {
   background-size: 100% 100%;
   border: none;
   border-radius: 0;
-  min-height: 140px;
-  padding: 16px 20px;
+  min-height: 200px;
+  padding: 20px 24px;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 16px;
+  justify-content: center;
+  gap: 12px;
   cursor: pointer;
   transition: transform 0.2s, filter 0.2s;
   box-shadow: none;
@@ -5587,14 +5599,14 @@ body {
 
 /* Player Avatar Circle */
 .profile-card-avatar {
-  width: 70px;
-  height: 70px;
+  width: 80px;
+  height: 80px;
   background: url('../sprites/ui-new/PlayerProfile/nameplateforplayer.png') no-repeat center center;
   background-size: contain;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 28px;
+  font-size: 32px;
   font-weight: 700;
   color: #1a3a5c;
   text-shadow: none;
@@ -5609,21 +5621,26 @@ body {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  width: 100%;
+  align-items: center;
 }
 
 .profile-card-name {
   font-family: 'Cinzel', serif;
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 600;
   color: #fff;
   text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+  text-align: center;
 }
 
 .profile-card-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 2px 0;
+  padding: 4px 0;
+  width: 100%;
+  max-width: 280px;
 }
 
 .profile-card-row .profile-card-label {
@@ -5652,9 +5669,10 @@ body {
 /* XP Progress Bar */
 .profile-xp-bar {
   width: 100%;
-  height: 6px;
+  max-width: 280px;
+  height: 10px;
   background: rgba(0, 0, 0, 0.5);
-  border-radius: 3px;
+  border-radius: 5px;
   overflow: hidden;
   margin-top: 4px;
 }
@@ -5662,7 +5680,7 @@ body {
 .profile-xp-fill {
   height: 100%;
   background: linear-gradient(90deg, #4a90d9 0%, #7ec8ff 100%);
-  border-radius: 3px;
+  border-radius: 5px;
   transition: width 0.3s ease;
 }
 
@@ -5675,8 +5693,8 @@ body {
   background-position: center center !important;
   border: none !important;
   border-radius: 0 !important;
-  min-height: 110px;
-  padding: 12px;
+  min-height: 140px;
+  padding: 14px;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
@@ -5728,11 +5746,12 @@ body {
 
 .crime-card.card-players-online {
   background-image: url('../sprites/ui-new/PlayerProfile/PlayersOnlineSquare.png');
+  min-height: 180px;
 }
 
 .crime-card.card-stats {
   background-image: url('../sprites/ui-new/PlayerProfile/StatsSquare.png');
-  min-height: 140px;
+  min-height: 180px;
 }
 
 .crime-card.card-skill-tree {
