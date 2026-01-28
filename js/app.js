@@ -18377,20 +18377,6 @@ function ensureLandmarkProperties() {
               </div>
               <div class="profile-card-row">
                 <span class="profile-card-label">
-                  <img class="profile-row-icon" src="sprites/ui-new/PlayerProfile/playercashProfile.png" alt="">
-                  CASH
-                </span>
-                <span class="profile-card-value" style="color: #4ade80;">$${player.cash.toLocaleString()}</span>
-              </div>
-              <div class="profile-card-row">
-                <span class="profile-card-label">
-                  <img class="profile-row-icon" src="sprites/ui-new/PlayerProfile/leaderboardsCrownProfile.png" alt="">
-                  REP
-                </span>
-                <span class="profile-card-value" style="color: #fbbf24;">${player.reputation}</span>
-              </div>
-              <div class="profile-card-row">
-                <span class="profile-card-label">
                   <img class="profile-row-icon" src="sprites/ui-new/PlayerProfile/playerHeatProfile.png" alt="">
                   HEAT
                 </span>
