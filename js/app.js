@@ -11273,23 +11273,46 @@ function updateTurfDefense(dt) {
         return;
       }
       
-      // Base64 encoded map image (WEBP format)
-      const mapImageData = 'sprites/turf-map/TurfMap.png';
+      // Static turf map image (file path; cache-busted with version)
+      const MAP_ASSET_VERSION = '2026-01-28';
+      const mapImageData = 'sprites/turf-map/TurfMap.png?v=' + MAP_ASSET_VERSION;
       
-      mapBackground.src = mapImageData;
-      mapBackground.onload = () => {
+      // Apply to visible map layer (city-map) so the new PNG actually shows in-game
+      const __cityMapEl = document.getElementById('city-map');
+      if (__cityMapEl) {
+        __cityMapEl.style.backgroundImage = `url("${mapImageData}")`;
+        __cityMapEl.style.backgroundSize = 'contain';
+        __cityMapEl.style.backgroundPosition = 'center';
+        __cityMapEl.style.backgroundRepeat = 'no-repeat';
+      }
+
+      // Load into the real visible background layer AND into an Image for road-mask building
+      const __roadMaskImg = new Image();
+      __roadMaskImg.onload = () => {
         console.log('✅ Static map loaded successfully');
         // Build road mask grid for cop A* pathfinding
         if (window.RoadPathfinder && typeof window.RoadPathfinder.buildFromImage === "function") {
-          window.RoadPathfinder.buildFromImage(mapBackground);
+          window.RoadPathfinder.buildFromImage(__roadMaskImg);
         } else {
-          window.__pendingRoadMaskImage = mapBackground;
+          window.__pendingRoadMaskImage = __roadMaskImg;
         }
       };
-      mapBackground.onerror = () => {
+      __roadMaskImg.onerror = () => {
         console.error('❌ Failed to load static map');
       };
-      
+
+      // Visible map layer
+      if (mapBackground.tagName === 'IMG') {
+        mapBackground.src = mapImageData;
+      } else {
+        mapBackground.style.backgroundImage = `url("${mapImageData}")`;
+        mapBackground.style.backgroundSize = 'contain';
+        mapBackground.style.backgroundPosition = 'center';
+        mapBackground.style.backgroundRepeat = 'no-repeat';
+      }
+
+      // Road mask loader (separate Image so onload always fires even if mapBackground isn't an <img>)
+      __roadMaskImg.src = mapImageData;
       console.log('==================================');
     }
     // ========================================
@@ -26016,6 +26039,14 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       if (typeof GoogleAuthManager !== 'undefined' && !GoogleAuthManager.isSignedIn()) {
         console.error('[initializeGame] ❌ Prevented game initialization - no authenticated user');
         return;
+      }
+
+
+      // Ensure the static turf map is loaded (visible background + road mask) before we transfer layers
+      if (typeof initStaticMap === 'function') {
+        initStaticMap();
+      } else {
+        console.warn('⚠️ initStaticMap() not found - map background may not load');
       }
 
       // Transfer map background to separate layer for zoom
