@@ -19793,6 +19793,25 @@ function ensureLandmarkProperties() {
         }
 
         if (e.touches.length === 1 && viewport) {
+          // Mobile UX: allow the *page* to scroll when the map is not zoomed in.
+          // When zoomed in, we capture the gesture for map panning.
+          const z = (typeof this.currentZoom === 'number' && isFinite(this.currentZoom)) ? this.currentZoom : 1;
+          const allowPageScroll = (z <= 1.02);
+
+          this._touchInteractingWithMap = !allowPageScroll;
+
+          if (allowPageScroll) {
+            // Do NOT preventDefault — let the browser scroll the page.
+            this.isPanning = false;
+            this.isPinching = false;
+            this.activePointerId = null;
+            // Clear tap tracking so we don't synthesize clicks while the user is scrolling the page.
+            this._touchTapMoved = true;
+            this._touchTapStartX = null;
+            this._touchTapStartY = null;
+            return;
+          }
+
           e.preventDefault();
           this.isPanning = true;
           this.isPinching = false;
@@ -19812,6 +19831,18 @@ function ensureLandmarkProperties() {
       handleTouchMove(e) {
         const viewport = document.getElementById('map-viewport');
         this._zoomViewport = viewport; // cache for cancelPanZoomCapture()
+
+        // If the user adds a second finger mid-gesture, enter pinch mode.
+        if (!this.isPinching && e.touches && e.touches.length === 2) {
+          e.preventDefault();
+          this.isPinching = true;
+          this.isPanning = false;
+          this._touchInteractingWithMap = true;
+          this.lastPinchDistance = this.getPinchDistance(e.touches);
+          const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+          const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+          this.pinchAnchor = { x: midX, y: midY };
+        }
 
         // Pinch zoom
         if (this.isPinching && e.touches.length === 2) {
@@ -19866,7 +19897,9 @@ function ensureLandmarkProperties() {
         }
 
         // Forward tap to underlying icon/landmark (touch) if this gesture was a tap (no drag, no pinch)
-        if (!this.isPinching && !this._touchTapMoved && e && e.changedTouches && e.changedTouches.length) {
+        // Only do this when we actually captured the gesture for the map. If we allowed page scrolling,
+        // we must NOT synthesize clicks (prevents accidental property taps while scrolling).
+        if (this._touchInteractingWithMap && !this.isPinching && !this._touchTapMoved && e && e.changedTouches && e.changedTouches.length) {
           const t = e.changedTouches[0];
           const el = document.elementFromPoint(t.clientX, t.clientY);
           const viewport = document.getElementById('map-viewport');
@@ -19885,6 +19918,7 @@ function ensureLandmarkProperties() {
 
         this.isPinching = false;
         this.isPanning = false;
+        this._touchInteractingWithMap = false;
         this.lastPinchDistance = 0;
         this.pinchAnchor = null;
       },
