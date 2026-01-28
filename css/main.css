@@ -4611,6 +4611,9 @@
     max-width: 100vw !important;
     max-height: 100vh !important;
     border-radius: 0 !important;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   }
 
   .skill-modal-panel {
@@ -5564,8 +5567,8 @@ body {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   /* Tighter spacing so the Profile grid fits comfortably on mobile */
-  gap: 6px;
-  padding: 6px 6px 18px;
+  gap: 12px;
+  padding: 6px 8px 18px;
   position: relative;
   z-index: 5;
 }
@@ -5774,13 +5777,19 @@ body {
 
 .crime-card.card-players-online {
   background-image: url('../sprites/ui-new/PlayerProfile/PlayersOnlineSquare.png');
-  min-height: clamp(160px, 24vh, 200px);
+  /* Let the grid column width drive sizing so it can’t overflow/overlap */
+  width: 100%;
+  max-width: 100%;
+  min-height: unset;
   aspect-ratio: 1 / 1.1;
 }
 
 .crime-card.card-stats {
   background-image: url('../sprites/ui-new/PlayerProfile/StatsSquare.png');
-  min-height: clamp(160px, 24vh, 200px);
+  /* Let the grid column width drive sizing so it can’t overflow/overlap */
+  width: 100%;
+  max-width: 100%;
+  min-height: unset;
   aspect-ratio: 1 / 1.1;
 }
 
@@ -5841,8 +5850,8 @@ body {
 
 .crime-card.card-players-online .crime-card-icon {
   background-image: url('../sprites/ui-new/PlayerProfile/PlayersOnlineIconProfile.png');
-  width: 50px;
-  height: 50px;
+  width: 58px;
+  height: 58px;
 }
 
 .crime-card.card-skill-tree .crime-card-icon {
@@ -5915,6 +5924,16 @@ body {
 
 .crime-card.card-leaderboard .crime-card-value {
   color: #fbbf24;
+}
+
+/* Players Online card: nudge text inward so it sits comfortably inside the frame */
+.crime-card.card-players-online {
+  padding-left: clamp(16px, 4.4vw, 20px);
+  padding-bottom: clamp(16px, 4.4vw, 22px);
+}
+
+.crime-card.card-players-online .crime-card-label {
+  margin-bottom: 6px;
 }
 
 .crime-card.card-players-online .crime-card-value {
@@ -6125,7 +6144,7 @@ body {
    ===================================================== */
 @media (max-width: 380px) {
   .crime-board {
-    gap: 8px;
+    gap: 12px;
     padding: 6px 10px 16px;
   }
   
