@@ -18970,71 +18970,56 @@ function ensureLandmarkProperties() {
         const profileHeader = document.querySelector('#profile-tab .page-header');
         if (!profileHeader) return;
         
-        // Create button container
-        const buttonContainer = document.createElement('div');
-        buttonContainer.style.cssText = `
-          position: absolute;
-          top: 12px;
-          right: 12px;
-          display: flex;
-          gap: 8px;
-        `;
+        // Check if buttons container already exists in HTML
+        let buttonContainer = profileHeader.querySelector('.profile-header-buttons');
         
-        // Chat button
-        const chatBtn = document.createElement('button');
-        chatBtn.id = 'chat-tab-btn';
-        chatBtn.innerHTML = '💬';
-        chatBtn.title = 'Chat';
-        chatBtn.style.cssText = `
-          background: transparent;
-          border: 1px solid #2a2a2a;
-          color: #e0e0e0;
-          font-size: 18px;
-          padding: 8px 12px;
-          border-radius: 4px;
-          cursor: pointer;
-          transition: all 0.2s;
-          min-width: 44px;
-          min-height: 44px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        `;
-        
-        chatBtn.addEventListener('click', () => {
-          ChatSystem.openChat(); // Open global chat
-        });
-        
-        // Logout button
-        const logoutBtn = document.createElement('button');
-        logoutBtn.id = 'logout-btn';
-        logoutBtn.innerHTML = '🚪';
-        logoutBtn.title = 'Logout';
-        logoutBtn.style.cssText = `
-          background: transparent;
-          border: 1px solid #2a2a2a;
-          color: #e0e0e0;
-          font-size: 18px;
-          padding: 8px 12px;
-          border-radius: 4px;
-          cursor: pointer;
-          transition: all 0.2s;
-          min-width: 44px;
-          min-height: 44px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        `;
-        
-        logoutBtn.addEventListener('click', async () => {
-          await AuthManager.logout();
-        });
-        
-        buttonContainer.appendChild(chatBtn);
-        buttonContainer.appendChild(logoutBtn);
-        
-        profileHeader.style.position = 'relative';
-        profileHeader.appendChild(buttonContainer);
+        if (!buttonContainer) {
+          // Create button container
+          buttonContainer = document.createElement('div');
+          buttonContainer.className = 'profile-header-buttons';
+          
+          // Chat button with PNG image
+          const chatBtn = document.createElement('button');
+          chatBtn.id = 'global-chat-btn';
+          chatBtn.className = 'profile-header-btn';
+          chatBtn.title = 'Global Chat';
+          chatBtn.innerHTML = '<img src="sprites/ui-new/PlayerProfile/globalchatbutton.png" alt="Chat">';
+          
+          chatBtn.addEventListener('click', () => {
+            ChatSystem.openChat();
+          });
+          
+          // Logout button with PNG image
+          const logoutBtn = document.createElement('button');
+          logoutBtn.id = 'logout-btn';
+          logoutBtn.className = 'profile-header-btn';
+          logoutBtn.title = 'Logout';
+          logoutBtn.innerHTML = '<img src="sprites/ui-new/PlayerProfile/loggoutbutton.png" alt="Logout">';
+          
+          logoutBtn.addEventListener('click', async () => {
+            await AuthManager.logout();
+          });
+          
+          buttonContainer.appendChild(chatBtn);
+          buttonContainer.appendChild(logoutBtn);
+          profileHeader.appendChild(buttonContainer);
+        } else {
+          // Buttons exist in HTML, just add event listeners
+          const chatBtn = document.getElementById('global-chat-btn');
+          const logoutBtn = document.getElementById('logout-btn');
+          
+          if (chatBtn) {
+            chatBtn.addEventListener('click', () => {
+              ChatSystem.openChat();
+            });
+          }
+          
+          if (logoutBtn) {
+            logoutBtn.addEventListener('click', async () => {
+              await AuthManager.logout();
+            });
+          }
+        }
         
         // Start listening for messages
         ChatSystem.startListeningForMessages();
