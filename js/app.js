@@ -18375,14 +18375,7 @@ function ensureLandmarkProperties() {
               <div class="profile-xp-bar">
                 <div class="profile-xp-fill" style="width: ${xpPercent}%"></div>
               </div>
-              <div class="profile-card-row">
-                <span class="profile-card-label">
-                  <img class="profile-row-icon" src="sprites/ui-new/PlayerProfile/playerHeatProfile.png" alt="">
-                  HEAT
-                </span>
-                <span class="profile-card-value" style="color: #f87171;">${Math.round(player.heat)}%</span>
-              </div>
-            </div>
+</div>
           </div>
           
           <div class="crime-card card-cash">
