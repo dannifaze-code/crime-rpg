@@ -1337,10 +1337,10 @@
       position: absolute;
       inset: 0;
       overflow: hidden;
-      touch-action: none;
+      touch-action: pan-y;
     }
     #map-viewport{
-      touch-action: none; /* prevent page scroll / browser gestures while panning */
+      touch-action: pan-y; /* allow vertical page scroll over the map */
     }
     #map-world{
       will-change: transform;
@@ -1406,7 +1406,7 @@
       left: 0;
       width: 100%;
       height: 100%;
-      touch-action: none;
+      touch-action: pan-y;
     }
 
     #map-background {
@@ -1888,7 +1888,7 @@
     .map-zoomable {
       position: relative;
       overflow: hidden;
-      touch-action: none; /* Disable default touch actions for custom pinch zoom */
+      touch-action: pan-y; /* Disable default touch actions for custom pinch zoom */
     }
 
     .map-zoom-wrapper {
