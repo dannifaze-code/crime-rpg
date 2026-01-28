@@ -19793,25 +19793,6 @@ function ensureLandmarkProperties() {
         }
 
         if (e.touches.length === 1 && viewport) {
-          // Mobile UX: allow the *page* to scroll when the map is not zoomed in.
-          // When zoomed in, we capture the gesture for map panning.
-          const z = (typeof this.currentZoom === 'number' && isFinite(this.currentZoom)) ? this.currentZoom : 1;
-          const allowPageScroll = (z <= 1.02);
-
-          this._touchInteractingWithMap = !allowPageScroll;
-
-          if (allowPageScroll) {
-            // Do NOT preventDefault — let the browser scroll the page.
-            this.isPanning = false;
-            this.isPinching = false;
-            this.activePointerId = null;
-            // Clear tap tracking so we don't synthesize clicks while the user is scrolling the page.
-            this._touchTapMoved = true;
-            this._touchTapStartX = null;
-            this._touchTapStartY = null;
-            return;
-          }
-
           e.preventDefault();
           this.isPanning = true;
           this.isPinching = false;
@@ -19831,18 +19812,6 @@ function ensureLandmarkProperties() {
       handleTouchMove(e) {
         const viewport = document.getElementById('map-viewport');
         this._zoomViewport = viewport; // cache for cancelPanZoomCapture()
-
-        // If the user adds a second finger mid-gesture, enter pinch mode.
-        if (!this.isPinching && e.touches && e.touches.length === 2) {
-          e.preventDefault();
-          this.isPinching = true;
-          this.isPanning = false;
-          this._touchInteractingWithMap = true;
-          this.lastPinchDistance = this.getPinchDistance(e.touches);
-          const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-          const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-          this.pinchAnchor = { x: midX, y: midY };
-        }
 
         // Pinch zoom
         if (this.isPinching && e.touches.length === 2) {
@@ -19897,9 +19866,7 @@ function ensureLandmarkProperties() {
         }
 
         // Forward tap to underlying icon/landmark (touch) if this gesture was a tap (no drag, no pinch)
-        // Only do this when we actually captured the gesture for the map. If we allowed page scrolling,
-        // we must NOT synthesize clicks (prevents accidental property taps while scrolling).
-        if (this._touchInteractingWithMap && !this.isPinching && !this._touchTapMoved && e && e.changedTouches && e.changedTouches.length) {
+        if (!this.isPinching && !this._touchTapMoved && e && e.changedTouches && e.changedTouches.length) {
           const t = e.changedTouches[0];
           const el = document.elementFromPoint(t.clientX, t.clientY);
           const viewport = document.getElementById('map-viewport');
@@ -19918,7 +19885,6 @@ function ensureLandmarkProperties() {
 
         this.isPinching = false;
         this.isPanning = false;
-        this._touchInteractingWithMap = false;
         this.lastPinchDistance = 0;
         this.pinchAnchor = null;
       },
@@ -20357,15 +20323,78 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
 
         // Helper: get random building target (tile coords)
         function pickRandomBuilding() {
-          const b = (GameState.map && GameState.map.buildings) ? GameState.map.buildings : [];
-          if (!b || b.length === 0) return null;
+          // Turf free-roam targets:
+          // Prefer the fixedPropertyPositions (the 21 turf buildings) + landmarks (police/safehouse),
+          // and fall back to GameState.map.buildings if present.
+          const w = (GameState.map && typeof GameState.map.width === 'number') ? GameState.map.width : 30;
+          const h = (GameState.map && typeof GameState.map.height === 'number') ? GameState.map.height : 30;
+
+          const candidates = [];
+
+          // 21 purchasable properties (stored as % coords)
+          if (Array.isArray(GameState.fixedPropertyPositions) && GameState.fixedPropertyPositions.length) {
+            GameState.fixedPropertyPositions.forEach(prop => {
+              if (!prop) return;
+              const px = Number(prop.x);
+              const py = Number(prop.y);
+              if (!isFinite(px) || !isFinite(py)) return;
+              candidates.push({
+                id: prop.id || prop.type || 'property',
+                type: prop.type || prop.id || 'property',
+                name: prop.name || prop.type || prop.id || 'Property',
+                // Convert % → tile-space so our existing renderer math stays intact
+                x: (px / 100) * w,
+                y: (py / 100) * h,
+                width: 1,
+                height: 1,
+                _roamKey: 'prop:' + (prop.id || prop.type || (px + ',' + py))
+              });
+            });
+          }
+
+          // Non-purchasable landmarks (stored as % coords)
+          if (GameState.fixedLandmarkPositions && typeof GameState.fixedLandmarkPositions === 'object') {
+            Object.keys(GameState.fixedLandmarkPositions).forEach(k => {
+              const lm = GameState.fixedLandmarkPositions[k];
+              if (!lm) return;
+              const px = Number(lm.x);
+              const py = Number(lm.y);
+              if (!isFinite(px) || !isFinite(py)) return;
+              candidates.push({
+                id: k,
+                type: k,
+                name: k,
+                x: (px / 100) * w,
+                y: (py / 100) * h,
+                width: 1,
+                height: 1,
+                _roamKey: 'lm:' + k
+              });
+            });
+          }
+
+          // Fallback: procedural/city buildings if available (tile coords)
+          const b = (GameState.map && Array.isArray(GameState.map.buildings)) ? GameState.map.buildings : [];
+          if (b && b.length) candidates.push(...b);
+
+          if (!candidates.length) return null;
 
           // Prefer "interesting" buildings by name/type if available
-          const preferred = b.filter(x => {
-            const t = (x.type || x.name || '').toString().toLowerCase();
-            return t.indexOf('shop') !== -1 || t.indexOf('mall') !== -1 || t.indexOf('casino') !== -1 || t.indexOf('bank') !== -1 || t.indexOf('chop') !== -1;
+          const preferred = candidates.filter(x => {
+            const t = (x && (x.type || x.name || '')).toString().toLowerCase();
+            return (
+              t.indexOf('shop') !== -1 ||
+              t.indexOf('mall') !== -1 ||
+              t.indexOf('casino') !== -1 ||
+              t.indexOf('bank') !== -1 ||
+              t.indexOf('chop') !== -1 ||
+              t.indexOf('strip') !== -1 ||
+              t.indexOf('hospital') !== -1 ||
+              t.indexOf('club') !== -1
+            );
           });
-          const pool = preferred.length ? preferred : b;
+
+          const pool = preferred.length ? preferred : candidates;
           return pool[Math.floor(Math.random() * pool.length)];
         }
 
