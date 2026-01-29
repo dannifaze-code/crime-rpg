@@ -296,7 +296,12 @@ const CopCar3D = {
     // with the 2D map markers that use percent coordinates.
     // Because the canvas is attached to #map-world, it inherits pan/zoom transforms.
     // That means zooming the map won't distort or spin the 3D car logic.
-    this.camera = new THREE.OrthographicCamera(0, 100, 100, 0, 0.1, 500);
+    //
+    // FIX: Use symmetric frustum centered at origin, then position camera at center of map.
+    // This ensures the 0-100 coordinate range maps correctly to the visible area.
+    // Also explicitly set up vector before lookAt to avoid gimbal issues when looking straight down.
+    this.camera = new THREE.OrthographicCamera(-50, 50, 50, -50, 0.1, 500);
+    this.camera.up.set(0, 0, -1); // Set up vector to -Z before lookAt (avoids gimbal lock when looking down Y)
     this.camera.position.set(50, 120, 50);
     this.camera.lookAt(50, 0, 50);
 
@@ -333,6 +338,7 @@ const CopCar3D = {
     this._groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
     this._setupLighting();
+    this._addDebugHelpers(); // Add visible markers to verify rendering
     this._ensureSmokeSystem();
     await this._loadModel();
 
@@ -341,6 +347,39 @@ const CopCar3D = {
 
     this.isInitialized = true;
     console.log('[CopCar3D] Ready');
+  },
+
+  _addDebugHelpers() {
+    // Add a semi-transparent ground plane to verify 3D rendering is working
+    // This helps visualize the coordinate space and can be removed in production.
+    try {
+      // Small corner markers at (0,0), (100,0), (0,100), (100,100) to verify coordinate space
+      const markerGeo = new THREE.SphereGeometry(2, 8, 8);
+      const markerMat = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.6 });
+
+      const corners = [
+        { x: 0, z: 0 },    // Top-left
+        { x: 100, z: 0 },  // Top-right
+        { x: 0, z: 100 },  // Bottom-left
+        { x: 100, z: 100 } // Bottom-right
+      ];
+
+      corners.forEach(c => {
+        const marker = new THREE.Mesh(markerGeo, markerMat);
+        marker.position.set(c.x, 1, c.z);
+        this.scene.add(marker);
+      });
+
+      // Add a center marker (green) at (50, 50)
+      const centerMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.6 });
+      const centerMarker = new THREE.Mesh(markerGeo, centerMat);
+      centerMarker.position.set(50, 1, 50);
+      this.scene.add(centerMarker);
+
+      console.log('[CopCar3D] Debug helpers added: corner markers (red), center marker (green)');
+    } catch (e) {
+      console.warn('[CopCar3D] Failed to add debug helpers:', e);
+    }
   },
 
   _setupLighting() {
@@ -420,8 +459,10 @@ const CopCar3D = {
           const visual = gltf.scene;
           visual.name = 'CopCarVisual';
 
-          // Scale first (affects bounds)
-          visual.scale.set(0.5, 0.5, 0.5);
+          // Scale the model to be visible in the 100-unit coordinate space.
+          // A typical car model is ~4-5 units long, so scale 2.0 makes it ~8-10 units
+          // which is about 8-10% of the map width - reasonably visible.
+          visual.scale.set(2.0, 2.0, 2.0);
 
           // Recenter pivot to bounds center, put wheels on ground (y=0)
           try {
@@ -482,10 +523,62 @@ const CopCar3D = {
         undefined,
         (err) => {
           console.error('[CopCar3D] Model load failed:', err);
-          reject(err);
+          // Fallback: create a simple colored box so the car is at least visible
+          this._createFallbackModel();
+          resolve(); // Don't reject - use fallback instead
         }
       );
     });
+  },
+
+  /**
+   * Create a simple colored box as fallback if GLB model fails to load.
+   * Also makes the 2D marker visible as additional fallback.
+   */
+  _createFallbackModel() {
+    console.warn('[CopCar3D] Using fallback box model');
+
+    // Create a simple police-car-colored box
+    const geometry = new THREE.BoxGeometry(2.5, 1.2, 4.5);
+    const material = new THREE.MeshStandardMaterial({
+      color: 0x1a1a2e, // Dark blue/black
+      metalness: 0.3,
+      roughness: 0.7
+    });
+    const box = new THREE.Mesh(geometry, material);
+    box.castShadow = true;
+    box.receiveShadow = true;
+
+    // Add a light bar on top (red/blue)
+    const lightBarGeo = new THREE.BoxGeometry(1.8, 0.3, 0.6);
+    const lightBarMat = new THREE.MeshStandardMaterial({
+      color: 0x4444ff,
+      emissive: 0x2222ff,
+      emissiveIntensity: 0.5
+    });
+    const lightBar = new THREE.Mesh(lightBarGeo, lightBarMat);
+    lightBar.position.y = 0.75;
+    box.add(lightBar);
+
+    const pivot = new THREE.Group();
+    pivot.name = 'CopCarPivot';
+    pivot.add(box);
+    pivot.position.y = 0.6; // Raise above ground
+
+    // Attach police lights
+    this.lights.police.forEach((l) => pivot.add(l));
+
+    this.model = pivot;
+    this.modelVisual = box;
+    this.scene.add(this.model);
+    this.modelLoaded = true;
+
+    // Also show the 2D marker as additional fallback
+    if (this.copCarElement) {
+      this.copCarElement.style.opacity = '1';
+      this.copCarElement.style.fontSize = '24px';
+      this.copCarElement.textContent = '🚔';
+    }
   },
 
   _cacheModelParts() {
@@ -897,8 +990,9 @@ const CopCar3D = {
   _handleResize(width, height) {
     if (!this.camera || !this.renderer) return;
 
-    // Orthographic camera bounds stay in percent-space (0..100). We only need to
-    // resize the renderer; projection matrix stays stable.
+    // Keep the frustum at fixed 100x100 units to match the map's percent coordinate system.
+    // Any aspect ratio distortion matches the 2D map distortion via CSS.
+    // The camera is centered at (50, 50), so symmetric bounds (-50, 50) cover 0-100.
     this.camera.updateProjectionMatrix();
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.config.maxPixelRatio));
     this.renderer.setSize(width, height, false);
