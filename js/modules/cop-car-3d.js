@@ -26,7 +26,9 @@ const CopCar3D = {
   canvas: null,
 
   // DOM
-  container: null,      // #city-map
+  // We attach to #map-world so the 3D overlay inherits the same pan/zoom transform as the map.
+  // Fallback to #city-map if needed.
+  container: null,      // #map-world (preferred) or #city-map (fallback)
   copCarElement: null,  // #cop-car (2D marker)
 
   // Model
@@ -134,7 +136,7 @@ const CopCar3D = {
     // Fast path: already initialized
     if (this.isInitialized && this.renderer && this.container) {
       try {
-        const c = document.getElementById('city-map');
+        const c = document.getElementById('map-world') || document.getElementById('city-map');
         if (c) this.container = c;
 
         this.copCarElement = document.getElementById('cop-car');
@@ -144,9 +146,10 @@ const CopCar3D = {
           this.container.appendChild(this.canvas);
         }
 
-        const rect = this.container.getBoundingClientRect();
-        if (rect.width > 0 && rect.height > 0) {
-          this._handleResize(rect.width, rect.height);
+        const w = this.container.offsetWidth;
+        const h = this.container.offsetHeight;
+        if (w > 0 && h > 0) {
+          this._handleResize(w, h);
         } else {
           this._waitForDimensions();
         }
@@ -174,9 +177,9 @@ const CopCar3D = {
         return false;
       }
 
-      this.container = document.getElementById('city-map');
+      this.container = document.getElementById('map-world') || document.getElementById('city-map');
       if (!this.container) {
-        console.error('[CopCar3D] #city-map not found');
+        console.error('[CopCar3D] #map-world/#city-map not found');
         this._initPromise = null;
         return false;
       }
@@ -188,15 +191,16 @@ const CopCar3D = {
         this._prepareMarkerElement();
       }
 
-      const rect = this.container.getBoundingClientRect();
-      if (!rect.width || !rect.height) {
-        console.warn('[CopCar3D] #city-map has zero size - waiting for layout...');
+      const w = this.container.offsetWidth;
+      const h = this.container.offsetHeight;
+      if (!w || !h) {
+        console.warn('[CopCar3D] Map container has zero size - waiting for layout...');
         this._waitForDimensions();
         this._initPromise = null;
         return false;
       }
 
-      await this._initScene(rect.width, rect.height);
+      await this._initScene(w, h);
       this._initPromise = null;
       return true;
     })();
@@ -238,8 +242,9 @@ const CopCar3D = {
     if (!this._pendingInitObserver && typeof ResizeObserver !== 'undefined') {
       this._pendingInitObserver = new ResizeObserver(() => {
         if (!this.container) return;
-        const rect = this.container.getBoundingClientRect();
-        if (rect.width > 0 && rect.height > 0) {
+        const w = this.container.offsetWidth;
+        const h = this.container.offsetHeight;
+        if (w > 0 && h > 0) {
           try { this._pendingInitObserver.disconnect(); } catch (e) {}
           this._pendingInitObserver = null;
           this.init();
@@ -257,9 +262,10 @@ const CopCar3D = {
         frames++;
 
         if (!this.container || !this.container.isConnected) return;
-        const rect = this.container.getBoundingClientRect();
+        const w = this.container.offsetWidth;
+        const h = this.container.offsetHeight;
 
-        if (rect.width > 0 && rect.height > 0) {
+        if (w > 0 && h > 0) {
           cancelAnimationFrame(this._pendingInitRAF);
           this._pendingInitRAF = null;
           this.init();
@@ -286,11 +292,13 @@ const CopCar3D = {
 
     this.scene = new THREE.Scene();
 
-    const aspect = width / height;
-    const camCfg = this.config.camera;
-    this.camera = new THREE.PerspectiveCamera(camCfg.fov, aspect, camCfg.near, camCfg.far);
-    this.camera.position.set(camCfg.position.x, camCfg.position.y, camCfg.position.z);
-    this.camera.lookAt(camCfg.lookAt.x, camCfg.lookAt.y, camCfg.lookAt.z);
+    // Use an orthographic camera in "percent space" (0..100) so the 3D car aligns
+    // with the 2D map markers that use percent coordinates.
+    // Because the canvas is attached to #map-world, it inherits pan/zoom transforms.
+    // That means zooming the map won't distort or spin the 3D car logic.
+    this.camera = new THREE.OrthographicCamera(0, 100, 100, 0, 0.1, 500);
+    this.camera.position.set(50, 120, 50);
+    this.camera.lookAt(50, 0, 50);
 
     this.renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, premultipliedAlpha: false });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.config.maxPixelRatio));
@@ -610,16 +618,32 @@ const CopCar3D = {
     // Keep marker in marker-mode even if other systems touch it
     this._prepareMarkerElement();
 
-    const screenPt = this._getCopScreenPoint();
-    if (!screenPt) {
-      this._updateSmoke(dt, 0);
-      return;
+    // Prefer authoritative CopCarSystem percent-coordinates.
+    // This makes the 3D car movement independent from DOM transforms and prevents zoom-induced spin.
+    let targetWorld = null;
+    let hasCopSystemPos = false;
+
+    if (typeof CopCarSystem !== 'undefined' && CopCarSystem && CopCarSystem.position) {
+      const px = Number(CopCarSystem.position.x);
+      const py = Number(CopCarSystem.position.y);
+      if (isFinite(px) && isFinite(py)) {
+        targetWorld = new THREE.Vector3(px, 0, py); // x=percentX, z=percentY
+        hasCopSystemPos = true;
+      }
     }
 
-    const targetWorld = this._screenToGroundWorld(screenPt);
+    // Fallback: derive from the DOM marker center if CopCarSystem isn't available.
     if (!targetWorld) {
-      this._updateSmoke(dt, 0);
-      return;
+      const screenPt = this._getCopScreenPoint();
+      if (!screenPt) {
+        this._updateSmoke(dt, 0);
+        return;
+      }
+      targetWorld = this._screenToGroundWorld(screenPt);
+      if (!targetWorld) {
+        this._updateSmoke(dt, 0);
+        return;
+      }
     }
 
     this._hasValidPose = true;
@@ -655,11 +679,17 @@ const CopCar3D = {
       this.model.position.z - prevPos.z
     );
 
-    // Desired yaw from movement vector (world space), with stop-stability.
+    // Desired yaw:
+    // - Prefer CopCarSystem.heading (stable across zoom/pan and matches the road-following system).
+    // - Fallback to derived movement vector.
     let desiredYaw = null;
     const mv = Math.abs(moveVec.x) + Math.abs(moveVec.z);
 
-    if (mv > 0.0002) {
+    if (hasCopSystemPos && typeof CopCarSystem.heading === 'number' && isFinite(CopCarSystem.heading)) {
+      // CopCarSystem.heading is defined as atan2(dx, dy) where dy is "down" on the map.
+      // Our camera looks down and we use x=right, z=down, so the heading maps directly to yaw.
+      desiredYaw = CopCarSystem.heading + this.config.modelYawOffset;
+    } else if (mv > 0.0002) {
       desiredYaw = Math.atan2(moveVec.x, moveVec.z) + this.config.modelYawOffset;
     } else {
       // If stopped, keep current yaw. (prevents jitter at intersections)
@@ -855,8 +885,10 @@ const CopCar3D = {
 
     this._resizeObserver = new ResizeObserver(() => {
       if (!this.container) return;
-      const rect = this.container.getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0) this._handleResize(rect.width, rect.height);
+      // Use offset* so zoom transforms don't trick us into resizing the drawing buffer.
+      const w = this.container.offsetWidth;
+      const h = this.container.offsetHeight;
+      if (w > 0 && h > 0) this._handleResize(w, h);
     });
 
     try { this._resizeObserver.observe(this.container); } catch (e) {}
@@ -865,7 +897,8 @@ const CopCar3D = {
   _handleResize(width, height) {
     if (!this.camera || !this.renderer) return;
 
-    this.camera.aspect = width / height;
+    // Orthographic camera bounds stay in percent-space (0..100). We only need to
+    // resize the renderer; projection matrix stays stable.
     this.camera.updateProjectionMatrix();
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.config.maxPixelRatio));
     this.renderer.setSize(width, height, false);
