@@ -26160,7 +26160,13 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       console.log('[DEBUG] Initializing cop car patrol system...');
       // Initialize cop car patrol on map
       CopCarSystem.init();
-      
+
+      // Initialize 3D cop car overlay (if available)
+      if (typeof CopCar3D !== 'undefined') {
+        console.log('[DEBUG] Initializing 3D cop car overlay...');
+        CopCar3D.init();
+      }
+
       console.log('[DEBUG] Skipping roads and buildings (using static map)...');
       // DISABLED: Roads and buildings generation not needed for static 2D map
       // initRoadsAndBuildings();
