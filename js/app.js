@@ -18266,6 +18266,18 @@ function ensureLandmarkProperties() {
           console.log('[TabSystem] Switching away from turf tab - disposing weather overlay');
           WeatherOverlay.dispose();
         }
+
+        // Dispose 3D cop car overlay if switching away from turf tab
+        if (GameState.ui.activeTab === 'turf' && tabId !== 'turf') {
+          try {
+            if (typeof CopCar3D !== 'undefined' && CopCar3D && typeof CopCar3D.dispose === 'function') {
+              console.log('[TabSystem] Switching away from turf tab - disposing CopCar3D');
+              CopCar3D.dispose();
+            }
+          } catch (e) {
+            console.warn('[TabSystem] CopCar3D dispose error:', e);
+          }
+        }
         
         // Update UI state
         GameState.ui.activeTab = tabId;
@@ -18326,6 +18338,18 @@ function ensureLandmarkProperties() {
               } else {
                 console.log('[TabSystem] WeatherOverlay already initialized - forcing render');
                 WeatherOverlay.render();
+              }
+
+
+
+              // Ensure 3D cop car overlay initializes after #city-map is visible
+              try {
+                if (typeof CopCar3D !== 'undefined' && CopCar3D && typeof CopCar3D.init === 'function') {
+                  console.log('[TabSystem] Ensuring CopCar3D overlay...');
+                  CopCar3D.init();
+                }
+              } catch (e) {
+                console.warn('[TabSystem] CopCar3D init error:', e);
               }
 
               // Render the tab content
@@ -26255,12 +26279,6 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       console.log('[DEBUG] Initializing cop car patrol system...');
       // Initialize cop car patrol on map
       CopCarSystem.init();
-
-      // Initialize 3D cop car overlay (if available)
-      if (typeof CopCar3D !== 'undefined') {
-        console.log('[DEBUG] Initializing 3D cop car overlay...');
-        CopCar3D.init();
-      }
 
       console.log('[DEBUG] Skipping roads and buildings (using static map)...');
       // DISABLED: Roads and buildings generation not needed for static 2D map
