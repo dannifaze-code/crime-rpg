@@ -14035,8 +14035,18 @@ function ensureLandmarkProperties() {
         console.log('🚔 Realistic Cop Car Patrol System initialized');
         console.log(`📍 Patrol route: ${this.patrolWaypoints.length} waypoints`);
         console.log(`⏱️ Speed: ${this.movementSpeed}ms per segment`);
+
+        // Start at the first waypoint position (not at 15,15)
+        this.position = { ...this.patrolWaypoints[0] };
+        this.currentWaypointIndex = 0;
+        this.currentPath = null;
+        this.currentPathIndex = 0;
+        this.currentSegmentT = 0;
+        this.speed = 0;
+        this.pauseUntil = 0;
+
         this.startPatrol();
-        
+
         // Update lights based on heat every second
         setInterval(() => {
           this.updateLights();
@@ -14111,35 +14121,10 @@ function ensureLandmarkProperties() {
         // Heading in map space (x to the right, y down)
         this.heading = Math.atan2(segDx, segDy);
 
-        // Determine if we should stop at the next node (intersection / sharp turn / waypoint)
-        const isEndOfPath = (this.currentPathIndex + 1) >= (this.currentPath.length - 1);
-        const nextNode = b;
-
-        let shouldStopNext = false;
-        if (isEndOfPath) {
-          shouldStopNext = true;
-        } else {
-          const c = this.currentPath[this.currentPathIndex + 2];
-          const ndx = c.x - b.x;
-          const ndy = c.y - b.y;
-          const nLen = Math.max(0.0001, Math.hypot(ndx, ndy));
-
-          const ux = segDx / segLen, uy = segDy / segLen;
-          const vx = ndx / nLen, vy = ndy / nLen;
-
-          const dot = Math.max(-1, Math.min(1, ux * vx + uy * vy));
-          const turnAngle = Math.acos(dot);
-          // Big turn => treat as intersection
-          if (turnAngle > (Math.PI / 4.2)) shouldStopNext = true; // ~43 degrees
-        }
-
-        const remaining = segLen * (1 - this.currentSegmentT);
-
-        // Smooth acceleration / braking toward a target speed
-        const stoppingDistance = (this.speed * this.speed) / (2 * this.decel + 1e-6);
-        const mustBrake = shouldStopNext && remaining <= (stoppingDistance + 0.03);
-
-        const targetSpeed = mustBrake ? 0 : this.cruiseSpeed;
+        // Simplified speed control: just accelerate to cruiseSpeed and maintain it.
+        // Only slow down when we actually reach a waypoint (handled in the segment completion logic).
+        // This prevents the car from getting stuck due to complex braking calculations on short paths.
+        const targetSpeed = this.cruiseSpeed;
         const rate = (targetSpeed > this.speed) ? this.accel : this.decel;
         const dv = rate * dt;
 
