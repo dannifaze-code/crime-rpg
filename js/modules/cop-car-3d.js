@@ -1,11 +1,19 @@
 /**
  * 3D Cop Car Module
- * Three.js-based 3D cop car overlay for the turf map
+ * Three.js-based 3D cop car overlay for the turf map.
+ *
+ * Goals:
+ * - Anchor the 3D canvas to #map-world (so it pans/zooms with the map).
+ * - Keep the cop car aligned to CopCarSystem.position (% coords) without "sliding".
+ * - Rotate the car along its movement direction.
+ * - Use proper lighting + sRGB output so the GLB is not black.
+ * - Optional shadow receiver plane (toggle via config).
  *
  * Dependencies (from global scope):
  * - THREE: Three.js library (loaded via CDN)
- * - GLTFLoader: Three.js GLTF loader
+ * - THREE.GLTFLoader: Three.js GLTF loader
  * - CopCarSystem: Existing cop car patrol logic
+ * - GameState: heat value for police light flashing
  */
 
 const CopCar3D = {
@@ -14,7 +22,7 @@ const CopCar3D = {
   camera: null,
   renderer: null,
   animationFrameId: null,
-  container: null,
+  container: null, // #map-world
   canvas: null,
   isInitialized: false,
 
@@ -23,14 +31,23 @@ const CopCar3D = {
   modelLoaded: false,
   modelPath: 'sprites/3d-models/cop-car.glb',
 
-  // Position tracking for rotation calculation
-  lastPosition: { x: 0, y: 0 },
-  currentRotation: 0,
-  targetRotation: 0,
+  // Motion smoothing
+  _lastWorldPos: null,
+  _currentYaw: 0,
+  _targetYaw: 0,
+
+  // Ray / plane for screen->world anchoring
+  _raycaster: null,
+  _groundPlane: null,
+  _tmpVec3: null,
+
+  // Ground shadow receiver
+  groundShadowMesh: null,
 
   // Lighting
   lights: {
     ambient: null,
+    hemi: null,
     directional: null,
     police: [] // Red/blue flashing lights
   },
@@ -39,120 +56,160 @@ const CopCar3D = {
   policeLightsActive: false,
   policeLightTime: 0,
 
+  // Config knobs (tweak if needed)
+  config: {
+    // Camera tuned to match your TurfMap.png "isometric-ish" look.
+    camera: {
+      fov: 45,
+      near: 0.1,
+      far: 2000,
+      position: { x: 0, y: 55, z: 35 },
+      lookAt: { x: 0, y: 0, z: 0 }
+    },
+
+    // Damping for position/yaw (higher = snappier)
+    positionDamping: 0.22,
+    yawDamping: 0.18,
+
+    // Model yaw offset (depends on how your GLB faces forward).
+    // If the car drives sideways/backwards, adjust by +/- Math.PI/2 or Math.PI.
+    modelYawOffset: 0,
+
+    // Shadows
+    shadowsEnabled: true,
+    shadowReceiverOpacity: 0.28
+  },
+
   /**
-   * Initialize 3D cop car overlay
+   * Initialize 3D cop car overlay.
    */
   async init() {
     console.log('[CopCar3D] Initializing 3D cop car overlay...');
 
-    // Check if Three.js is available
     if (typeof THREE === 'undefined') {
       console.error('[CopCar3D] THREE.js not loaded!');
       return false;
     }
 
-    // Get the turf map container
-    this.container = document.getElementById('city-map');
+    // Anchor to map-world so we inherit TurfTab pan/zoom transforms.
+    this.container = document.getElementById('map-world');
     if (!this.container) {
-      console.error('[CopCar3D] Container #city-map not found!');
+      console.error('[CopCar3D] Container #map-world not found!');
       return false;
     }
 
-    // Wait for valid dimensions
-    const rect = this.container.getBoundingClientRect();
-    if (rect.width === 0 || rect.height === 0) {
-      console.warn('[CopCar3D] Container has zero dimensions - waiting...');
+    const { width, height } = this._getContainerSize();
+    if (!width || !height) {
+      console.warn('[CopCar3D] #map-world has zero dimensions - waiting...');
       this._waitForDimensions();
       return false;
     }
 
-    await this._initScene(rect.width, rect.height);
+    await this._initScene(width, height);
     return true;
   },
 
+  _getContainerSize() {
+    const w = this.container?.offsetWidth || 0;
+    const h = this.container?.offsetHeight || 0;
+    return { width: w, height: h };
+  },
+
   /**
-   * Wait for container to have valid dimensions
+   * Wait for container to have valid dimensions.
    */
   _waitForDimensions() {
-    if (this._pendingInitObserver) return;
+    if (this._pendingInitObserver || !this.container) return;
 
     if (typeof ResizeObserver !== 'undefined') {
-      this._pendingInitObserver = new ResizeObserver((entries) => {
-        for (const entry of entries) {
-          const { width, height } = entry.contentRect;
-          if (width > 0 && height > 0) {
-            this._pendingInitObserver.disconnect();
-            this._pendingInitObserver = null;
-            this.init();
-          }
+      this._pendingInitObserver = new ResizeObserver(() => {
+        const { width, height } = this._getContainerSize();
+        if (width > 0 && height > 0) {
+          this._pendingInitObserver.disconnect();
+          this._pendingInitObserver = null;
+          this.init();
         }
       });
       this._pendingInitObserver.observe(this.container);
+    } else {
+      // Fallback: retry soon
+      setTimeout(() => this.init(), 250);
     }
   },
 
   /**
-   * Initialize Three.js scene
+   * Initialize Three.js scene.
    */
   async _initScene(width, height) {
     console.log('[CopCar3D] Setting up scene:', width, 'x', height);
 
-    // Create scene
     this.scene = new THREE.Scene();
 
-    // Create camera - isometric-style perspective to match the TurfMap
-    // Using perspective camera for better 3D look
+    // Camera (perspective with tilt to match the map look)
     const aspect = width / height;
-    this.camera = new THREE.PerspectiveCamera(45, aspect, 0.1, 1000);
+    const camCfg = this.config.camera;
+    this.camera = new THREE.PerspectiveCamera(camCfg.fov, aspect, camCfg.near, camCfg.far);
+    this.camera.position.set(camCfg.position.x, camCfg.position.y, camCfg.position.z);
+    this.camera.lookAt(camCfg.lookAt.x, camCfg.lookAt.y, camCfg.lookAt.z);
 
-    // Position camera for isometric-ish top-down view
-    // Adjust these values to match your TurfMap.png angle
-    this.camera.position.set(0, 50, 30);
-    this.camera.lookAt(0, 0, 0);
-
-    // Create WebGL renderer with transparency
+    // Renderer
     this.renderer = new THREE.WebGLRenderer({
       alpha: true,
       antialias: true,
       premultipliedAlpha: false
     });
-    this.renderer.setSize(width, height);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Limit for mobile performance
-    this.renderer.shadowMap.enabled = true;
+
+    // r128: use outputEncoding (not outputColorSpace)
+    this.renderer.outputEncoding = THREE.sRGBEncoding;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.15;
+
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    this.renderer.setSize(width, height, false);
+
+    // Shadows (optional)
+    this.renderer.shadowMap.enabled = !!this.config.shadowsEnabled;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-    // Style canvas
+    // Canvas styling (must be inside #map-world)
     this.canvas = this.renderer.domElement;
+    this.canvas.id = 'cop-car-3d-canvas';
     this.canvas.style.position = 'absolute';
     this.canvas.style.top = '0';
     this.canvas.style.left = '0';
     this.canvas.style.width = '100%';
     this.canvas.style.height = '100%';
     this.canvas.style.pointerEvents = 'none';
-    this.canvas.style.zIndex = '5'; // Above map background, below UI
-    this.canvas.id = 'cop-car-3d-canvas';
+    this.canvas.style.zIndex = '3'; // Above background/entities, below global UI
 
-    // Add canvas to container
-    const mapViewport = document.getElementById('map-viewport');
-    if (mapViewport) {
-      mapViewport.appendChild(this.canvas);
-    } else {
-      this.container.appendChild(this.canvas);
-    }
+    // Ensure parent is positioned for absolute child
+    try {
+      const pos = getComputedStyle(this.container).position;
+      if (!pos || pos === 'static') this.container.style.position = 'relative';
+    } catch (e) {}
 
-    // Setup lighting
+    // Attach to #map-world (critical fix: prevents "sliding" during pan/zoom)
+    this.container.appendChild(this.canvas);
+
+    // Helpers
+    this._raycaster = new THREE.Raycaster();
+    this._groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); // y = 0
+    this._tmpVec3 = new THREE.Vector3();
+
+    // Lighting + optional shadow plane
     this._setupLighting();
+    this._setupShadowReceiver();
 
-    // Load 3D model
+    // Load model
     await this._loadModel();
 
-    // Hide the emoji cop car
+    // Keep the emoji cop car in DOM for fallback, but make it invisible (do NOT display:none)
     this._hideEmojiCopCar();
 
-    // Start render loop
+    // Start loop
     this._startRenderLoop();
 
-    // Handle resize
+    // Resize: observe #map-world (not #city-map)
     this._setupResizeHandler();
 
     this.isInitialized = true;
@@ -160,41 +217,69 @@ const CopCar3D = {
   },
 
   /**
-   * Setup scene lighting
+   * Setup scene lighting (stronger + more natural so the GLB doesn't render black).
    */
   _setupLighting() {
-    // Ambient light for base visibility
-    this.lights.ambient = new THREE.AmbientLight(0xffffff, 0.6);
+    this.lights.ambient = new THREE.AmbientLight(0xffffff, 0.45);
     this.scene.add(this.lights.ambient);
 
-    // Directional light for shadows (sun-like)
-    this.lights.directional = new THREE.DirectionalLight(0xffffff, 0.8);
-    this.lights.directional.position.set(10, 20, 10);
-    this.lights.directional.castShadow = true;
-    this.lights.directional.shadow.mapSize.width = 512;
-    this.lights.directional.shadow.mapSize.height = 512;
-    this.lights.directional.shadow.camera.near = 0.5;
-    this.lights.directional.shadow.camera.far = 50;
+    this.lights.hemi = new THREE.HemisphereLight(0xffffff, 0x2a2a2a, 0.65);
+    this.lights.hemi.position.set(0, 100, 0);
+    this.scene.add(this.lights.hemi);
+
+    this.lights.directional = new THREE.DirectionalLight(0xffffff, 1.05);
+    this.lights.directional.position.set(18, 35, 14);
+
+    if (this.config.shadowsEnabled) {
+      this.lights.directional.castShadow = true;
+      this.lights.directional.shadow.mapSize.width = 1024;
+      this.lights.directional.shadow.mapSize.height = 1024;
+      this.lights.directional.shadow.camera.near = 0.5;
+      this.lights.directional.shadow.camera.far = 200;
+      this.lights.directional.shadow.camera.left = -80;
+      this.lights.directional.shadow.camera.right = 80;
+      this.lights.directional.shadow.camera.top = 80;
+      this.lights.directional.shadow.camera.bottom = -80;
+      this.lights.directional.shadow.bias = -0.00025;
+    }
+
     this.scene.add(this.lights.directional);
 
-    // Police lights (red and blue point lights)
-    const redLight = new THREE.PointLight(0xff0000, 0, 5);
-    redLight.position.set(-0.3, 1, 0);
+    // Police lights (red/blue)
+    const redLight = new THREE.PointLight(0xff0000, 0, 8);
+    redLight.position.set(-0.35, 1.1, 0.05);
     this.lights.police.push(redLight);
 
-    const blueLight = new THREE.PointLight(0x0000ff, 0, 5);
-    blueLight.position.set(0.3, 1, 0);
+    const blueLight = new THREE.PointLight(0x0000ff, 0, 8);
+    blueLight.position.set(0.35, 1.1, 0.05);
     this.lights.police.push(blueLight);
   },
 
   /**
-   * Load the GLB model
+   * Optional shadow receiver plane (transparent except for shadows).
+   */
+  _setupShadowReceiver() {
+    if (!this.config.shadowsEnabled) return;
+
+    // Large plane under the car; doesn't need to match the map bounds precisely.
+    const geom = new THREE.PlaneGeometry(500, 500);
+    const mat = new THREE.ShadowMaterial({ opacity: this.config.shadowReceiverOpacity });
+    const plane = new THREE.Mesh(geom, mat);
+    plane.rotation.x = -Math.PI / 2;
+    plane.position.y = 0;
+    plane.receiveShadow = true;
+    plane.renderOrder = 0;
+    this.groundShadowMesh = plane;
+    this.scene.add(plane);
+  },
+
+  /**
+   * Load the GLB model.
    */
   async _loadModel() {
     console.log('[CopCar3D] Loading model:', this.modelPath);
 
     return new Promise((resolve, reject) => {
-      // Check if GLTFLoader is available
       if (!THREE.GLTFLoader) {
         console.error('[CopCar3D] GLTFLoader not available!');
         reject(new Error('GLTFLoader not loaded'));
@@ -210,30 +295,52 @@ const CopCar3D = {
 
           this.model = gltf.scene;
 
-          // Scale model appropriately (adjust as needed)
+          // Scale model appropriately (size already looks good per your note).
           this.model.scale.set(0.5, 0.5, 0.5);
 
-          // Enable shadows on all meshes
+          // Ensure materials/textures display correctly (avoid "all black" look).
           this.model.traverse((child) => {
-            if (child.isMesh) {
-              child.castShadow = true;
-              child.receiveShadow = true;
-            }
+            if (!child.isMesh) return;
+
+            child.castShadow = !!this.config.shadowsEnabled;
+            child.receiveShadow = !!this.config.shadowsEnabled;
+
+            const mats = Array.isArray(child.material) ? child.material : [child.material];
+            mats.forEach((mat) => {
+              if (!mat) return;
+
+              // r128: enforce correct color space for albedo maps.
+              if (mat.map) {
+                mat.map.encoding = THREE.sRGBEncoding;
+                mat.map.needsUpdate = true;
+              }
+              if (mat.emissiveMap) {
+                mat.emissiveMap.encoding = THREE.sRGBEncoding;
+                mat.emissiveMap.needsUpdate = true;
+              }
+
+              // Mildly boost readability on mobile (without "cartoon" look).
+              if (typeof mat.roughness === 'number') mat.roughness = Math.min(1, Math.max(0.2, mat.roughness));
+              if (typeof mat.metalness === 'number') mat.metalness = Math.min(1, Math.max(0.0, mat.metalness));
+
+              mat.needsUpdate = true;
+            });
           });
 
-          // Add police lights to model
-          this.lights.police.forEach(light => {
-            this.model.add(light);
-          });
+          // Attach police lights to the model
+          this.lights.police.forEach((light) => this.model.add(light));
 
-          // Add model to scene
+          // Slightly lift above plane to avoid z-fighting with shadow receiver
+          this.model.position.y = 0.15;
+
           this.scene.add(this.model);
 
           this.modelLoaded = true;
           resolve();
         },
         (progress) => {
-          const percent = (progress.loaded / progress.total * 100).toFixed(1);
+          if (!progress.total) return;
+          const percent = ((progress.loaded / progress.total) * 100).toFixed(1);
           console.log(`[CopCar3D] Loading: ${percent}%`);
         },
         (error) => {
@@ -245,18 +352,20 @@ const CopCar3D = {
   },
 
   /**
-   * Hide the emoji cop car element
+   * Hide the emoji cop car element without removing it from layout.
    */
   _hideEmojiCopCar() {
     const emojiCopCar = document.getElementById('cop-car');
-    if (emojiCopCar) {
-      emojiCopCar.style.display = 'none';
-      console.log('[CopCar3D] Emoji cop car hidden');
-    }
+    if (!emojiCopCar) return;
+
+    emojiCopCar.style.opacity = '0';
+    emojiCopCar.style.pointerEvents = 'none';
+    emojiCopCar.style.filter = 'none';
+    console.log('[CopCar3D] Emoji cop car hidden (opacity=0)');
   },
 
   /**
-   * Start the render loop
+   * Start the render loop.
    */
   _startRenderLoop() {
     const animate = () => {
@@ -268,63 +377,84 @@ const CopCar3D = {
   },
 
   /**
-   * Update 3D cop car position and rotation
+   * Convert a map % position into an NDC ray intersection on the ground plane.
+   * This guarantees the 3D car is anchored to the same screen-space position
+   * as the 2D map coordinates, even with a tilted camera.
+   */
+  _screenPointToGroundWorld(posPercent) {
+    const w = this.canvas?.width || 0;
+    const h = this.canvas?.height || 0;
+    if (!w || !h) return null;
+
+    const px = (posPercent.x / 100) * w;
+    const py = (posPercent.y / 100) * h;
+
+    const ndcX = (px / w) * 2 - 1;
+    const ndcY = -((py / h) * 2 - 1);
+
+    this._raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), this.camera);
+
+    const hit = new THREE.Vector3();
+    const ok = this._raycaster.ray.intersectPlane(this._groundPlane, hit);
+    return ok ? hit : null;
+  },
+
+  /**
+   * Update 3D cop car position and rotation.
    */
   _update() {
-    if (!this.model || !this.modelLoaded) return;
+    if (!this.model || !this.modelLoaded || !this.camera || !this.renderer) return;
 
-    // Get position from CopCarSystem
-    if (typeof CopCarSystem !== 'undefined' && CopCarSystem.position) {
-      const pos = CopCarSystem.position;
-
-      // Convert percentage (0-100) to 3D world coordinates
-      // Map dimensions in 3D space
-      const mapWidth = 40;  // 3D units
-      const mapHeight = 60; // 3D units (taller aspect ratio)
-
-      // Center the coordinate system
-      const x = (pos.x / 100) * mapWidth - (mapWidth / 2);
-      const z = (pos.y / 100) * mapHeight - (mapHeight / 2);
-
-      // Update model position
-      this.model.position.x = x;
-      this.model.position.z = z;
-      this.model.position.y = 0; // Ground level
-
-      // Calculate rotation based on movement direction
-      if (this.lastPosition.x !== pos.x || this.lastPosition.y !== pos.y) {
-        const dx = pos.x - this.lastPosition.x;
-        const dy = pos.y - this.lastPosition.y;
-
-        if (Math.abs(dx) > 0.001 || Math.abs(dy) > 0.001) {
-          // Calculate target angle (atan2 gives angle in radians)
-          this.targetRotation = Math.atan2(dx, dy);
-        }
-
-        this.lastPosition = { x: pos.x, y: pos.y };
-      }
-
-      // Smoothly interpolate rotation
-      const rotationSpeed = 0.1;
-      let angleDiff = this.targetRotation - this.currentRotation;
-
-      // Handle wrap-around for smooth rotation
-      while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-      while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-
-      this.currentRotation += angleDiff * rotationSpeed;
-      this.model.rotation.y = this.currentRotation;
+    // Get latest position from CopCarSystem
+    const sys = (typeof CopCarSystem !== 'undefined') ? CopCarSystem : null;
+    if (!sys || !sys.position) {
+      this._updatePoliceLights();
+      return;
     }
 
-    // Update police lights based on heat
+    const targetWorld = this._screenPointToGroundWorld(sys.position);
+    if (targetWorld) {
+      // Smooth position
+      const damping = this.config.positionDamping;
+      this._tmpVec3.copy(targetWorld);
+      this._tmpVec3.y = this.model.position.y; // keep model lifted
+
+      // Initialize at first valid position to avoid a startup "teleport"
+      if (!this._lastWorldPos) {
+        this.model.position.copy(this._tmpVec3);
+        this._lastWorldPos = this.model.position.clone();
+      } else {
+        this.model.position.lerp(this._tmpVec3, damping);
+      }
+
+      // Rotation: follow movement direction in ground plane
+      const dx = this.model.position.x - this._lastWorldPos.x;
+      const dz = this.model.position.z - this._lastWorldPos.z;
+
+      if (Math.abs(dx) + Math.abs(dz) > 0.0005) {
+        this._targetYaw = Math.atan2(dx, dz) + this.config.modelYawOffset;
+      }
+
+      // Smooth yaw (shortest-arc)
+      let diff = this._targetYaw - this._currentYaw;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      this._currentYaw += diff * this.config.yawDamping;
+
+      this.model.rotation.y = this._currentYaw;
+
+      // Update last for next tick
+      this._lastWorldPos.copy(this.model.position);
+    }
+
     this._updatePoliceLights();
   },
 
   /**
-   * Update police light flashing based on heat level
+   * Update police light flashing based on heat level.
    */
   _updatePoliceLights() {
-    if (!GameState || typeof GameState.player === 'undefined') return;
+    if (!window.GameState || typeof GameState.player === 'undefined') return;
 
     const heat = GameState.player.heat || 0;
 
@@ -333,75 +463,71 @@ const CopCar3D = {
       this.policeLightsActive = true;
       this.policeLightTime += 0.1;
 
-      // Alternating flash pattern
       const flashPhase = Math.sin(this.policeLightTime * 10);
 
-      // Red light
-      this.lights.police[0].intensity = flashPhase > 0 ? 2 : 0;
+      this.lights.police[0].intensity = flashPhase > 0 ? 2.2 : 0;
+      this.lights.police[1].intensity = flashPhase > 0 ? 0 : 2.2;
 
-      // Blue light (opposite phase)
-      this.lights.police[1].intensity = flashPhase > 0 ? 0 : 2;
-
-      // Increase intensity with heat
-      const intensityMultiplier = heat > 80 ? 1.5 : 1;
+      const intensityMultiplier = heat > 80 ? 1.45 : 1;
       this.lights.police[0].intensity *= intensityMultiplier;
       this.lights.police[1].intensity *= intensityMultiplier;
     } else {
       this.policeLightsActive = false;
-      this.lights.police[0].intensity = 0;
-      this.lights.police[1].intensity = 0;
+      if (this.lights.police[0]) this.lights.police[0].intensity = 0;
+      if (this.lights.police[1]) this.lights.police[1].intensity = 0;
     }
   },
 
   /**
-   * Setup resize handler
+   * Observe #map-world for size changes (map load, orientation change, etc.).
    */
   _setupResizeHandler() {
-    const resizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const { width, height } = entry.contentRect;
-        if (width > 0 && height > 0) {
-          this._handleResize(width, height);
-        }
-      }
+    if (!this.container || typeof ResizeObserver === 'undefined') return;
+
+    const ro = new ResizeObserver(() => {
+      const { width, height } = this._getContainerSize();
+      if (width > 0 && height > 0) this._handleResize(width, height);
     });
-    resizeObserver.observe(this.container);
+    ro.observe(this.container);
+    this._resizeObserver = ro;
   },
 
-  /**
-   * Handle container resize
-   */
   _handleResize(width, height) {
     if (!this.camera || !this.renderer) return;
 
-    // Update camera
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
-
-    // Update renderer
-    this.renderer.setSize(width, height);
+    this.renderer.setSize(width, height, false);
   },
 
   /**
-   * Cleanup resources
+   * Cleanup resources.
    */
   dispose() {
     if (this.animationFrameId) {
       cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
+    }
+
+    if (this._resizeObserver) {
+      try { this._resizeObserver.disconnect(); } catch (e) {}
+      this._resizeObserver = null;
     }
 
     if (this.renderer) {
       this.renderer.dispose();
+      this.renderer = null;
     }
 
     if (this.canvas && this.canvas.parentNode) {
       this.canvas.parentNode.removeChild(this.canvas);
     }
 
-    // Show emoji cop car again
+    // Restore emoji cop car
     const emojiCopCar = document.getElementById('cop-car');
     if (emojiCopCar) {
-      emojiCopCar.style.display = '';
+      emojiCopCar.style.opacity = '';
+      emojiCopCar.style.pointerEvents = '';
     }
 
     this.isInitialized = false;
