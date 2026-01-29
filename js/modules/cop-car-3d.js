@@ -338,7 +338,6 @@ const CopCar3D = {
     this._groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
     this._setupLighting();
-    this._addDebugHelpers(); // Add visible markers to verify rendering
     this._ensureSmokeSystem();
     await this._loadModel();
 
@@ -347,39 +346,6 @@ const CopCar3D = {
 
     this.isInitialized = true;
     console.log('[CopCar3D] Ready');
-  },
-
-  _addDebugHelpers() {
-    // Add a semi-transparent ground plane to verify 3D rendering is working
-    // This helps visualize the coordinate space and can be removed in production.
-    try {
-      // Small corner markers at (0,0), (100,0), (0,100), (100,100) to verify coordinate space
-      const markerGeo = new THREE.SphereGeometry(2, 8, 8);
-      const markerMat = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.6 });
-
-      const corners = [
-        { x: 0, z: 0 },    // Top-left
-        { x: 100, z: 0 },  // Top-right
-        { x: 0, z: 100 },  // Bottom-left
-        { x: 100, z: 100 } // Bottom-right
-      ];
-
-      corners.forEach(c => {
-        const marker = new THREE.Mesh(markerGeo, markerMat);
-        marker.position.set(c.x, 1, c.z);
-        this.scene.add(marker);
-      });
-
-      // Add a center marker (green) at (50, 50)
-      const centerMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.6 });
-      const centerMarker = new THREE.Mesh(markerGeo, centerMat);
-      centerMarker.position.set(50, 1, 50);
-      this.scene.add(centerMarker);
-
-      console.log('[CopCar3D] Debug helpers added: corner markers (red), center marker (green)');
-    } catch (e) {
-      console.warn('[CopCar3D] Failed to add debug helpers:', e);
-    }
   },
 
   _setupLighting() {
@@ -779,11 +745,12 @@ const CopCar3D = {
     const mv = Math.abs(moveVec.x) + Math.abs(moveVec.z);
 
     if (hasCopSystemPos && typeof CopCarSystem.heading === 'number' && isFinite(CopCarSystem.heading)) {
-      // CopCarSystem.heading is defined as atan2(dx, dy) where dy is "down" on the map.
-      // Our camera looks down and we use x=right, z=down, so the heading maps directly to yaw.
-      desiredYaw = CopCarSystem.heading + this.config.modelYawOffset;
+      // CopCarSystem.heading is atan2(dx, dy) measured counter-clockwise from +Y (down on map).
+      // Three.js rotation.y rotates counter-clockwise when viewed from above.
+      // We negate the heading to convert to clockwise rotation for proper road alignment.
+      desiredYaw = -CopCarSystem.heading + this.config.modelYawOffset;
     } else if (mv > 0.0002) {
-      desiredYaw = Math.atan2(moveVec.x, moveVec.z) + this.config.modelYawOffset;
+      desiredYaw = -Math.atan2(moveVec.x, moveVec.z) + this.config.modelYawOffset;
     } else {
       // If stopped, keep current yaw. (prevents jitter at intersections)
       desiredYaw = this._currentYaw;
