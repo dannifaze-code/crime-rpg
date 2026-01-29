@@ -1568,18 +1568,44 @@
       50% { opacity: 0.5; }
     }
 
-    /* Cop Car on Map */
+    /* Cop Car on Map (2D marker only — 3D overlay renders the vehicle) */
     .cop-car {
       position: absolute;
-      font-size: 32px;
+      width: 32px;
+      height: 32px;
       transform: translate(-50%, -50%);
-      transition: all 2s linear;
       pointer-events: none;
-      z-index: 100;
-      filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.6));
+      z-index: 3;
+
+      /* Hide the legacy emoji; keep a stable box for getBoundingClientRect() */
+      font-size: 0px;
+      line-height: 0px;
+      color: transparent;
+      text-shadow: none;
+
+      /* Disable marker smoothing; 3D module handles realistic motion */
+      transition: none !important;
+      filter: none !important;
+      opacity: 0; /* invisible position marker */
     }
 
-    /* Police lights animations */
+    /* Disable legacy heat-based pulsing on the hidden marker */
+    .cop-car.medium-heat,
+    .cop-car.high-heat {
+      animation: none !important;
+    }
+
+    /* 3D overlay canvas (added by CopCar3D) */
+    #cop-car-3d-canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 6;
+    }
+
+/* Police lights animations */
     .cop-car.no-heat {
       /* No lights */
     }
