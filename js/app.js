@@ -11274,7 +11274,7 @@ function updateTurfDefense(dt) {
       }
       
       // Base64 encoded map image (WEBP format)
-      const mapImageData = 'https://raw.githubusercontent.com/dannifaze-code/crime-rpg/main/sprites/turf-map/TurfMap.png';
+      const mapImageData = './sprites/turf-map/TurfMap.png';
       
       mapBackground.src = mapImageData;
       mapBackground.onload = () => {
