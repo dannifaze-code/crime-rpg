@@ -13926,6 +13926,18 @@ function ensureLandmarkProperties() {
       isPatrolling: false,
       movementSpeed: 8000, // 8 seconds per segment (slower, realistic traffic)
       updateInterval: 50, // Update position every 50ms for smooth animation
+      // Motion realism (percent-units per second; tuned for TurfMap.png scale)
+      heading: 0,            // radians in map-space (used by 3D cop car)
+      speed: 0,              // current speed (percent units/sec)
+      cruiseSpeed: 6.2,      // typical driving speed
+      accel: 10.0,           // speed up rate
+      decel: 14.0,           // braking rate
+      pauseUntil: 0,         // ms timestamp while stopped
+      stopMinMs: 350,        // stop time at intersections
+      stopMaxMs: 900,
+      lastUpdateTs: 0,       // performance.now() timestamp for dt
+      currentSegmentT: 0,    // 0..1 within current segment
+      
       
       // REALISTIC ROAD-FOLLOWING WAYPOINTS
       // These follow the actual roads on your turf map image
@@ -14063,64 +14075,147 @@ function ensureLandmarkProperties() {
           return;
         }
 
+        const now = performance.now();
+        if (!this.lastUpdateTs) this.lastUpdateTs = now;
+        const dt = Math.min(0.05, Math.max(0.001, (now - this.lastUpdateTs) / 1000)); // clamp 1ms..50ms
+        this.lastUpdateTs = now;
+
+        // Stop at intersections / sharp turns
+        if (this.pauseUntil && now < this.pauseUntil) {
+          this.speed = 0;
+          this.renderCopCar();
+          this.animationFrameId = requestAnimationFrame(() => this.animateMovement());
+          return;
+        }
+
         // Ensure we have a path (road-following if possible)
         const currentWaypoint = this.patrolWaypoints[this.currentWaypointIndex];
         const nextIndex = (this.currentWaypointIndex + 1) % this.patrolWaypoints.length;
         const nextWaypoint = this.patrolWaypoints[nextIndex];
 
         if (!this.currentPath || this.currentPath.length < 2) {
-          // Try A* road path; fallback to straight segment
           const rp = window.RoadPathfinder;
           const path = (rp && typeof rp.getPathPercent === "function") ? rp.getPathPercent(currentWaypoint, nextWaypoint) : null;
           this.currentPath = (path && path.length >= 2) ? path : [currentWaypoint, nextWaypoint];
           this.currentPathIndex = 0;
-          this.currentSegmentProgress = 0;
-
-          // Precompute total path length (in percent units) for time distribution
-          this._pathTotalLen = 0;
-          for (let i = 0; i < this.currentPath.length - 1; i++) {
-            const a = this.currentPath[i], b = this.currentPath[i+1];
-            const dx = b.x - a.x, dy = b.y - a.y;
-            this._pathTotalLen += Math.hypot(dx, dy);
-          }
-          if (!this._pathTotalLen || !isFinite(this._pathTotalLen)) this._pathTotalLen = 1;
+          this.currentSegmentT = 0;
         }
 
-        // Step along the path
         const a = this.currentPath[this.currentPathIndex];
         const b = this.currentPath[this.currentPathIndex + 1];
 
-        // Segment length and how much of the total time it should consume
-        const segLen = Math.max(0.0001, Math.hypot(b.x - a.x, b.y - a.y));
-        const segDuration = this.movementSpeed * (segLen / this._pathTotalLen); // ms for this segment
-        const progressIncrement = this.updateInterval / Math.max(16, segDuration);
+        const segDx = b.x - a.x;
+        const segDy = b.y - a.y;
+        const segLen = Math.max(0.0001, Math.hypot(segDx, segDy));
 
-        // Interpolate within this segment
-        const p = this.currentSegmentProgress;
-        this.position = {
-          x: a.x + (b.x - a.x) * p,
-          y: a.y + (b.y - a.y) * p
-        };
+        // Heading in map space (x to the right, y down)
+        this.heading = Math.atan2(segDx, segDy);
 
-        this.renderCopCar();
+        // Determine if we should stop at the next node (intersection / sharp turn / waypoint)
+        const isEndOfPath = (this.currentPathIndex + 1) >= (this.currentPath.length - 1);
+        const nextNode = b;
 
-        // Advance progress
-        this.currentSegmentProgress += progressIncrement;
+        let shouldStopNext = false;
+        if (isEndOfPath) {
+          shouldStopNext = true;
+        } else {
+          const c = this.currentPath[this.currentPathIndex + 2];
+          const ndx = c.x - b.x;
+          const ndy = c.y - b.y;
+          const nLen = Math.max(0.0001, Math.hypot(ndx, ndy));
 
-        // Advance to next segment when complete
-        if (this.currentSegmentProgress >= 1) {
-          this.currentSegmentProgress = 0;
-          this.currentPathIndex++;
+          const ux = segDx / segLen, uy = segDy / segLen;
+          const vx = ndx / nLen, vy = ndy / nLen;
 
-          // If we finished the path, advance waypoint index
-          if (this.currentPathIndex >= this.currentPath.length - 1) {
-            this.currentWaypointIndex = nextIndex;
-            this.currentPath = null;
-            this.currentPathIndex = 0;
+          const dot = Math.max(-1, Math.min(1, ux * vx + uy * vy));
+          const turnAngle = Math.acos(dot);
+          // Big turn => treat as intersection
+          if (turnAngle > (Math.PI / 4.2)) shouldStopNext = true; // ~43 degrees
+        }
+
+        const remaining = segLen * (1 - this.currentSegmentT);
+
+        // Smooth acceleration / braking toward a target speed
+        const stoppingDistance = (this.speed * this.speed) / (2 * this.decel + 1e-6);
+        const mustBrake = shouldStopNext && remaining <= (stoppingDistance + 0.03);
+
+        const targetSpeed = mustBrake ? 0 : this.cruiseSpeed;
+        const rate = (targetSpeed > this.speed) ? this.accel : this.decel;
+        const dv = rate * dt;
+
+        if (Math.abs(targetSpeed - this.speed) <= dv) {
+          this.speed = targetSpeed;
+        } else {
+          this.speed += Math.sign(targetSpeed - this.speed) * dv;
+        }
+
+        let travel = this.speed * dt;
+
+        // March along segments, possibly crossing multiple in one frame
+        while (travel > 0 && this.currentPath && this.currentPathIndex < this.currentPath.length - 1) {
+          const a2 = this.currentPath[this.currentPathIndex];
+          const b2 = this.currentPath[this.currentPathIndex + 1];
+
+          const dx2 = b2.x - a2.x;
+          const dy2 = b2.y - a2.y;
+          const len2 = Math.max(0.0001, Math.hypot(dx2, dy2));
+
+          const remaining2 = len2 * (1 - this.currentSegmentT);
+          const step = Math.min(travel, remaining2);
+
+          this.currentSegmentT += step / len2;
+          travel -= step;
+
+          this.position = {
+            x: a2.x + dx2 * this.currentSegmentT,
+            y: a2.y + dy2 * this.currentSegmentT
+          };
+
+          // Recompute heading for this segment
+          this.heading = Math.atan2(dx2, dy2);
+
+          // End segment
+          if (this.currentSegmentT >= 0.999999) {
+            this.currentSegmentT = 0;
+            this.currentPathIndex++;
+
+            const reachedEnd = this.currentPathIndex >= this.currentPath.length - 1;
+
+            // Stop when reaching end-of-path (waypoint), or a sharp turn node
+            if (reachedEnd) {
+              this.currentWaypointIndex = nextIndex;
+              this.currentPath = null;
+              this.currentPathIndex = 0;
+
+              this.pauseUntil = now + (this.stopMinMs + Math.random() * (this.stopMaxMs - this.stopMinMs));
+              this.speed = 0;
+              break;
+            } else {
+              // Stop at sharp turns (intersection feel)
+              const cur = this.currentPath[this.currentPathIndex - 1];
+              const mid = this.currentPath[this.currentPathIndex];
+              const nxt = this.currentPath[this.currentPathIndex + 1];
+
+              const v1x = mid.x - cur.x;
+              const v1y = mid.y - cur.y;
+              const v2x = nxt.x - mid.x;
+              const v2y = nxt.y - mid.y;
+
+              const l1 = Math.max(0.0001, Math.hypot(v1x, v1y));
+              const l2 = Math.max(0.0001, Math.hypot(v2x, v2y));
+              const d = Math.max(-1, Math.min(1, (v1x / l1) * (v2x / l2) + (v1y / l1) * (v2y / l2)));
+              const ang = Math.acos(d);
+
+              if (ang > (Math.PI / 4.2)) {
+                this.pauseUntil = now + (this.stopMinMs + Math.random() * (this.stopMaxMs - this.stopMinMs));
+                this.speed = 0;
+                break;
+              }
+            }
           }
         }
 
-        // Continue animation
+        this.renderCopCar();
         this.animationFrameId = requestAnimationFrame(() => this.animateMovement());
       },
 
