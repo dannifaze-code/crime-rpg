@@ -11266,30 +11266,42 @@ function updateTurfDefense(dt) {
     // Initialize static 2D map
     function initStaticMap() {
       console.log('=== Initializing Static 2D Map ===');
-      
+
       const mapBackground = document.getElementById('map-background');
       if (!mapBackground) {
         console.error('Map background element not found');
         return;
       }
-      
-      // Base64 encoded map image (WEBP format)
-      const mapImageData = 'sprites/turf-map/TurfMap.png';
-      
-      mapBackground.src = mapImageData;
-      mapBackground.onload = () => {
+
+      // Path to the turf map image
+      const mapImagePath = 'sprites/turf-map/TurfMap.png';
+
+      // Create an Image object to load the PNG (needed for RoadPathfinder)
+      const mapImage = new Image();
+      mapImage.crossOrigin = 'anonymous';
+
+      mapImage.onload = () => {
         console.log('✅ Static map loaded successfully');
+        // Set the background image on the div
+        mapBackground.style.backgroundImage = `url('${mapImagePath}')`;
+        mapBackground.style.backgroundSize = 'cover';
+        mapBackground.style.backgroundPosition = 'center';
+        mapBackground.style.backgroundRepeat = 'no-repeat';
+
         // Build road mask grid for cop A* pathfinding
         if (window.RoadPathfinder && typeof window.RoadPathfinder.buildFromImage === "function") {
-          window.RoadPathfinder.buildFromImage(mapBackground);
+          window.RoadPathfinder.buildFromImage(mapImage);
         } else {
-          window.__pendingRoadMaskImage = mapBackground;
+          window.__pendingRoadMaskImage = mapImage;
         }
       };
-      mapBackground.onerror = () => {
+      mapImage.onerror = () => {
         console.error('❌ Failed to load static map');
       };
-      
+
+      // Start loading the image
+      mapImage.src = mapImagePath;
+
       console.log('==================================');
     }
     // ========================================
