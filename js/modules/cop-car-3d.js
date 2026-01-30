@@ -26,9 +26,17 @@ const CopCar3D = {
   canvas: null,
 
   // DOM
-  // We attach to #map-world so the 3D overlay inherits the same pan/zoom transform as the map.
-  // Fallback to #city-map if needed.
-  container: null,      // #map-world (preferred) or #city-map (fallback)
+  // IMPORTANT: we do NOT mount the canvas inside #map-world.
+  // #map-world is transform-scaled for pan/zoom; if we nest the WebGL canvas inside it,
+  // the renderer can end up being double-affected by CSS transforms (size drift, 360 spins
+  // during zoom gestures on some mobile browsers).
+  //
+  // Instead, we mount a dedicated overlay layer inside #map-viewport and *mirror* the
+  // current #map-world transform onto that layer. This keeps the 3D overlay visually
+  // locked to the map while remaining isolated from layout/measurement weirdness.
+  container: null,      // #map-viewport (preferred) or #city-map (fallback)
+  layer: null,          // #cop-car-3d-layer (inside container)
+  mapWorldEl: null,     // #map-world (transform source)
   copCarElement: null,  // #cop-car (2D marker)
 
   // Model
@@ -136,18 +144,20 @@ const CopCar3D = {
     // Fast path: already initialized
     if (this.isInitialized && this.renderer && this.container) {
       try {
-        const c = document.getElementById('map-world') || document.getElementById('city-map');
-        if (c) this.container = c;
+        this.container = document.getElementById('map-viewport') || document.getElementById('city-map');
+        this.mapWorldEl = document.getElementById('map-world');
+        this._ensureLayer();
 
         this.copCarElement = document.getElementById('cop-car');
         this._prepareMarkerElement();
 
-        if (this.canvas && this.container && !this.container.contains(this.canvas)) {
-          this.container.appendChild(this.canvas);
+        if (this.canvas && this.layer && !this.layer.contains(this.canvas)) {
+          this.layer.appendChild(this.canvas);
         }
 
-        const w = this.container.offsetWidth;
-        const h = this.container.offsetHeight;
+        const dims = this._getWorldBaseSize();
+        const w = dims.w;
+        const h = dims.h;
         if (w > 0 && h > 0) {
           this._handleResize(w, h);
         } else {
@@ -177,12 +187,15 @@ const CopCar3D = {
         return false;
       }
 
-      this.container = document.getElementById('map-world') || document.getElementById('city-map');
+      this.container = document.getElementById('map-viewport') || document.getElementById('city-map');
+      this.mapWorldEl = document.getElementById('map-world');
       if (!this.container) {
-        console.error('[CopCar3D] #map-world/#city-map not found');
+        console.error('[CopCar3D] #map-viewport/#city-map not found');
         this._initPromise = null;
         return false;
       }
+
+      this._ensureLayer();
 
       this.copCarElement = document.getElementById('cop-car');
       if (!this.copCarElement) {
@@ -191,8 +204,9 @@ const CopCar3D = {
         this._prepareMarkerElement();
       }
 
-      const w = this.container.offsetWidth;
-      const h = this.container.offsetHeight;
+      const dims = this._getWorldBaseSize();
+      const w = dims.w;
+      const h = dims.h;
       if (!w || !h) {
         console.warn('[CopCar3D] Map container has zero size - waiting for layout...');
         this._waitForDimensions();
@@ -235,6 +249,69 @@ const CopCar3D = {
     s.filter = 'none';
   },
 
+  _getWorldBaseSize() {
+    // NOTE: offsetWidth/offsetHeight ignore CSS transforms, which is what we want.
+    const world = this.mapWorldEl || document.getElementById('map-world');
+    if (world) {
+      return { w: world.offsetWidth || 0, h: world.offsetHeight || 0 };
+    }
+    if (this.container) {
+      return { w: this.container.offsetWidth || 0, h: this.container.offsetHeight || 0 };
+    }
+    return { w: 0, h: 0 };
+  },
+
+  _ensureLayer() {
+    if (!this.container) return;
+    this.mapWorldEl = this.mapWorldEl || document.getElementById('map-world');
+
+    let layer = this.layer;
+    if (!layer || !layer.isConnected) {
+      layer = document.getElementById('cop-car-3d-layer');
+    }
+
+    if (!layer) {
+      layer = document.createElement('div');
+      layer.id = 'cop-car-3d-layer';
+      layer.style.position = 'absolute';
+      layer.style.left = '0';
+      layer.style.top = '0';
+      layer.style.pointerEvents = 'none';
+      layer.style.zIndex = '6';
+      layer.style.transformOrigin = '0 0';
+      this.container.appendChild(layer);
+    }
+
+    this.layer = layer;
+
+    // Ensure parent is positioned so our absolute layer sizes correctly
+    try {
+      const pos = getComputedStyle(this.container).position;
+      if (!pos || pos === 'static') this.container.style.position = 'relative';
+    } catch (e) {}
+
+    this._syncLayerTransform();
+  },
+
+  _syncLayerTransform() {
+    if (!this.layer) return;
+    const world = this.mapWorldEl || document.getElementById('map-world');
+    if (!world) return;
+
+    // Mirror the exact transform so the 3D overlay follows pan/zoom 1:1
+    // but without being nested inside the transformed element.
+    const tf = world.style.transform || getComputedStyle(world).transform || '';
+    this.layer.style.transform = (tf && tf !== 'none') ? tf : '';
+
+    // Match the untransformed (base) world size.
+    const w = world.offsetWidth || 0;
+    const h = world.offsetHeight || 0;
+    if (w > 0 && h > 0) {
+      this.layer.style.width = `${w}px`;
+      this.layer.style.height = `${h}px`;
+    }
+  },
+
   _waitForDimensions() {
     if (!this.container) return;
 
@@ -242,15 +319,19 @@ const CopCar3D = {
     if (!this._pendingInitObserver && typeof ResizeObserver !== 'undefined') {
       this._pendingInitObserver = new ResizeObserver(() => {
         if (!this.container) return;
-        const w = this.container.offsetWidth;
-        const h = this.container.offsetHeight;
+          const dims = this._getWorldBaseSize();
+          const w = dims.w;
+          const h = dims.h;
         if (w > 0 && h > 0) {
           try { this._pendingInitObserver.disconnect(); } catch (e) {}
           this._pendingInitObserver = null;
           this.init();
         }
       });
-      try { this._pendingInitObserver.observe(this.container); } catch (e) {}
+      try {
+        this._pendingInitObserver.observe(this.container);
+        if (this.mapWorldEl) this._pendingInitObserver.observe(this.mapWorldEl);
+      } catch (e) {}
     }
 
     // RAF polling fallback
@@ -262,8 +343,9 @@ const CopCar3D = {
         frames++;
 
         if (!this.container || !this.container.isConnected) return;
-        const w = this.container.offsetWidth;
-        const h = this.container.offsetHeight;
+        const dims = this._getWorldBaseSize();
+        const w = dims.w;
+        const h = dims.h;
 
         if (w > 0 && h > 0) {
           cancelAnimationFrame(this._pendingInitRAF);
@@ -292,15 +374,11 @@ const CopCar3D = {
 
     this.scene = new THREE.Scene();
 
-    // Use an orthographic camera in "percent space" (0..100) so the 3D car aligns
-    // with the 2D map markers that use percent coordinates.
-    // Because the canvas is attached to #map-world, it inherits pan/zoom transforms.
-    // That means zooming the map won't distort or spin the 3D car logic.
-    //
-    // FIX: Use symmetric frustum centered at origin, then position camera at center of map.
-    // This ensures the 0-100 coordinate range maps correctly to the visible area.
-    // Also explicitly set up vector before lookAt to avoid gimbal issues when looking straight down.
-    this.camera = new THREE.OrthographicCamera(-50, 50, 50, -50, 0.1, 500);
+    // Orthographic camera in "percent space" (0..100) so the 3D car aligns with
+    // the 2D marker which is positioned using % left/top.
+    // The layer mirrors #map-world's CSS transform (pan/zoom), keeping alignment
+    // correct without nesting the canvas inside the transformed element.
+    this.camera = new THREE.OrthographicCamera(0, 100, 100, 0, 0.1, 500);
     this.camera.up.set(0, 0, -1); // Set up vector to -Z before lookAt (avoids gimbal lock when looking down Y)
     this.camera.position.set(50, 120, 50);
     this.camera.lookAt(50, 0, 50);
@@ -332,7 +410,9 @@ const CopCar3D = {
       if (!pos || pos === 'static') this.container.style.position = 'relative';
     } catch (e) {}
 
-    this.container.appendChild(this.canvas);
+    this._ensureLayer();
+    if (this.layer) this.layer.appendChild(this.canvas);
+    this._syncLayerTransform();
 
     this._raycaster = new THREE.Raycaster();
     this._groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -631,16 +711,19 @@ const CopCar3D = {
     if (!this.copCarElement || !this.container) return null;
 
     const copRect = this.copCarElement.getBoundingClientRect();
-    const containerRect = this.container.getBoundingClientRect();
+    const base = this.layer || this.container;
+    if (!base) return null;
 
-    if (containerRect.width <= 0 || containerRect.height <= 0) return null;
+    const baseRect = base.getBoundingClientRect();
 
-    const cx = (copRect.left + copRect.right) * 0.5 - containerRect.left;
-    const cy = (copRect.top + copRect.bottom) * 0.5 - containerRect.top;
+    if (baseRect.width <= 0 || baseRect.height <= 0) return null;
+
+    const cx = (copRect.left + copRect.right) * 0.5 - baseRect.left;
+    const cy = (copRect.top + copRect.bottom) * 0.5 - baseRect.top;
 
     if (!isFinite(cx) || !isFinite(cy)) return null;
 
-    return { x: cx, y: cy, w: containerRect.width, h: containerRect.height };
+    return { x: cx, y: cy, w: baseRect.width, h: baseRect.height };
   },
 
   _screenToGroundWorld(screenPt) {
@@ -667,6 +750,9 @@ const CopCar3D = {
     const dt = this._lastTickTime ? Math.min(0.05, (now - this._lastTickTime) / 1000) : (1 / 60);
     this._lastTickTime = now;
 
+    // Keep our overlay layer locked to the current map transform.
+    this._syncLayerTransform();
+
     this._updatePoliceLights();
 
     if (!this.modelLoaded || !this.model || !this.camera || !this._raycaster) {
@@ -682,9 +768,11 @@ const CopCar3D = {
     let targetWorld = null;
     let hasCopSystemPos = false;
 
-    if (typeof CopCarSystem !== 'undefined' && CopCarSystem && CopCarSystem.position) {
-      const px = Number(CopCarSystem.position.x);
-      const py = Number(CopCarSystem.position.y);
+    const cs = (typeof window !== 'undefined') ? window.CopCarSystem : null;
+
+    if (cs && cs.position) {
+      const px = Number(cs.position.x);
+      const py = Number(cs.position.y);
       if (isFinite(px) && isFinite(py)) {
         targetWorld = new THREE.Vector3(px, 0, py); // x=percentX, z=percentY
         hasCopSystemPos = true;
@@ -708,8 +796,8 @@ const CopCar3D = {
     this._hasValidPose = true;
 
     // Determine cop speed from system (for stop snapping + smoke) if available
-    const copSpeed = (typeof CopCarSystem !== 'undefined' && CopCarSystem && typeof CopCarSystem.speed === 'number')
-      ? CopCarSystem.speed
+    const copSpeed = (cs && typeof cs.speed === 'number')
+      ? cs.speed
       : 0;
 
     // Always keep ride height
@@ -744,11 +832,11 @@ const CopCar3D = {
     let desiredYaw = null;
     const mv = Math.abs(moveVec.x) + Math.abs(moveVec.z);
 
-    if (hasCopSystemPos && typeof CopCarSystem.heading === 'number' && isFinite(CopCarSystem.heading)) {
+    if (hasCopSystemPos && cs && typeof cs.heading === 'number' && isFinite(cs.heading)) {
       // CopCarSystem.heading is atan2(dx, dy) measured counter-clockwise from +Y (down on map).
       // Three.js rotation.y rotates counter-clockwise when viewed from above.
       // We negate the heading to convert to clockwise rotation for proper road alignment.
-      desiredYaw = -CopCarSystem.heading + this.config.modelYawOffset;
+      desiredYaw = -cs.heading + this.config.modelYawOffset;
     } else if (mv > 0.0002) {
       desiredYaw = -Math.atan2(moveVec.x, moveVec.z) + this.config.modelYawOffset;
     } else {
@@ -945,13 +1033,15 @@ const CopCar3D = {
 
     this._resizeObserver = new ResizeObserver(() => {
       if (!this.container) return;
-      // Use offset* so zoom transforms don't trick us into resizing the drawing buffer.
-      const w = this.container.offsetWidth;
-      const h = this.container.offsetHeight;
-      if (w > 0 && h > 0) this._handleResize(w, h);
+      this._syncLayerTransform();
+      const dims = this._getWorldBaseSize();
+      if (dims.w > 0 && dims.h > 0) this._handleResize(dims.w, dims.h);
     });
 
-    try { this._resizeObserver.observe(this.container); } catch (e) {}
+    try {
+      this._resizeObserver.observe(this.container);
+      if (this.mapWorldEl) this._resizeObserver.observe(this.mapWorldEl);
+    } catch (e) {}
   },
 
   _handleResize(width, height) {
@@ -959,7 +1049,6 @@ const CopCar3D = {
 
     // Keep the frustum at fixed 100x100 units to match the map's percent coordinate system.
     // Any aspect ratio distortion matches the 2D map distortion via CSS.
-    // The camera is centered at (50, 50), so symmetric bounds (-50, 50) cover 0-100.
     this.camera.updateProjectionMatrix();
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.config.maxPixelRatio));
     this.renderer.setSize(width, height, false);
