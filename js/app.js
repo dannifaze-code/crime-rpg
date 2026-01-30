@@ -14289,6 +14289,10 @@ function ensureLandmarkProperties() {
       }
     };
 
+    // Expose so external modules (e.g. js/modules/cop-car-3d.js) can read
+    // authoritative cop position/heading/speed without relying on DOM measurements.
+    window.CopCarSystem = CopCarSystem;
+
     // ========================================
     // INMATE RECRUITMENT SYSTEM
     // ========================================
@@ -26264,6 +26268,11 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       console.log('[DEBUG] Initializing cop car patrol system...');
       // Initialize cop car patrol on map
       CopCarSystem.init();
+
+      // Build the road mask used by RoadPathfinder (and set the map background div).
+      // Even though the static map is also set via CSS, we still load the image here
+      // so pathfinding can sample pixels reliably.
+      try { initStaticMap(); } catch (e) { console.warn('initStaticMap failed:', e); }
 
       console.log('[DEBUG] Skipping roads and buildings (using static map)...');
       // DISABLED: Roads and buildings generation not needed for static 2D map
