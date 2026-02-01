@@ -5917,12 +5917,13 @@ body {
 
 .crime-card.card-leaderboard .crime-card-icon {
   background-image: url('../sprites/ui-new/PlayerProfile/PlayerTrophyIconProfile.png');
-  /* Center the trophy and make it larger - same as crown icon */
+  /* Center the trophy - use calc() to avoid conflict with animation transform */
   width: 85px;
   height: 85px;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  top: calc(50% - 42.5px);
+  left: calc(50% - 42.5px);
+  transform: none;
+  animation: none;
 }
 
 .crime-card.card-players-online .crime-card-icon {
@@ -6266,7 +6267,8 @@ body {
 
   /* Stats and Players cards - SAME height as other cards for uniform grid */
   .crime-card.card-players-online,
-  .crime-card.card-stats {
+  .crime-card.card-stats,
+  .crime-card.card-leaderboard {
     height: 160px;
     min-height: 160px;
     max-height: 160px;
@@ -6336,7 +6338,8 @@ body {
   }
 
   .crime-card.card-players-online,
-  .crime-card.card-stats {
+  .crime-card.card-stats,
+  .crime-card.card-leaderboard {
     height: 140px;
     min-height: 140px;
     max-height: 140px;
