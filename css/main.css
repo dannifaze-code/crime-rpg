@@ -5592,6 +5592,8 @@ body {
 .crime-board {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
+  /* Align items to stretch so card pairs have equal heights */
+  align-items: stretch;
   /* Tighter spacing so the Profile grid fits comfortably on mobile */
   gap: 12px;
   padding: 6px 8px 18px;
@@ -5747,8 +5749,12 @@ body {
   border: none !important;
   border-radius: 0 !important;
   /* Responsive sizing: smaller on phones, roomy on tablets/desktop */
+  /* Fallback min-height for browsers without clamp() support */
+  min-height: 130px;
   min-height: clamp(128px, 20vh, 160px);
   aspect-ratio: 1.5 / 1;
+  /* Fallback padding for browsers without clamp() support */
+  padding: 12px;
   padding: clamp(12px, 3.6vw, 16px);
   display: flex;
   flex-direction: column;
@@ -5803,19 +5809,21 @@ body {
 
 .crime-card.card-players-online {
   background-image: url('../sprites/ui-new/PlayerProfile/PlayersOnlineSquare.png');
-  /* Let the grid column width drive sizing so it can’t overflow/overlap */
+  /* Let the grid column width drive sizing so it can't overflow/overlap */
   width: 100%;
   max-width: 100%;
-  min-height: unset;
+  /* Fallback min-height for browsers without aspect-ratio support */
+  min-height: 170px;
   aspect-ratio: 1 / 1.1;
 }
 
 .crime-card.card-stats {
   background-image: url('../sprites/ui-new/PlayerProfile/StatsSquare.png');
-  /* Let the grid column width drive sizing so it can’t overflow/overlap */
+  /* Let the grid column width drive sizing so it can't overflow/overlap */
   width: 100%;
   max-width: 100%;
-  min-height: unset;
+  /* Fallback min-height for browsers without aspect-ratio support */
+  min-height: 170px;
   aspect-ratio: 1 / 1.1;
 }
 
@@ -6163,6 +6171,32 @@ body {
 
 .tab:active {
   transform: scale(0.92);
+}
+
+/* =====================================================
+   FALLBACK FOR BROWSERS WITHOUT aspect-ratio SUPPORT
+   (Fixes jumbled profile UI on older Android browsers)
+   ===================================================== */
+@supports not (aspect-ratio: 1 / 1) {
+  /* Ensure all standard cards in a row have matching heights */
+  .crime-card {
+    min-height: 130px;
+  }
+
+  .crime-card.card-profile {
+    min-height: 230px;
+  }
+
+  .crime-card.card-players-online,
+  .crime-card.card-stats {
+    /* These taller cards need more space for their content */
+    min-height: 180px;
+  }
+
+  /* Ensure grid rows have consistent baseline heights */
+  .crime-board {
+    grid-auto-rows: minmax(130px, auto);
+  }
 }
 
 /* =====================================================
