@@ -5901,7 +5901,8 @@ body {
 
 .crime-card.card-heat .crime-card-value {
   position: relative;
-  top: -1px;
+  top: -2px;
+  left: 2px;
 }
 
 .crime-card.card-global-heat .crime-card-icon {
