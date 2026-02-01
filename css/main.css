@@ -5805,6 +5805,10 @@ body {
 
 .crime-card.card-leaderboard {
   background-image: url('../sprites/ui-new/PlayerProfile/LeaderboardsUiSquare.png');
+  /* Ensure card fills grid cell like other cards */
+  width: 100%;
+  max-width: 100%;
+  min-height: 160px;
 }
 
 .crime-card.card-players-online {
