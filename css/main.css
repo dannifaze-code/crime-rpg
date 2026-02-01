@@ -5917,8 +5917,12 @@ body {
 
 .crime-card.card-leaderboard .crime-card-icon {
   background-image: url('../sprites/ui-new/PlayerProfile/PlayerTrophyIconProfile.png');
-  width: 45px;
-  height: 45px;
+  /* Center the trophy and make it larger - same as crown icon */
+  width: 85px;
+  height: 85px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
 }
 
 .crime-card.card-players-online .crime-card-icon {
