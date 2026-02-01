@@ -5884,6 +5884,24 @@ body {
 
 .crime-card.card-heat .crime-card-icon {
   background-image: url('../sprites/ui-new/PlayerProfile/playerHeatProfile.png');
+  /* Center the heat icon and make it larger - same as cash icon */
+  width: 70px;
+  height: 70px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+/* Heat card text positioning adjustments */
+.crime-card.card-heat .crime-card-label {
+  position: relative;
+  top: -2px;
+  left: 3px;
+}
+
+.crime-card.card-heat .crime-card-value {
+  position: relative;
+  top: -1px;
 }
 
 .crime-card.card-global-heat .crime-card-icon {
