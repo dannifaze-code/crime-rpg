@@ -5805,10 +5805,12 @@ body {
 
 .crime-card.card-leaderboard {
   background-image: url('../sprites/ui-new/PlayerProfile/LeaderboardsUiSquare.png');
-  /* Ensure card fills grid cell like other cards */
-  width: 100%;
-  max-width: 100%;
-  min-height: 160px;
+  /* Force card to match other cards - use !important to override any conflicts */
+  width: 100% !important;
+  max-width: 100% !important;
+  height: 160px !important;
+  min-height: 160px !important;
+  max-height: 160px !important;
 }
 
 .crime-card.card-players-online {
