@@ -5923,13 +5923,24 @@ body {
 
 .crime-card.card-leaderboard .crime-card-icon {
   background-image: url('../sprites/ui-new/PlayerProfile/PlayerTrophyIconProfile.png');
-  /* Center the trophy - use calc() to avoid conflict with animation transform */
+  /* Center the trophy - moved up 6px to make room for text */
   width: 85px;
   height: 85px;
-  top: calc(50% - 42.5px);
+  top: calc(50% - 48.5px);
   left: calc(50% - 42.5px);
   transform: none;
   animation: none;
+}
+
+/* Leaderboard card text positioning - neat spacing below trophy */
+.crime-card.card-leaderboard .crime-card-label {
+  position: relative;
+  top: -8px;
+}
+
+.crime-card.card-leaderboard .crime-card-value {
+  position: relative;
+  top: -6px;
 }
 
 .crime-card.card-players-online .crime-card-icon {
