@@ -5874,9 +5874,9 @@ body {
 
 .crime-card.card-rep .crime-card-icon {
   background-image: url('../sprites/ui-new/PlayerProfile/leaderboardsCrownProfile.png');
-  /* Center the crown and make it larger - same as cash/level icons */
-  width: 70px;
-  height: 70px;
+  /* Center the crown - slightly larger to visually match level emblem */
+  width: 85px;
+  height: 85px;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
