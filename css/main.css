@@ -4550,7 +4550,14 @@
     inset 0 0 18px rgba(140, 0, 0, 0.35),
     inset 0 0 2px rgba(255, 255, 255, 0.06),
     0 10px 22px rgba(0, 0, 0, 0.45);
-  padding-bottom: clamp(14px, 4vw, 18px); /* Increased bottom padding to prevent text clipping */
+  /* Flexible height - remove fixed aspect ratio */
+  aspect-ratio: unset !important;
+  height: auto !important;
+  min-height: clamp(140px, 22vh, 180px);
+  max-height: none !important;
+  /* Responsive padding for all display sizes */
+  padding: clamp(14px, 4vw, 18px) clamp(12px, 3.6vw, 16px);
+  padding-bottom: clamp(16px, 4.5vw, 20px); /* Extra bottom padding to prevent text clipping */
 }
 
 /* subtle etched noise */
@@ -4599,6 +4606,13 @@
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: rgba(255,255,255,0.72);
+  /* Responsive font sizing */
+  font-size: clamp(9px, 2.8vw, 11px);
+  line-height: 1.3;
+  /* Allow wrapping */
+  white-space: normal;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .crime-card.card-skill-tree .crime-card-value,
@@ -4609,8 +4623,14 @@
   text-transform: none;
   font-weight: 700;
   text-shadow: 0 1px 0 rgba(0,0,0,0.5), 0 0 10px rgba(180, 40, 40, 0.25);
-  line-height: 1.3; /* Improved line-height to prevent clipping */
-  margin-bottom: 3px; /* Add spacing before subvalue */
+  /* Responsive font sizing and line-height */
+  font-size: clamp(15px, 4.5vw, 19px);
+  line-height: 1.35;
+  margin-bottom: clamp(3px, 1vw, 5px); /* Responsive spacing before subvalue */
+  /* Allow wrapping */
+  white-space: normal;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .crime-card.card-skill-tree .crime-card-subvalue,
@@ -4618,7 +4638,13 @@
   font-family: "Cinzel", serif;
   color: rgba(255,255,255,0.78);
   opacity: 0.95;
-  line-height: 1.4; /* Ensure proper spacing for subvalue */
+  /* Responsive font sizing and line-height */
+  font-size: clamp(9px, 2.5vw, 11px);
+  line-height: 1.5;
+  /* Allow wrapping */
+  white-space: normal;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 /* hover glow */
@@ -6141,10 +6167,15 @@ body {
    SKILL TREE CARD - Special layout
    ===================================================== */
 .crime-card.card-skill-tree .crime-card-subvalue {
-  font-size: 10px;
+  /* Responsive font sizing - matches the main rule above */
+  font-size: clamp(9px, 2.5vw, 11px);
   color: rgba(200, 180, 160, 0.8);
-  margin-top: 2px;
+  margin-top: clamp(2px, 0.8vw, 3px);
   text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+  /* Allow wrapping - prevent text clipping */
+  white-space: normal;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 /* =====================================================
@@ -6307,6 +6338,15 @@ body {
     aspect-ratio: unset;
   }
 
+  /* Skill tree card - flexible height to prevent text clipping */
+  .crime-card.card-skill-tree,
+  .crime-card.skill-tree-card {
+    height: auto !important;
+    min-height: 160px;
+    max-height: none !important;
+    aspect-ratio: unset !important;
+  }
+
   /* Profile card spans full width, taller and prominent */
   .crime-card.card-profile {
     height: auto;
@@ -6381,6 +6421,15 @@ body {
     height: auto;
     min-height: 140px;
     max-height: none;
+  }
+
+  /* Skill tree card - flexible height to prevent text clipping */
+  .crime-card.card-skill-tree,
+  .crime-card.skill-tree-card {
+    height: auto !important;
+    min-height: 140px;
+    max-height: none !important;
+    aspect-ratio: unset !important;
   }
 
   .crime-card.card-profile {
