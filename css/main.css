@@ -1002,14 +1002,14 @@
     }
 
     .profile-card-avatar {
-      width: 64px;
-      height: 64px;
+      width: 80px;
+      height: 80px;
       border-radius: 50%;
       background: linear-gradient(135deg, #8ab4f8 0%, #5a84c8 100%);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 32px;
+      font-size: 40px;
       font-weight: 700;
       color: #0a0a0a;
       flex-shrink: 0;
@@ -1064,9 +1064,9 @@
       }
       
       .profile-card-avatar {
-        width: 56px;
-        height: 56px;
-        font-size: 28px;
+        width: 70px;
+        height: 70px;
+        font-size: 35px;
       }
       
       .profile-card-name {
