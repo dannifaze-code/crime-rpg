@@ -100,6 +100,15 @@ const CopCar3D = {
       position: { x: 0, y: 55, z: 35 },
       lookAt: { x: 0, y: 0, z: 0 }
     },
+    debug: {
+      enabled: true,
+      logIntervalMs: 1000,
+      modelScale: 10,
+      ambientIntensity: 1.0,
+      directionalIntensity: 1.0,
+      directionalPosition: { x: 50, y: 100, z: 50 },
+      rideHeight: 0
+    },
 
     // dt-based smoothing strengths (higher = tighter)
     positionLerpStrength: 18,
@@ -484,15 +493,20 @@ const CopCar3D = {
   },
 
   _setupLighting() {
-    this.lights.ambient = new THREE.AmbientLight(0xffffff, 1.0);
+    const debug = this.config?.debug;
+    // Debug visibility: use debug-configured light intensities for cop car troubleshooting.
+    const ambientIntensity = debug?.ambientIntensity ?? 1.0;
+    this.lights.ambient = new THREE.AmbientLight(0xffffff, ambientIntensity);
     this.scene.add(this.lights.ambient);
 
     this.lights.hemi = new THREE.HemisphereLight(0xffffff, 0x2a2a2a, 0.65);
     this.lights.hemi.position.set(0, 100, 0);
     this.scene.add(this.lights.hemi);
 
-    this.lights.directional = new THREE.DirectionalLight(0xffffff, 1.0);
-    this.lights.directional.position.set(50, 100, 50);
+    const directionalIntensity = debug?.directionalIntensity ?? 1.0;
+    this.lights.directional = new THREE.DirectionalLight(0xffffff, directionalIntensity);
+    const directionalPos = debug?.directionalPosition || { x: 50, y: 100, z: 50 };
+    this.lights.directional.position.set(directionalPos.x, directionalPos.y, directionalPos.z);
 
     if (this.config.shadowsEnabled) {
       this.lights.directional.castShadow = true;
@@ -546,6 +560,7 @@ const CopCar3D = {
   },
 
   _setupDebugHelpers() {
+    if (!this.config?.debug?.enabled) return;
     if (!this.scene) return;
 
     if (!this._debugAxes) {
@@ -576,11 +591,15 @@ const CopCar3D = {
           pivot.name = 'CopCarPivot';
 
           const visual = gltf.scene;
+          const debugEnabled = !!this.config?.debug?.enabled;
           visual.name = 'CopCarVisual';
-          console.log('[CopCar3D] GLB LOADED', { children: visual.children?.length || 0 });
+          if (debugEnabled) {
+            console.log('[CopCar3D] GLB LOADED', { children: visual.children?.length || 0 });
+          }
 
-          // Scale the model to be visible in the 100-unit coordinate space.
-          visual.scale.setScalar(10);
+          // Scale the model to be visible in the 100-unit coordinate space (temporary debug boost).
+          const modelScale = this.config?.debug?.modelScale ?? 10;
+          visual.scale.setScalar(modelScale);
 
           // Recenter pivot to bounds center, put wheels on ground (y=0)
           try {
@@ -591,10 +610,12 @@ const CopCar3D = {
             visual.position.set(-center.x, -minY, -center.z);
             const size = new THREE.Vector3();
             box.getSize(size);
-            console.log('[CopCar3D] GLB bbox', {
-              size: { x: size.x, y: size.y, z: size.z },
-              center: { x: center.x, y: center.y, z: center.z }
-            });
+            if (debugEnabled) {
+              console.log('[CopCar3D] GLB bbox', {
+                size: { x: size.x, y: size.y, z: size.z },
+                center: { x: center.x, y: center.y, z: center.z }
+              });
+            }
           } catch (e) {
             // fallback: no recenter
           }
@@ -629,7 +650,9 @@ const CopCar3D = {
 
           pivot.add(visual);
 
-          pivot.position.set(0, 0, 0);
+          // Debug: keep on the ground plane without ride height offset.
+          const rideHeight = this.config?.debug?.rideHeight ?? 0;
+          pivot.position.set(0, rideHeight, 0);
 
           this.model = pivot;
           this.modelVisual = visual;
@@ -794,7 +817,7 @@ const CopCar3D = {
     const dt = this._lastTickTime ? Math.min(0.05, (now - this._lastTickTime) / 1000) : (1 / 60);
     this._lastTickTime = now;
 
-    if (now - this._lastDebugLog >= 1000) {
+    if (this.config?.debug?.enabled && (now - this._lastDebugLog >= this.config.debug.logIntervalMs)) {
       this._lastDebugLog = now;
       const cam = this.camera;
       const look = this._cameraLookAt;
