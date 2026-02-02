@@ -42,6 +42,7 @@ const CopCar3D = {
   model: null,          // pivot group we move/rotate
   modelVisual: null,    // gltf.scene (offset inside pivot)
   modelLoaded: false,
+  _pendingModelRoot: null,
   modelPath: 'sprites/3d-models/cop-car.glb',
 
   // loop
@@ -292,6 +293,44 @@ const CopCar3D = {
     this._syncLayerTransform();
   },
 
+  _attachPendingModel() {
+    const pending = this._pendingModelRoot;
+    if (!pending) return;
+    const attachResult = this._addModelToScene(pending, false);
+    if (attachResult.success) {
+      this._pendingModelRoot = null;
+    } else {
+      const reason = attachResult.error
+        ? (attachResult.error.message || attachResult.error.toString())
+        : (this.scene ? 'attach failed' : 'scene not ready');
+      console.warn('[CopCar3D] Pending model attach deferred:', reason);
+    }
+  },
+
+  _addModelToScene(model, allowDefer = true) {
+    const result = { success: false, deferred: false, error: null };
+    if (!model) return result;
+    if (this.scene) {
+      try {
+        if (model.parent && model.parent !== this.scene) {
+          model.parent.remove(model);
+        }
+        this.scene.add(model);
+        result.success = true;
+        return result;
+      } catch (e) {
+        console.warn('[CopCar3D] Model attach failed:', e);
+        result.error = e;
+        return result;
+      }
+    }
+    if (allowDefer) {
+      this._pendingModelRoot = model;
+      result.deferred = true;
+    }
+    return result;
+  },
+
   _syncLayerTransform() {
     if (!this.layer) return;
     const world = this.mapWorldEl || document.getElementById('map-world');
@@ -309,6 +348,11 @@ const CopCar3D = {
       this.layer.style.width = `${w}px`;
       this.layer.style.height = `${h}px`;
     }
+  },
+
+  _tickPendingModelAttach() {
+    if (!this._pendingModelRoot) return;
+    this._attachPendingModel();
   },
 
   _waitForDimensions() {
@@ -419,6 +463,7 @@ const CopCar3D = {
     this._setupLighting();
     this._ensureSmokeSystem();
     await this._loadModel();
+    this._attachPendingModel();
 
     this._setupResizeHandler();
     this._startLoop();
@@ -559,7 +604,7 @@ const CopCar3D = {
           // Cache wheels + exhaust anchor
           this._cacheModelParts();
 
-          this.scene.add(this.model);
+          this._addModelToScene(this.model);
           this.modelLoaded = true;
 
           console.log('[CopCar3D] Model loaded');
@@ -615,7 +660,7 @@ const CopCar3D = {
 
     this.model = pivot;
     this.modelVisual = box;
-    this.scene.add(this.model);
+    this._addModelToScene(this.model);
     this.modelLoaded = true;
 
     // Also show the 2D marker as additional fallback
@@ -722,6 +767,7 @@ const CopCar3D = {
     this._updatePoliceLights();
 
     if (!this.modelLoaded || !this.model || !this.camera || !this._raycaster) {
+      this._tickPendingModelAttach();
       this._updateSmoke(dt, 0);
       return;
     }
@@ -1090,6 +1136,7 @@ const CopCar3D = {
       this.model = null;
       this.modelVisual = null;
       this.modelLoaded = false;
+      this._pendingModelRoot = null;
 
       this._wheels = [];
       this._frontWheels = [];
