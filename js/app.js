@@ -6774,6 +6774,9 @@ function updateTurfDefense(dt) {
       if (DEBUG_OVERLAY_ENABLED) {
         DebugOverlay.draw(ctx, canvas);
       }
+      if (typeof RoadDebugOverlay !== 'undefined') {
+        RoadDebugOverlay.draw();
+      }
     }
 
     // ========================================
@@ -9435,6 +9438,101 @@ function updateTurfDefense(dt) {
       }
     };
 
+    const RoadDebugOverlay = {
+      enabled: false,
+      canvas: null,
+      ctx: null,
+      toggle() {
+        this.enabled = !this.enabled;
+        if (!this.enabled) this._clear();
+      },
+      init() {
+        if (this.canvas && this.canvas.isConnected) return;
+        const world = document.getElementById('map-world');
+        if (!world) return;
+        this.canvas = document.createElement('canvas');
+        this.canvas.id = 'road-debug-canvas';
+        this.canvas.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:7;';
+        world.appendChild(this.canvas);
+        this.ctx = this.canvas.getContext('2d');
+        this._resize();
+        window.addEventListener('resize', () => this._resize());
+      },
+      _resize() {
+        if (!this.canvas) return;
+        const world = document.getElementById('map-world');
+        const w = world ? world.offsetWidth : this.canvas.clientWidth;
+        const h = world ? world.offsetHeight : this.canvas.clientHeight;
+        if (w && h) {
+          this.canvas.width = w;
+          this.canvas.height = h;
+        }
+      },
+      _clear() {
+        if (!this.ctx || !this.canvas) return;
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+      },
+      draw() {
+        if (!this.enabled) return;
+        const rp = window.RoadPathfinder;
+        if (!rp || !rp.getDebugData) return;
+        const dbg = rp.getDebugData();
+        if (!dbg || !dbg.nodes || !dbg.edges) return;
+        this.init();
+        if (!this.ctx || !this.canvas) return;
+        this._resize();
+        this._clear();
+
+        const ctx = this.ctx;
+        ctx.save();
+        ctx.strokeStyle = 'rgba(0, 200, 255, 0.5)';
+        ctx.lineWidth = 1;
+
+        for (const node of dbg.nodes) {
+          const edges = dbg.edges.get(node.id) || [];
+          for (const edge of edges) {
+            if (!edge.path || edge.path.length < 2) continue;
+            ctx.beginPath();
+            edge.path.forEach((cell, idx) => {
+              const x = (cell.gx / (dbg.grid.gw - 1)) * this.canvas.width;
+              const y = (cell.gy / (dbg.grid.gh - 1)) * this.canvas.height;
+              if (idx === 0) ctx.moveTo(x, y);
+              else ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+          }
+        }
+
+        ctx.fillStyle = 'rgba(255, 200, 0, 0.8)';
+        for (const node of dbg.nodes) {
+          const x = (node.gx / (dbg.grid.gw - 1)) * this.canvas.width;
+          const y = (node.gy / (dbg.grid.gh - 1)) * this.canvas.height;
+          ctx.beginPath();
+          ctx.arc(x, y, 2.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        ctx.strokeStyle = 'rgba(255, 80, 80, 0.9)';
+        ctx.lineWidth = 2;
+        const cs = window.CopCarSystem;
+        if (cs && cs.currentPath && cs.currentPath.length > 1) {
+          ctx.beginPath();
+          cs.currentPath.forEach((pt, idx) => {
+            const x = (pt.x / 100) * this.canvas.width;
+            const y = (pt.y / 100) * this.canvas.height;
+            if (idx === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          });
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+    };
+
+    window.toggleRoadDebug = function() {
+      RoadDebugOverlay.toggle();
+    };
+
     // ========================================
     // CORE: Seed Generation Utilities
     // ========================================
@@ -11314,6 +11412,10 @@ function updateTurfDefense(dt) {
         w: 0, h: 0,           // image size in px
         gw: 0, gh: 0,         // grid size in cells
         walkable: null,       // Uint8Array (1 = road)
+        nodes: [],
+        nodeMap: null,
+        edges: new Map(),
+        entryNodes: []
       };
 
       function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
@@ -11390,6 +11492,7 @@ function updateTurfDefense(dt) {
           // Light dilation to connect slightly broken road samples
           dilate(1);
 
+          buildRoadGraph();
           state.ready = true;
           console.log(`🛣️ RoadPathfinder ready: ${state.gw}x${state.gh} grid, cellSize=${state.cellSize}px`);
         } catch (e) {
@@ -11447,6 +11550,202 @@ function updateTurfDefense(dt) {
           }
         }
         return { gx, gy }; // fallback
+      }
+
+      function buildRoadGraph() {
+        if (!state.walkable) return;
+
+        const gw = state.gw;
+        const gh = state.gh;
+        const nodes = [];
+        const nodeMap = new Int32Array(gw * gh);
+        nodeMap.fill(-1);
+
+        function isRoad(gx, gy) {
+          return inBounds(gx, gy) && state.walkable[idx(gx, gy)] === 1;
+        }
+
+        function isNodeCell(gx, gy) {
+          if (!isRoad(gx, gy)) return false;
+          const up = isRoad(gx, gy - 1);
+          const down = isRoad(gx, gy + 1);
+          const left = isRoad(gx - 1, gy);
+          const right = isRoad(gx + 1, gy);
+          const count = (up?1:0) + (down?1:0) + (left?1:0) + (right?1:0);
+          if (count !== 2) return true;
+          return !((up && down) || (left && right));
+        }
+
+        for (let gy = 0; gy < gh; gy++) {
+          for (let gx = 0; gx < gw; gx++) {
+            if (!isNodeCell(gx, gy)) continue;
+            const id = nodes.length;
+            nodes.push({ id, gx, gy, edges: [] });
+            nodeMap[idx(gx, gy)] = id;
+          }
+        }
+
+        const edges = new Map();
+        function addEdge(a, b, cost, path) {
+          if (a === b || a < 0 || b < 0) return;
+          if (!edges.has(a)) edges.set(a, []);
+          if (!edges.has(b)) edges.set(b, []);
+          edges.get(a).push({ to: b, cost, path });
+          edges.get(b).push({ to: a, cost, path: path.slice().reverse() });
+        }
+
+        const dirs = [
+          { dx: 1, dy: 0 },
+          { dx: -1, dy: 0 },
+          { dx: 0, dy: 1 },
+          { dx: 0, dy: -1 }
+        ];
+
+        for (const node of nodes) {
+          for (const d of dirs) {
+            let gx = node.gx + d.dx;
+            let gy = node.gy + d.dy;
+            if (!isRoad(gx, gy)) continue;
+            let steps = 1;
+            const path = [{ gx: node.gx, gy: node.gy }];
+
+            while (inBounds(gx, gy) && isRoad(gx, gy)) {
+              path.push({ gx, gy });
+              const nid = nodeMap[idx(gx, gy)];
+              if (nid >= 0 && nid !== node.id) {
+                addEdge(node.id, nid, steps, path);
+                break;
+              }
+              gx += d.dx;
+              gy += d.dy;
+              steps++;
+            }
+          }
+        }
+
+        const entryNodes = [];
+        const edgesToCheck = [
+          { edge: 'top', gx: (gx, gy) => gx, gy: () => 0 },
+          { edge: 'bottom', gx: (gx, gy) => gx, gy: () => gh - 1 },
+          { edge: 'left', gx: () => 0, gy: (gx, gy) => gy },
+          { edge: 'right', gx: () => gw - 1, gy: (gx, gy) => gy }
+        ];
+
+        for (const edge of edgesToCheck) {
+          const limit = (edge.edge === 'top' || edge.edge === 'bottom') ? gw : gh;
+          for (let i = 0; i < limit; i++) {
+            const gx = edge.gx(i, i);
+            const gy = edge.gy(i, i);
+            if (!isRoad(gx, gy)) continue;
+            const nid = nodeMap[idx(gx, gy)];
+            if (nid >= 0 && !entryNodes.includes(nid)) entryNodes.push(nid);
+          }
+        }
+
+        state.nodes = nodes;
+        state.nodeMap = nodeMap;
+        state.edges = edges;
+        state.entryNodes = entryNodes;
+      }
+
+      function getClosestNodeId(pt) {
+        if (!state.nodeMap || !state.nodes.length) return -1;
+        let { gx, gy } = percentToGrid(pt);
+        ({ gx, gy } = nearestRoadCell(gx, gy, 14));
+        const direct = state.nodeMap[idx(gx, gy)];
+        if (direct >= 0) return direct;
+
+        let best = -1;
+        let bestDist = Infinity;
+        for (const node of state.nodes) {
+          const dx = node.gx - gx;
+          const dy = node.gy - gy;
+          const d = dx * dx + dy * dy;
+          if (d < bestDist) {
+            bestDist = d;
+            best = node.id;
+          }
+        }
+        return best;
+      }
+
+      function getPathBetweenNodes(startId, goalId) {
+        if (!state.edges || startId < 0 || goalId < 0) return null;
+        if (startId === goalId) return [state.nodes[startId]];
+
+        const open = new MinHeap();
+        const total = state.nodes.length;
+        const cameFrom = new Int32Array(total);
+        const gScore = new Float32Array(total);
+        const fScore = new Float32Array(total);
+        const closed = new Uint8Array(total);
+
+        cameFrom.fill(-1);
+        gScore.fill(Infinity);
+        fScore.fill(Infinity);
+
+        const goal = state.nodes[goalId];
+        function h(id) {
+          const n = state.nodes[id];
+          return Math.abs(n.gx - goal.gx) + Math.abs(n.gy - goal.gy);
+        }
+
+        gScore[startId] = 0;
+        fScore[startId] = h(startId);
+        open.push({ id: startId, f: fScore[startId] });
+
+        while (!open.isEmpty()) {
+          const current = open.pop();
+          const cid = current.id;
+          if (closed[cid]) continue;
+          closed[cid] = 1;
+          if (cid === goalId) {
+            const path = [];
+            let cur = cid;
+            while (cur !== -1) {
+              path.push(cur);
+              cur = cameFrom[cur];
+            }
+            path.reverse();
+            return path;
+          }
+
+          const neighbors = state.edges.get(cid) || [];
+          for (const edge of neighbors) {
+            const nid = edge.to;
+            if (closed[nid]) continue;
+            const tentative = gScore[cid] + edge.cost;
+            if (tentative < gScore[nid]) {
+              cameFrom[nid] = cid;
+              gScore[nid] = tentative;
+              fScore[nid] = tentative + h(nid);
+              open.push({ id: nid, f: fScore[nid] });
+            }
+          }
+        }
+        return null;
+      }
+
+      function pathNodesToPercent(nodePath) {
+        if (!nodePath || nodePath.length === 0) return [];
+        const points = [];
+        for (let i = 0; i < nodePath.length - 1; i++) {
+          const a = nodePath[i];
+          const b = nodePath[i + 1];
+          const edges = state.edges.get(a) || [];
+          const edge = edges.find(e => e.to === b);
+          if (!edge) continue;
+          const seg = edge.path || [];
+          for (let j = 0; j < seg.length; j++) {
+            if (points.length && j === 0) continue;
+            points.push(gridToPercent(seg[j].gx, seg[j].gy));
+          }
+        }
+        if (nodePath.length === 1) {
+          const node = state.nodes[nodePath[0]];
+          points.push(gridToPercent(node.gx, node.gy));
+        }
+        return points;
       }
 
       function aStar(start, goal) {
@@ -11541,18 +11840,13 @@ function updateTurfDefense(dt) {
       function getPathPercent(fromPercent, toPercent) {
         if (!state.ready) return null;
 
-        let s = percentToGrid(fromPercent);
-        let g = percentToGrid(toPercent);
-        s = nearestRoadCell(s.gx, s.gy);
-        g = nearestRoadCell(g.gx, g.gy);
+        const startId = getClosestNodeId(fromPercent);
+        const goalId = getClosestNodeId(toPercent);
+        if (startId < 0 || goalId < 0) return null;
 
-        const cells = aStar(s, g);
-        if (!cells) return null;
-
-        const simp = simplifyPath(cells);
-
-        // Convert to percent points
-        return simp.map(c => gridToPercent(c.gx, c.gy));
+        const nodePath = getPathBetweenNodes(startId, goalId);
+        if (!nodePath) return null;
+        return pathNodesToPercent(nodePath);
       }
 
       // Tiny min-heap for A*
@@ -11596,6 +11890,18 @@ function updateTurfDefense(dt) {
       return {
         buildFromImage,
         getPathPercent,
+        getClosestNodeId,
+        getPathBetweenNodes,
+        pathNodesToPercent,
+        getDebugData() {
+          return {
+            ready: state.ready,
+            nodes: state.nodes,
+            edges: state.edges,
+            entryNodes: state.entryNodes,
+            grid: { gw: state.gw, gh: state.gh }
+          };
+        },
         get ready() { return state.ready; }
       };
     })();
@@ -14030,6 +14336,9 @@ function ensureLandmarkProperties() {
       _pathTotalLen: 1,
  // 0-1 progress through current segment
       animationFrameId: null,
+      exitPending: false,
+      exitRespawnAt: 0,
+      lastExitNodeId: -1,
       
       init() {
         console.log('🚔 Realistic Cop Car Patrol System initialized');
@@ -14044,6 +14353,9 @@ function ensureLandmarkProperties() {
         this.currentSegmentT = 0;
         this.speed = 0;
         this.pauseUntil = 0;
+        this.exitPending = false;
+        this.exitRespawnAt = 0;
+        this.lastExitNodeId = -1;
 
         this.startPatrol();
 
@@ -14090,6 +14402,17 @@ function ensureLandmarkProperties() {
         const dt = Math.min(0.05, Math.max(0.001, (now - this.lastUpdateTs) / 1000)); // clamp 1ms..50ms
         this.lastUpdateTs = now;
 
+        // Off-map handling: despawn for a moment, then re-enter at another entry node
+        if (this.exitPending) {
+          this.speed = 0;
+          if (now >= this.exitRespawnAt) {
+            this._respawnFromExit();
+          }
+          this.renderCopCar();
+          this.animationFrameId = requestAnimationFrame(() => this.animateMovement());
+          return;
+        }
+
         // Stop at intersections / sharp turns
         if (this.pauseUntil && now < this.pauseUntil) {
           this.speed = 0;
@@ -14098,17 +14421,14 @@ function ensureLandmarkProperties() {
           return;
         }
 
-        // Ensure we have a path (road-following if possible)
-        const currentWaypoint = this.patrolWaypoints[this.currentWaypointIndex];
-        const nextIndex = (this.currentWaypointIndex + 1) % this.patrolWaypoints.length;
-        const nextWaypoint = this.patrolWaypoints[nextIndex];
-
+        // Ensure we have a path (road-following via RoadPathfinder graph)
         if (!this.currentPath || this.currentPath.length < 2) {
-          const rp = window.RoadPathfinder;
-          const path = (rp && typeof rp.getPathPercent === "function") ? rp.getPathPercent(currentWaypoint, nextWaypoint) : null;
-          this.currentPath = (path && path.length >= 2) ? path : [currentWaypoint, nextWaypoint];
-          this.currentPathIndex = 0;
-          this.currentSegmentT = 0;
+          this._buildNextRoadPath();
+          if (!this.currentPath || this.currentPath.length < 2) {
+            this.renderCopCar();
+            this.animationFrameId = requestAnimationFrame(() => this.animateMovement());
+            return;
+          }
         }
 
         const a = this.currentPath[this.currentPathIndex];
@@ -14168,9 +14488,15 @@ function ensureLandmarkProperties() {
 
             // Stop when reaching end-of-path (waypoint), or a sharp turn node
             if (reachedEnd) {
-              this.currentWaypointIndex = nextIndex;
+              this.currentWaypointIndex = (this.currentWaypointIndex + 1) % this.patrolWaypoints.length;
               this.currentPath = null;
               this.currentPathIndex = 0;
+
+              if (this._shouldExitMap()) {
+                this._scheduleExit();
+                this.speed = 0;
+                break;
+              }
 
               this.pauseUntil = now + (this.stopMinMs + Math.random() * (this.stopMaxMs - this.stopMinMs));
               this.speed = 0;
@@ -14202,6 +14528,76 @@ function ensureLandmarkProperties() {
 
         this.renderCopCar();
         this.animationFrameId = requestAnimationFrame(() => this.animateMovement());
+      },
+
+      _buildNextRoadPath() {
+        const rp = window.RoadPathfinder;
+        if (!rp || !rp.ready) return;
+
+        const entryNodes = rp.getDebugData ? (rp.getDebugData().entryNodes || []) : [];
+        const hasEntries = entryNodes.length > 1;
+
+        let fromPt = this.position;
+        let toPt = null;
+
+        if (hasEntries && Math.random() < 0.18) {
+          const exitId = entryNodes[Math.floor(Math.random() * entryNodes.length)];
+          const exitNode = rp.getDebugData().nodes.find(n => n.id === exitId);
+          if (exitNode) {
+            toPt = { x: (exitNode.gx / (rp.getDebugData().grid.gw - 1)) * 100, y: (exitNode.gy / (rp.getDebugData().grid.gh - 1)) * 100 };
+            this.lastExitNodeId = exitId;
+          }
+        }
+
+        if (!toPt) {
+          const nextIndex = (this.currentWaypointIndex + 1) % this.patrolWaypoints.length;
+          toPt = this.patrolWaypoints[nextIndex];
+        }
+
+        const path = (typeof rp.getPathPercent === 'function') ? rp.getPathPercent(fromPt, toPt) : null;
+        if (path && path.length >= 2) {
+          this.currentPath = path;
+          this.currentPathIndex = 0;
+          this.currentSegmentT = 0;
+        }
+      },
+
+      _shouldExitMap() {
+        return this.lastExitNodeId >= 0;
+      },
+
+      _scheduleExit() {
+        this.exitPending = true;
+        this.exitRespawnAt = performance.now() + 1200 + Math.random() * 1000;
+      },
+
+      _respawnFromExit() {
+        const rp = window.RoadPathfinder;
+        if (!rp || !rp.ready || !rp.getDebugData) {
+          this.exitPending = false;
+          this.lastExitNodeId = -1;
+          return;
+        }
+        const dbg = rp.getDebugData();
+        const entries = dbg.entryNodes || [];
+        if (!entries.length) {
+          this.exitPending = false;
+          this.lastExitNodeId = -1;
+          return;
+        }
+        let entryId = entries[Math.floor(Math.random() * entries.length)];
+        if (entries.length > 1 && entryId === this.lastExitNodeId) {
+          entryId = entries[(entries.indexOf(entryId) + 1) % entries.length];
+        }
+        const node = dbg.nodes.find(n => n.id === entryId);
+        if (node) {
+          this.position = { x: (node.gx / (dbg.grid.gw - 1)) * 100, y: (node.gy / (dbg.grid.gh - 1)) * 100 };
+        }
+        this.currentPath = null;
+        this.currentPathIndex = 0;
+        this.currentSegmentT = 0;
+        this.exitPending = false;
+        this.lastExitNodeId = -1;
       },
 
       moveToNextWaypoint() {

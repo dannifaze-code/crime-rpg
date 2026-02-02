@@ -7,8 +7,7 @@
  * Design:
  * - We keep the existing CopCarSystem logic (roads + intersection stops).
  * - The 2D #cop-car remains as a POSITION MARKER only (emoji hidden via CSS/JS).
- * - The 3D car anchors to the marker's on-screen center (already includes pan/zoom transforms),
- *   then maps that screen point into our ground plane via raycast.
+ * - The 3D car reads CopCarSystem.position/heading directly (authoritative map percent space).
  * - We recenter the GLB pivot to eliminate "sliding"/orbiting during rotation.
  * - Wheel roll + subtle steering + faint exhaust for realism.
  *
@@ -707,36 +706,6 @@ const CopCar3D = {
   /**
    * Center point of the marker in container pixel space.
    */
-  _getCopScreenPoint() {
-    if (!this.copCarElement || !this.container) return null;
-
-    const copRect = this.copCarElement.getBoundingClientRect();
-    const base = this.layer || this.container;
-    if (!base) return null;
-
-    const baseRect = base.getBoundingClientRect();
-
-    if (baseRect.width <= 0 || baseRect.height <= 0) return null;
-
-    const cx = (copRect.left + copRect.right) * 0.5 - baseRect.left;
-    const cy = (copRect.top + copRect.bottom) * 0.5 - baseRect.top;
-
-    if (!isFinite(cx) || !isFinite(cy)) return null;
-
-    return { x: cx, y: cy, w: baseRect.width, h: baseRect.height };
-  },
-
-  _screenToGroundWorld(screenPt) {
-    const ndcX = (screenPt.x / screenPt.w) * 2 - 1;
-    const ndcY = -((screenPt.y / screenPt.h) * 2 - 1);
-
-    this._raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), this.camera);
-
-    const hit = new THREE.Vector3();
-    const ok = this._raycaster.ray.intersectPlane(this._groundPlane, hit);
-    return ok ? hit : null;
-  },
-
   _angleDiff(a, b) {
     let d = a - b;
     while (d > Math.PI) d -= Math.PI * 2;
@@ -769,29 +738,20 @@ const CopCar3D = {
     let hasCopSystemPos = false;
 
     const cs = (typeof window !== 'undefined') ? window.CopCarSystem : null;
-
-    if (cs && cs.position) {
-      const px = Number(cs.position.x);
-      const py = Number(cs.position.y);
-      if (isFinite(px) && isFinite(py)) {
-        targetWorld = new THREE.Vector3(px, 0, py); // x=percentX, z=percentY
-        hasCopSystemPos = true;
-      }
+    if (!cs || !cs.position) {
+      this._updateSmoke(dt, 0);
+      return;
     }
 
-    // Fallback: derive from the DOM marker center if CopCarSystem isn't available.
-    if (!targetWorld) {
-      const screenPt = this._getCopScreenPoint();
-      if (!screenPt) {
-        this._updateSmoke(dt, 0);
-        return;
-      }
-      targetWorld = this._screenToGroundWorld(screenPt);
-      if (!targetWorld) {
-        this._updateSmoke(dt, 0);
-        return;
-      }
+    const px = Number(cs.position.x);
+    const py = Number(cs.position.y);
+    if (!isFinite(px) || !isFinite(py)) {
+      this._updateSmoke(dt, 0);
+      return;
     }
+
+    targetWorld = new THREE.Vector3(px, 0, py); // x=percentX, z=percentY
+    hasCopSystemPos = true;
 
     this._hasValidPose = true;
 
