@@ -324,6 +324,7 @@ const CopCar3D = {
   _addModelToScene(model, allowDefer = true) {
     const result = { success: false, deferred: false, error: null };
     if (!model) return result;
+    const debugEnabled = !!this.config?.debug?.enabled;
     if (this.copRoot) {
       try {
         if (model.parent && model.parent !== this.copRoot) {
@@ -331,6 +332,14 @@ const CopCar3D = {
         }
         this.copRoot.add(model);
         result.success = true;
+        if (debugEnabled) {
+          console.log('[CopCar3D] Model attached to copRoot', {
+            copRootChildren: this.copRoot.children.length,
+            modelName: model.name || 'unnamed',
+            modelPosition: { x: model.position.x, y: model.position.y, z: model.position.z },
+            modelScale: model.scale ? { x: model.scale.x, y: model.scale.y, z: model.scale.z } : null
+          });
+        }
         return result;
       } catch (e) {
         console.warn('[CopCar3D] Model attach failed:', e);
@@ -341,6 +350,9 @@ const CopCar3D = {
     if (allowDefer) {
       this._pendingModelRoot = model;
       result.deferred = true;
+      if (debugEnabled) {
+        console.log('[CopCar3D] Model attach deferred (copRoot not ready)');
+      }
     }
     return result;
   },
@@ -594,7 +606,22 @@ const CopCar3D = {
           const debugEnabled = !!this.config?.debug?.enabled;
           visual.name = 'CopCarVisual';
           if (debugEnabled) {
-            console.log('[CopCar3D] GLB LOADED', { children: visual.children?.length || 0 });
+            let meshCount = 0;
+            let totalVertices = 0;
+            visual.traverse((obj) => {
+              if (obj.isMesh) {
+                meshCount++;
+                if (obj.geometry && obj.geometry.attributes && obj.geometry.attributes.position) {
+                  totalVertices += obj.geometry.attributes.position.count;
+                }
+              }
+            });
+            console.log('[CopCar3D] GLB LOADED', {
+              children: visual.children?.length || 0,
+              meshCount,
+              totalVertices,
+              visible: visual.visible
+            });
           }
 
           // Scale the model to be visible in the 100-unit coordinate space (temporary debug boost).
@@ -822,11 +849,15 @@ const CopCar3D = {
       const cam = this.camera;
       const look = this._cameraLookAt;
       const root = this.copRoot;
+      const mdl = this.model;
       console.log('[CopCar3D] Debug', {
         camera: cam ? { x: cam.position.x, y: cam.position.y, z: cam.position.z } : null,
         lookAt: look ? { x: look.x, y: look.y, z: look.z } : null,
-        copRoot: root ? { x: root.position.x, y: root.position.y, z: root.position.z } : null,
-        copChildren: root ? root.children.length : 0
+        copRoot: root ? { x: root.position.x, y: root.position.y, z: root.position.z, children: root.children.length } : null,
+        model: mdl ? { x: mdl.position.x, y: mdl.position.y, z: mdl.position.z, visible: mdl.visible } : null,
+        modelLoaded: this.modelLoaded,
+        modelInCopRoot: root && mdl ? root.children.includes(mdl) : false,
+        sceneChildren: this.scene ? this.scene.children.length : 0
       });
     }
 
