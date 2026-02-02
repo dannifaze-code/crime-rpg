@@ -5994,9 +5994,15 @@ body {
   /* Center the clipboard icon and make it same size as Cash icon */
   width: 70px;
   height: 70px;
-  top: 50%;
+  top: calc(50% - 6px);
   left: 50%;
   transform: translate(-50%, -50%);
+}
+
+.crime-card.card-heat-log .crime-card-label,
+.crime-card.card-heat-log .crime-card-value {
+  position: relative;
+  top: -4px;
 }
 
 .crime-card.card-expense-log .crime-card-icon {
@@ -6342,6 +6348,12 @@ body {
     aspect-ratio: unset;
   }
 
+  .crime-card.card-heat-log {
+    height: auto;
+    min-height: 160px;
+    max-height: none;
+  }
+
   /* Skill tree card - flexible height to prevent text clipping */
   .crime-card.card-skill-tree,
   .crime-card.skill-tree-card {
@@ -6427,6 +6439,12 @@ body {
     max-height: none;
   }
 
+  .crime-card.card-heat-log {
+    height: auto;
+    min-height: 140px;
+    max-height: none;
+  }
+
   /* Skill tree card - flexible height to prevent text clipping */
   .crime-card.card-skill-tree,
   .crime-card.skill-tree-card {
@@ -6481,4 +6499,3 @@ body {
 .stat-grid {
   display: none !important;
 }
-
