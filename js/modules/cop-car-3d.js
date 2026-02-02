@@ -42,6 +42,7 @@ const CopCar3D = {
   model: null,          // pivot group we move/rotate
   modelVisual: null,    // gltf.scene (offset inside pivot)
   modelLoaded: false,
+  copRoot: null,
   _pendingModelRoot: null,
   modelPath: 'sprites/3d-models/cop-car.glb',
 
@@ -68,6 +69,10 @@ const CopCar3D = {
   // ray
   _raycaster: null,
   _groundPlane: null,
+  _cameraLookAt: null,
+  _lastDebugLog: 0,
+  _debugAxes: null,
+  _debugCube: null,
 
   // wheels
   _wheels: [],
@@ -302,7 +307,7 @@ const CopCar3D = {
     } else {
       const reason = attachResult.error
         ? (attachResult.error.message || attachResult.error.toString())
-        : (this.scene ? 'attach failed' : 'scene not ready');
+        : (this.copRoot ? 'attach failed' : 'root not ready');
       console.warn('[CopCar3D] Pending model attach deferred:', reason);
     }
   },
@@ -310,12 +315,12 @@ const CopCar3D = {
   _addModelToScene(model, allowDefer = true) {
     const result = { success: false, deferred: false, error: null };
     if (!model) return result;
-    if (this.scene) {
+    if (this.copRoot) {
       try {
-        if (model.parent && model.parent !== this.scene) {
+        if (model.parent && model.parent !== this.copRoot) {
           model.parent.remove(model);
         }
-        this.scene.add(model);
+        this.copRoot.add(model);
         result.success = true;
         return result;
       } catch (e) {
@@ -416,6 +421,10 @@ const CopCar3D = {
     } catch (e) {}
 
     this.scene = new THREE.Scene();
+    this.copRoot = new THREE.Group();
+    this.copRoot.name = 'CopCarRoot';
+    this.scene.add(this.copRoot);
+    this._attachPendingModel();
 
     // Orthographic camera in "percent space" (0..100) so the 3D car aligns with
     // the 2D marker which is positioned using % left/top.
@@ -424,7 +433,8 @@ const CopCar3D = {
     this.camera = new THREE.OrthographicCamera(0, 100, 100, 0, 0.1, 500);
     this.camera.up.set(0, 0, -1); // Set up vector to -Z before lookAt (avoids gimbal lock when looking down Y)
     this.camera.position.set(50, 120, 50);
-    this.camera.lookAt(50, 0, 50);
+    this._cameraLookAt = new THREE.Vector3(50, 0, 50);
+    this.camera.lookAt(this._cameraLookAt);
 
     this.renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, premultipliedAlpha: false });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.config.maxPixelRatio));
@@ -461,6 +471,7 @@ const CopCar3D = {
     this._groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
     this._setupLighting();
+    this._setupDebugHelpers();
     this._ensureSmokeSystem();
     await this._loadModel();
     this._attachPendingModel();
@@ -473,15 +484,15 @@ const CopCar3D = {
   },
 
   _setupLighting() {
-    this.lights.ambient = new THREE.AmbientLight(0xffffff, 0.45);
+    this.lights.ambient = new THREE.AmbientLight(0xffffff, 1.0);
     this.scene.add(this.lights.ambient);
 
     this.lights.hemi = new THREE.HemisphereLight(0xffffff, 0x2a2a2a, 0.65);
     this.lights.hemi.position.set(0, 100, 0);
     this.scene.add(this.lights.hemi);
 
-    this.lights.directional = new THREE.DirectionalLight(0xffffff, 1.05);
-    this.lights.directional.position.set(18, 35, 14);
+    this.lights.directional = new THREE.DirectionalLight(0xffffff, 1.0);
+    this.lights.directional.position.set(50, 100, 50);
 
     if (this.config.shadowsEnabled) {
       this.lights.directional.castShadow = true;
@@ -534,6 +545,24 @@ const CopCar3D = {
     });
   },
 
+  _setupDebugHelpers() {
+    if (!this.scene) return;
+
+    if (!this._debugAxes) {
+      this._debugAxes = new THREE.AxesHelper(50);
+      this._debugAxes.position.set(50, 0, 50);
+      this.scene.add(this._debugAxes);
+    }
+
+    if (!this._debugCube) {
+      const geometry = new THREE.BoxGeometry(5, 5, 5);
+      const material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+      this._debugCube = new THREE.Mesh(geometry, material);
+      this._debugCube.position.set(50, 2.5, 50);
+      this.scene.add(this._debugCube);
+    }
+  },
+
   async _loadModel() {
     console.log('[CopCar3D] Loading:', this.modelPath);
 
@@ -548,11 +577,10 @@ const CopCar3D = {
 
           const visual = gltf.scene;
           visual.name = 'CopCarVisual';
+          console.log('[CopCar3D] GLB LOADED', { children: visual.children?.length || 0 });
 
           // Scale the model to be visible in the 100-unit coordinate space.
-          // A typical car model is ~4-5 units long, so scale 2.0 makes it ~8-10 units
-          // which is about 8-10% of the map width - reasonably visible.
-          visual.scale.set(2.0, 2.0, 2.0);
+          visual.scale.setScalar(10);
 
           // Recenter pivot to bounds center, put wheels on ground (y=0)
           try {
@@ -561,6 +589,12 @@ const CopCar3D = {
             box.getCenter(center);
             const minY = box.min.y;
             visual.position.set(-center.x, -minY, -center.z);
+            const size = new THREE.Vector3();
+            box.getSize(size);
+            console.log('[CopCar3D] GLB bbox', {
+              size: { x: size.x, y: size.y, z: size.z },
+              center: { x: center.x, y: center.y, z: center.z }
+            });
           } catch (e) {
             // fallback: no recenter
           }
@@ -595,8 +629,7 @@ const CopCar3D = {
 
           pivot.add(visual);
 
-          // Set base ride height (slightly above plane)
-          pivot.position.y = 0.15;
+          pivot.position.set(0, 0, 0);
 
           this.model = pivot;
           this.modelVisual = visual;
@@ -760,6 +793,19 @@ const CopCar3D = {
     const now = performance.now();
     const dt = this._lastTickTime ? Math.min(0.05, (now - this._lastTickTime) / 1000) : (1 / 60);
     this._lastTickTime = now;
+
+    if (now - this._lastDebugLog >= 1000) {
+      this._lastDebugLog = now;
+      const cam = this.camera;
+      const look = this._cameraLookAt;
+      const root = this.copRoot;
+      console.log('[CopCar3D] Debug', {
+        camera: cam ? { x: cam.position.x, y: cam.position.y, z: cam.position.z } : null,
+        lookAt: look ? { x: look.x, y: look.y, z: look.z } : null,
+        copRoot: root ? { x: root.position.x, y: root.position.y, z: root.position.z } : null,
+        copChildren: root ? root.children.length : 0
+      });
+    }
 
     // Keep our overlay layer locked to the current map transform.
     this._syncLayerTransform();
@@ -1120,6 +1166,15 @@ const CopCar3D = {
       if (this.scene && this.model) {
         try { this.scene.remove(this.model); } catch (e) {}
       }
+      if (this.scene && this.copRoot) {
+        try { this.scene.remove(this.copRoot); } catch (e) {}
+      }
+      if (this._debugAxes && this.scene) {
+        try { this.scene.remove(this._debugAxes); } catch (e) {}
+      }
+      if (this._debugCube && this.scene) {
+        try { this.scene.remove(this._debugCube); } catch (e) {}
+      }
 
       if (this.renderer) {
         this.renderer.dispose();
@@ -1136,7 +1191,11 @@ const CopCar3D = {
       this.model = null;
       this.modelVisual = null;
       this.modelLoaded = false;
+      this.copRoot = null;
       this._pendingModelRoot = null;
+      this._cameraLookAt = null;
+      this._debugAxes = null;
+      this._debugCube = null;
 
       this._wheels = [];
       this._frontWheels = [];
