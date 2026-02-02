@@ -5945,8 +5945,12 @@ body {
 
 .crime-card.card-players-online .crime-card-icon {
   background-image: url('../sprites/ui-new/PlayerProfile/PlayersOnlineIconProfile.png');
-  width: 58px;
-  height: 58px;
+  /* Center the icon and make it same size as cash icon */
+  width: 70px;
+  height: 70px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
 }
 
 .crime-card.card-skill-tree .crime-card-icon {
