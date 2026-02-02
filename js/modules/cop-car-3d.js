@@ -7,7 +7,7 @@
  * Design:
  * - We keep the existing CopCarSystem logic (roads + intersection stops).
  * - The 2D #cop-car remains as a POSITION MARKER only (emoji hidden via CSS/JS).
- * - The 3D car reads CopCarSystem.position/heading directly (authoritative map percent space).
+ * - The 3D car reads CopCarSystem.position/heading directly (authoritative map percent space, no DOM fallback).
  * - We recenter the GLB pivot to eliminate "sliding"/orbiting during rotation.
  * - Wheel roll + subtle steering + faint exhaust for realism.
  *
@@ -703,9 +703,6 @@ const CopCar3D = {
     tick();
   },
 
-  /**
-   * Center point of the marker in container pixel space.
-   */
   _angleDiff(a, b) {
     let d = a - b;
     while (d > Math.PI) d -= Math.PI * 2;
@@ -735,10 +732,10 @@ const CopCar3D = {
     // Prefer authoritative CopCarSystem percent-coordinates.
     // This makes the 3D car movement independent from DOM transforms and prevents zoom-induced spin.
     let targetWorld = null;
-    let hasCopSystemPos = false;
 
     const cs = (typeof window !== 'undefined') ? window.CopCarSystem : null;
     if (!cs || !cs.position) {
+      // No authoritative cop position yet; skip rendering until CopCarSystem is ready.
       this._updateSmoke(dt, 0);
       return;
     }
@@ -751,7 +748,6 @@ const CopCar3D = {
     }
 
     targetWorld = new THREE.Vector3(px, 0, py); // x=percentX, z=percentY
-    hasCopSystemPos = true;
 
     this._hasValidPose = true;
 
@@ -792,7 +788,7 @@ const CopCar3D = {
     let desiredYaw = null;
     const mv = Math.abs(moveVec.x) + Math.abs(moveVec.z);
 
-    if (hasCopSystemPos && cs && typeof cs.heading === 'number' && isFinite(cs.heading)) {
+    if (typeof cs.heading === 'number' && isFinite(cs.heading)) {
       // CopCarSystem.heading is atan2(dx, dy) measured counter-clockwise from +Y (down on map).
       // Three.js rotation.y rotates counter-clockwise when viewed from above.
       // We negate the heading to convert to clockwise rotation for proper road alignment.
