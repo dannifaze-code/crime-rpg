@@ -6001,14 +6001,14 @@ body {
 
 .crime-card.card-heat-log .crime-card-label {
   position: relative;
-  top: -6px;
+  top: -10px;
   left: 3px;
   color: #888888;
 }
 
 .crime-card.card-heat-log .crime-card-value {
   position: relative;
-  top: -6px;
+  top: -10px;
   left: 3px;
 }
 
