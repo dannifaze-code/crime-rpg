@@ -11402,6 +11402,7 @@ function updateTurfDefense(dt) {
 
       console.log('==================================');
     }
+    window.initStaticMap = initStaticMap;
     // ========================================
     // ROAD-MASK PATHFINDING (A* on a grid) for Cop Patrol
     // ========================================
@@ -26668,7 +26669,13 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       // Build the road mask used by RoadPathfinder (and set the map background div).
       // Even though the static map is also set via CSS, we still load the image here
       // so pathfinding can sample pixels reliably.
-      try { initStaticMap(); } catch (e) { console.warn('initStaticMap failed:', e); }
+      try {
+        if (typeof window.initStaticMap === 'function') {
+          window.initStaticMap();
+        } else {
+          console.warn('initStaticMap failed: initStaticMap not available');
+        }
+      } catch (e) { console.warn('initStaticMap failed:', e); }
 
       console.log('[DEBUG] Skipping roads and buildings (using static map)...');
       // DISABLED: Roads and buildings generation not needed for static 2D map
