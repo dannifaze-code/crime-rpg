@@ -6286,13 +6286,20 @@ body {
     aspect-ratio: unset;
   }
 
-  /* Stats and Players cards - SAME height as other cards for uniform grid */
+  /* Players and Leaderboard cards - SAME height as other cards for uniform grid */
   .crime-card.card-players-online,
-  .crime-card.card-stats,
   .crime-card.card-leaderboard {
     height: 160px;
     min-height: 160px;
     max-height: 160px;
+    aspect-ratio: unset;
+  }
+
+  /* Stats card - auto-sizing to prevent clipping of additional stats */
+  .crime-card.card-stats {
+    height: auto;
+    min-height: 160px;
+    max-height: none;
     aspect-ratio: unset;
   }
 
@@ -6359,11 +6366,17 @@ body {
   }
 
   .crime-card.card-players-online,
-  .crime-card.card-stats,
   .crime-card.card-leaderboard {
     height: 140px;
     min-height: 140px;
     max-height: 140px;
+  }
+
+  /* Stats card - auto-sizing to prevent clipping of additional stats */
+  .crime-card.card-stats {
+    height: auto;
+    min-height: 140px;
+    max-height: none;
   }
 
   .crime-card.card-profile {
