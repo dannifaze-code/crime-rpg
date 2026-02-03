@@ -18775,8 +18775,8 @@ function ensureLandmarkProperties() {
       updateLeaderboard() {
         console.log('📊 Storage.updateLeaderboard() called');
         
-        // Check if user is authenticated first
-        if (!auth || !auth.currentUser) {
+        // Check if user is authenticated first (auth may not exist if Firebase failed to load)
+        if (typeof auth === 'undefined' || !auth || !auth.currentUser) {
           console.warn('⚠️ User not authenticated - skipping leaderboard update');
           return;
         }
@@ -26817,7 +26817,11 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       console.log('=== [DEBUG] initializeGame() called ===');
 
       // CRITICAL: Safety check - don't initialize game if no user is authenticated
-      if (typeof GoogleAuthManager !== 'undefined' && !GoogleAuthManager.isSignedIn()) {
+      // Allow either Google Auth OR local auth to proceed
+      const isGoogleAuthed = typeof GoogleAuthManager !== 'undefined' && GoogleAuthManager.isSignedIn();
+      const isLocalAuthed = typeof AuthManager !== 'undefined' && AuthManager.isLoggedIn();
+      
+      if (!isGoogleAuthed && !isLocalAuthed) {
         console.error('[initializeGame] ❌ Prevented game initialization - no authenticated user');
         return;
       }
@@ -26955,12 +26959,14 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       // ready immediately, but CopCarSystem will retry building paths until it is.
       console.log('[DEBUG] Initializing static map and RoadPathfinder...');
       try {
-        // initStaticMap is exposed to window immediately after its definition,
-        // so we always call via window.initStaticMap() for consistency
-        if (typeof window.initStaticMap === 'function') {
+        // Call initStaticMap directly since it's defined in the same scope
+        // Also exposed to window for external module access
+        if (typeof initStaticMap === 'function') {
+          initStaticMap();
+        } else if (typeof window.initStaticMap === 'function') {
           window.initStaticMap();
         } else {
-          console.warn('initStaticMap failed: window.initStaticMap not available');
+          console.warn('initStaticMap failed: function not available');
         }
       } catch (e) { console.warn('initStaticMap failed:', e); }
       
