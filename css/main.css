@@ -5041,20 +5041,85 @@
    Bottom UI area (bottom-menu = 180px) + player nameplate margin = ~200px bottom
    This creates a safe "arena box" for sprites to live in */
 
+/* Debug arena outline - toggle via JS: document.body.classList.add('battle-debug') */
+.battle-debug .battle-player-sprite-container,
+.battle-debug .battle-enemy-sprite-container {
+  outline: 2px dashed rgba(0, 255, 0, 0.7);
+  outline-offset: -2px;
+}
+.battle-debug .battle-player-sprite-container::after,
+.battle-debug .battle-enemy-sprite-container::after {
+  content: attr(data-debug-label);
+  position: absolute;
+  bottom: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  color: #0f0;
+  background: rgba(0,0,0,0.8);
+  padding: 2px 4px;
+  white-space: nowrap;
+}
+
+/* ====== BATTLE PLAYER SPRITE ANIMATIONS ====== */
+/* Idle breathing/bob animation - subtle and continuous */
+@keyframes battle-idle-bob {
+  0%, 100% { transform: scaleX(-1) translateY(0); }
+  50% { transform: scaleX(-1) translateY(-3px); }
+}
+
+/* Attack recoil animation - quick kickback then settle */
+@keyframes battle-attack-recoil {
+  0% { transform: scaleX(-1) translateX(0) translateY(0); }
+  15% { transform: scaleX(-1) translateX(12px) translateY(-2px); }
+  40% { transform: scaleX(-1) translateX(-4px) translateY(1px); }
+  100% { transform: scaleX(-1) translateX(0) translateY(0); }
+}
+
+/* Hit reaction animation - shake + knockback + flash */
+@keyframes battle-hit-shake {
+  0% { transform: scaleX(-1) translateX(0); filter: drop-shadow(0 8px 16px rgba(0,0,0,0.6)) brightness(1); }
+  10% { transform: scaleX(-1) translateX(-8px); filter: drop-shadow(0 8px 16px rgba(0,0,0,0.6)) brightness(2); }
+  20% { transform: scaleX(-1) translateX(6px); filter: drop-shadow(0 8px 16px rgba(0,0,0,0.6)) brightness(1.5); }
+  30% { transform: scaleX(-1) translateX(-5px); filter: drop-shadow(0 8px 16px rgba(0,0,0,0.6)) brightness(1.2); }
+  50% { transform: scaleX(-1) translateX(3px); filter: drop-shadow(0 8px 16px rgba(0,0,0,0.6)) brightness(1); }
+  70% { transform: scaleX(-1) translateX(-2px); }
+  100% { transform: scaleX(-1) translateX(0); filter: drop-shadow(0 8px 16px rgba(0,0,0,0.6)) brightness(1); }
+}
+
+/* Aim posture micro-lean (optional subtle effect) */
+@keyframes battle-aim-lean {
+  0%, 100% { transform: scaleX(-1) translateX(0) rotate(0deg); }
+  50% { transform: scaleX(-1) translateX(-2px) rotate(-1deg); }
+}
+
+/* Respect prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  .battle-player-portrait img,
+  .battle-player-portrait img.battle-anim-idle,
+  .battle-player-portrait img.battle-anim-attack,
+  .battle-player-portrait img.battle-anim-hit {
+    animation: none !important;
+    transform: scaleX(-1) !important;
+  }
+}
+
 /* Battle player sprite container - RIGHT side, faces LEFT toward enemy */
+/* INCREASED SIZE: ~65-75% of arena height for better visibility */
 .battle-player-sprite-container {
   position: absolute;
   /* Arena-relative positioning: right side with safe padding */
-  right: 15%;
+  right: 8%;
   /* Position above bottom-menu (180px) + nameplate clearance */
-  bottom: clamp(200px, calc(180px + 5vh), 280px);
+  bottom: clamp(195px, calc(180px + 3vh), 240px);
   z-index: 25; /* Above background, below UI panels (z-index: 50) */
-  /* Responsive sizing: scale with viewport, max 60% of available arena height */
-  width: clamp(100px, 22vw, 180px);
-  height: clamp(100px, 22vw, 180px);
+  /* Responsive sizing: LARGER - scale with viewport height for proper arena coverage */
+  /* Target: 65-75% of arena height (arena ~= 100vh - 150px top - 200px bottom = ~450px on mobile) */
+  width: clamp(140px, 35vw, 280px);
+  height: clamp(200px, 45vh, 380px);
   pointer-events: none;
-  /* Overflow hidden prevents fallback top-down sprites from extending outside container bounds */
-  overflow: hidden;
+  /* Allow sprite shadows to render outside bounds */
+  overflow: visible;
 }
 
 /* Battle player sprite - uses free-roam sprite style (fallback) */
@@ -5066,13 +5131,13 @@
   transform: scaleX(-1);
 }
 
-/* Battle player portrait - NEW front-facing sprite for battle-only */
+/* Battle player portrait - NEW side-view sprite for battle-only */
 .battle-player-portrait {
   position: relative;
   width: 100%;
   height: 100%;
   display: flex;
-  align-items: center;
+  align-items: flex-end; /* Anchor sprite to bottom of container */
   justify-content: center;
 }
 
@@ -5082,10 +5147,31 @@
   width: auto;
   height: auto;
   object-fit: contain;
-  /* Face LEFT toward enemy - horizontal mirror only */
+  /* Face LEFT toward enemy - horizontal mirror only (no rotation) */
   transform: scaleX(-1);
   filter: drop-shadow(0 8px 16px rgba(0,0,0,0.6));
   image-rendering: auto; /* Better quality for portrait art */
+  /* Default idle animation - subtle bob */
+  animation: battle-idle-bob 2.5s ease-in-out infinite;
+  /* Smooth transitions between animation states */
+  transition: filter 0.1s ease;
+}
+
+/* Animation state classes - applied via JavaScript */
+.battle-player-portrait img.battle-anim-idle {
+  animation: battle-idle-bob 2.5s ease-in-out infinite;
+}
+
+.battle-player-portrait img.battle-anim-attack {
+  animation: battle-attack-recoil 0.35s ease-out forwards;
+}
+
+.battle-player-portrait img.battle-anim-hit {
+  animation: battle-hit-shake 0.4s ease-out forwards;
+}
+
+.battle-player-portrait img.battle-anim-aim {
+  animation: battle-aim-lean 1.5s ease-in-out infinite;
 }
 
 .battle-sprite-layer {
@@ -5139,42 +5225,44 @@
 
 /* ====== MOBILE RESPONSIVE BATTLE SPRITES ====== */
 /* Mobile-first: smaller screens get proportional sizing */
+/* Player sprite is larger (~65-75% arena height), enemy matches proportionally */
 @media (max-width: 600px) {
   .battle-player-sprite-container {
-    width: clamp(90px, 26vw, 130px);
-    height: clamp(90px, 26vw, 130px);
-    right: 10%;
-    bottom: clamp(190px, calc(170px + 6vh), 270px);
+    /* Larger size for mobile - maintain visibility */
+    width: clamp(110px, 32vw, 180px);
+    height: clamp(160px, 40vh, 280px);
+    right: 5%;
+    bottom: clamp(190px, calc(170px + 4vh), 230px);
   }
   
   .battle-enemy-sprite {
-    max-width: clamp(110px, 32vw, 160px);
-    max-height: clamp(110px, 32vw, 160px);
-  }
-  
-  .battle-enemy-sprite-container {
-    left: 8%;
-    bottom: clamp(190px, calc(170px + 6vh), 270px);
-  }
-}
-
-/* Extra small screens (narrow phones) */
-@media (max-width: 400px) {
-  .battle-player-sprite-container {
-    width: clamp(70px, 24vw, 100px);
-    height: clamp(70px, 24vw, 100px);
-    right: 8%;
-    bottom: clamp(180px, calc(165px + 5vh), 240px);
-  }
-  
-  .battle-enemy-sprite {
-    max-width: clamp(90px, 28vw, 120px);
-    max-height: clamp(90px, 28vw, 120px);
+    max-width: clamp(120px, 35vw, 180px);
+    max-height: clamp(160px, 40vh, 240px);
   }
   
   .battle-enemy-sprite-container {
     left: 5%;
-    bottom: clamp(180px, calc(165px + 5vh), 240px);
+    bottom: clamp(190px, calc(170px + 4vh), 230px);
+  }
+}
+
+/* Extra small screens (narrow phones like 360px width) */
+@media (max-width: 400px) {
+  .battle-player-sprite-container {
+    width: clamp(90px, 28vw, 140px);
+    height: clamp(130px, 35vh, 220px);
+    right: 3%;
+    bottom: clamp(185px, calc(165px + 4vh), 210px);
+  }
+  
+  .battle-enemy-sprite {
+    max-width: clamp(100px, 30vw, 140px);
+    max-height: clamp(130px, 35vh, 200px);
+  }
+  
+  .battle-enemy-sprite-container {
+    left: 3%;
+    bottom: clamp(185px, calc(165px + 4vh), 210px);
   }
 }
 
@@ -5183,20 +5271,20 @@
   .battle-player-sprite-container,
   .battle-enemy-sprite-container {
     /* Raise sprites higher on tall screens to stay in visible arena */
-    bottom: clamp(220px, calc(180px + 8vh), 320px);
+    bottom: clamp(200px, calc(180px + 5vh), 260px);
   }
 }
 
 /* Short/wide aspect ratios - prevent sprites from being too large */
 @media (min-aspect-ratio: 16/10) {
   .battle-player-sprite-container {
-    width: clamp(100px, 15vw, 160px);
-    height: clamp(100px, 15vw, 160px);
+    width: clamp(120px, 18vw, 200px);
+    height: clamp(180px, 30vh, 280px);
   }
   
   .battle-enemy-sprite {
-    max-width: clamp(120px, 18vw, 200px);
-    max-height: clamp(120px, 18vw, 200px);
+    max-width: clamp(140px, 22vw, 220px);
+    max-height: clamp(180px, 30vh, 250px);
   }
 }
 
