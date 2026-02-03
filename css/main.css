@@ -5053,7 +5053,7 @@
   width: clamp(100px, 22vw, 180px);
   height: clamp(100px, 22vw, 180px);
   pointer-events: none;
-  /* Ensure sprite doesn't overflow arena */
+  /* Overflow hidden prevents fallback top-down sprites from extending outside container bounds */
   overflow: hidden;
 }
 
@@ -5120,7 +5120,7 @@
   /* Position above bottom-menu with same vertical alignment as player */
   bottom: clamp(200px, calc(180px + 5vh), 280px);
   z-index: 25; /* Above background, below UI panels */
-  /* Ensure container doesn't cause clipping issues */
+  /* Overflow visible allows enemy sprites to display drop shadows without clipping */
   overflow: visible;
 }
 
@@ -5538,21 +5538,21 @@
     font-size: 14px;
   }
 
-  /* Enemy sprite - positioned on the LEFT, higher up to avoid overlap */
+  /* Legacy pokemon-bottom class (enemy sprite on LEFT) - sizing now handled by .battle-enemy-sprite */
   .player-sprite-container img,
   .pokemon-bottom {
-    /* Let .battle-enemy-sprite handle sizing via clamp() */
+    /* Sizing handled by .battle-enemy-sprite via clamp() in main styles */
   }
 
-  /* Player sprite - positioned on the RIGHT */
+  /* Legacy pokemon-top class (player sprite on RIGHT) - sizing now handled by .battle-player-sprite-container */
   .enemy-sprite-container img,
   .pokemon-top {
-    /* Let .battle-player-sprite-container handle sizing via clamp() */
+    /* Sizing handled by .battle-player-sprite-container via clamp() in main styles */
   }
 
-  /* Enemy sprite container (on left side) - let CSS clamp handle positioning */
+  /* Enemy sprite container (on left side) - positioning now handled by main styles */
   .box-bottom-left.battle-enemy-sprite-container {
-    /* Removed !important - using clamp() in main styles */
+    /* Positioning handled via clamp() in main styles - removed !important overrides */
   }
 
   .bottom-menu {
