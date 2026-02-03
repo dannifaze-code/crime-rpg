@@ -37,13 +37,25 @@ const WeatherOverlay = {
           return false;
         }
         
-        // Check if container is visible
+        // Known TurfMap dimensions (fallback when DOM isn't rendered yet)
+        const TURF_MAP_WIDTH = 1024;
+        const TURF_MAP_HEIGHT = 1536;
+
+        // Check if container is visible - try multiple sources for dimensions
         const rect = this.container.getBoundingClientRect();
-        if (rect.width === 0 || rect.height === 0) {
-          console.warn('[WeatherOverlay] Container has zero dimensions - refusing to initialize');
+        let useWidth = rect.width || this.container.clientWidth || this.container.offsetWidth;
+        let useHeight = rect.height || this.container.clientHeight || this.container.offsetHeight;
+
+        // If still zero, use fallback dimensions but set up observer for resize
+        if (useWidth === 0 || useHeight === 0) {
+          console.warn('[WeatherOverlay] Container has zero dimensions - using fallback');
           console.warn('[WeatherOverlay] Rect:', rect);
 
-          // Set up a ResizeObserver to automatically initialize when container gets valid dimensions
+          // Use fallback dimensions to allow initialization
+          useWidth = TURF_MAP_WIDTH;
+          useHeight = TURF_MAP_HEIGHT;
+
+          // Set up a ResizeObserver to resize when container gets valid dimensions
           if (!this._pendingInitObserver && typeof ResizeObserver !== 'undefined') {
             console.log('[WeatherOverlay] Setting up ResizeObserver to detect valid dimensions...');
             this._pendingInitObserver = new ResizeObserver((entries) => {
@@ -51,38 +63,38 @@ const WeatherOverlay = {
                 const { width, height } = entry.contentRect;
                 if (width > 0 && height > 0) {
                   console.log('[WeatherOverlay] ✅ Container now has valid dimensions:', width, 'x', height);
-                  console.log('[WeatherOverlay] Automatically initializing...');
 
                   // Disconnect observer
                   this._pendingInitObserver.disconnect();
                   this._pendingInitObserver = null;
 
-                  // Initialize now that we have valid dimensions
-                  this.init();
+                  // Resize the renderer to match actual dimensions
+                  if (this.renderer && this.camera) {
+                    this.renderer.setSize(width, height);
+                    this.camera.left = width / -2;
+                    this.camera.right = width / 2;
+                    this.camera.top = height / 2;
+                    this.camera.bottom = height / -2;
+                    this.camera.updateProjectionMatrix();
+                    console.log('[WeatherOverlay] ✅ Resized to actual dimensions:', width, 'x', height);
+                  }
                 }
               }
             });
             this._pendingInitObserver.observe(this.container);
           }
-
-          return false;
         }
 
         // Create Three.js scene
         this.scene = new THREE.Scene();
 
         // Create orthographic camera (2D projection for weather effects)
-        const width = this.container.clientWidth || rect.width;
-        const height = this.container.clientHeight || rect.height;
+        // Use the dimensions we computed earlier (includes fallback handling)
+        const width = useWidth;
+        const height = useHeight;
 
-        // Double-check we have valid dimensions
-        if (width <= 0 || height <= 0) {
-          console.error('[WeatherOverlay] Failed to get valid dimensions:', width, 'x', height);
-          return false;
-        }
-        
         console.log('[WeatherOverlay] Using dimensions:', width, 'x', height);
-        
+
         this.camera = new THREE.OrthographicCamera(
           width / -2,   // left
           width / 2,    // right
