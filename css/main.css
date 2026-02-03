@@ -5034,6 +5034,104 @@
   image-rendering: pixelated;
 }
 
+/* ====== BATTLE SPRITE STYLES ====== */
+
+/* Battle player sprite container - RIGHT side, faces LEFT toward enemy */
+.battle-player-sprite-container {
+  position: absolute;
+  right: 12%;
+  bottom: 200px;
+  z-index: 20;
+  width: 160px;
+  height: 160px;
+  pointer-events: none;
+}
+
+/* Battle player sprite - uses free-roam sprite style */
+.battle-player-sprite {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  /* Face LEFT toward enemy (player on right side) */
+  transform: scaleX(-1);
+}
+
+.battle-sprite-layer {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 100%;
+  height: 100%;
+  transform: translate(-50%, -50%);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  image-rendering: pixelated;
+}
+
+.battle-sprite-feet {
+  opacity: 0.95;
+  transform: translate(-50%, -50%) scale(0.75);
+}
+
+.battle-sprite-body {
+  opacity: 1;
+  transform: translate(-50%, -50%) translateY(-10%);
+  filter: drop-shadow(0 8px 16px rgba(0,0,0,0.6));
+}
+
+/* Battle enemy sprite - LEFT side, faces RIGHT toward player */
+.battle-enemy-sprite-container {
+  position: absolute;
+  left: 8%;
+  bottom: 200px;
+  z-index: 20;
+}
+
+.battle-enemy-sprite {
+  max-width: 200px;
+  max-height: 200px;
+  filter: drop-shadow(0 8px 16px rgba(0,0,0,0.6));
+  image-rendering: pixelated;
+  /* Face RIGHT toward player (enemy on left side) - no flip needed, sprites face right by default */
+  transform: scaleX(1);
+}
+
+/* Mobile responsive battle sprites */
+@media (max-width: 600px) {
+  .battle-player-sprite-container {
+    width: 100px;
+    height: 100px;
+    right: 8%;
+    bottom: 190px;
+  }
+  
+  .battle-enemy-sprite {
+    max-width: 120px;
+    max-height: 120px;
+  }
+}
+
+@media (max-width: 400px) {
+  .battle-player-sprite-container {
+    width: 80px;
+    height: 80px;
+    right: 5%;
+    bottom: 185px;
+  }
+  
+  .battle-enemy-sprite {
+    max-width: 100px;
+    max-height: 100px;
+  }
+  
+  .battle-enemy-sprite-container {
+    left: 5%;
+  }
+}
+
+/* ====== END BATTLE SPRITE STYLES ====== */
+
 /* Player Info Panel - Bottom Right */
 .box-top-right {
   position: absolute;
