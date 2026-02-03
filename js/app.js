@@ -15351,65 +15351,81 @@ function ensureLandmarkProperties() {
 
       _buildNextRoadPath() {
         const rp = window.RoadPathfinder;
-        if (!rp || !rp.ready) {
-          // RoadPathfinder not ready yet, will retry on next animation frame
-          return;
-        }
-
-        const dbg = rp.getDebugData ? rp.getDebugData() : null;
-        const entryNodes = (typeof rp.getEntryNodes === 'function')
-          ? rp.getEntryNodes()
-          : (dbg ? (dbg.entryNodes || []) : []);
-        const hasEntries = entryNodes.length > 1;
+        const rpReady = rp && rp.ready;
 
         let fromPt = this.position;
         let toPt = null;
 
-        if (hasEntries && Math.random() < 0.22) {
-          const exitId = entryNodes[Math.floor(Math.random() * entryNodes.length)];
-          const exitPt = (typeof rp.getNodePercent === 'function') ? rp.getNodePercent(exitId) : null;
-          if (exitPt) {
-            toPt = exitPt;
-            this.lastExitNodeId = exitId;
+        if (rpReady) {
+          // Use RoadPathfinder for smart road-following pathfinding
+          const dbg = rp.getDebugData ? rp.getDebugData() : null;
+          const entryNodes = (typeof rp.getEntryNodes === 'function')
+            ? rp.getEntryNodes()
+            : (dbg ? (dbg.entryNodes || []) : []);
+          const hasEntries = entryNodes.length > 1;
+
+          if (hasEntries && Math.random() < 0.22) {
+            const exitId = entryNodes[Math.floor(Math.random() * entryNodes.length)];
+            const exitPt = (typeof rp.getNodePercent === 'function') ? rp.getNodePercent(exitId) : null;
+            if (exitPt) {
+              toPt = exitPt;
+              this.lastExitNodeId = exitId;
+            }
+          }
+
+          if (!toPt && dbg && Array.isArray(dbg.nodes) && dbg.nodes.length) {
+            const maxAttempts = Math.min(10, dbg.nodes.length);
+            let chosen = null;
+            for (let i = 0; i < maxAttempts; i++) {
+              const candidate = dbg.nodes[Math.floor(Math.random() * dbg.nodes.length)];
+              if (!candidate) continue;
+              if (candidate.id === this.lastTargetNodeId && dbg.nodes.length > 1) continue;
+              const pt = (typeof rp.getNodePercent === 'function')
+                ? rp.getNodePercent(candidate.id)
+                : { x: (candidate.gx / (dbg.grid.gw - 1)) * 100, y: (candidate.gy / (dbg.grid.gh - 1)) * 100 };
+              if (!pt) continue;
+              const dist = Math.hypot(pt.x - fromPt.x, pt.y - fromPt.y);
+              if (dist < 6 && i < maxAttempts - 1) continue;
+              chosen = { id: candidate.id, pt };
+              break;
+            }
+            if (chosen) {
+              toPt = chosen.pt;
+              this.lastTargetNodeId = chosen.id;
+              this.lastExitNodeId = -1;
+            }
           }
         }
 
-        if (!toPt && dbg && Array.isArray(dbg.nodes) && dbg.nodes.length) {
-          const maxAttempts = Math.min(10, dbg.nodes.length);
-          let chosen = null;
-          for (let i = 0; i < maxAttempts; i++) {
-            const candidate = dbg.nodes[Math.floor(Math.random() * dbg.nodes.length)];
-            if (!candidate) continue;
-            if (candidate.id === this.lastTargetNodeId && dbg.nodes.length > 1) continue;
-            const pt = (typeof rp.getNodePercent === 'function')
-              ? rp.getNodePercent(candidate.id)
-              : { x: (candidate.gx / (dbg.grid.gw - 1)) * 100, y: (candidate.gy / (dbg.grid.gh - 1)) * 100 };
-            if (!pt) continue;
-            const dist = Math.hypot(pt.x - fromPt.x, pt.y - fromPt.y);
-            if (dist < 6 && i < maxAttempts - 1) continue;
-            chosen = { id: candidate.id, pt };
-            break;
-          }
-          if (chosen) {
-            toPt = chosen.pt;
-            this.lastTargetNodeId = chosen.id;
-            this.lastExitNodeId = -1;
-          }
-        }
-
+        // Fallback: use predefined patrol waypoints when RoadPathfinder not available
         if (!toPt) {
           const nextIndex = (this.currentWaypointIndex + 1) % this.patrolWaypoints.length;
           toPt = this.patrolWaypoints[nextIndex];
           this.lastExitNodeId = -1;
         }
 
-        const path = (typeof rp.getPathPercent === 'function') ? rp.getPathPercent(fromPt, toPt) : null;
+        // Try to get path from RoadPathfinder, or use simple direct path as fallback
+        let path = null;
+        if (rpReady && typeof rp.getPathPercent === 'function') {
+          path = rp.getPathPercent(fromPt, toPt);
+        }
+        
+        // Fallback: create a simple direct path between points when RoadPathfinder unavailable
+        if (!path || path.length < 2) {
+          // Use waypoint-based simple movement path
+          path = [fromPt, toPt];
+          if (!this._hasLoggedFallbackPath) {
+            this._hasLoggedFallbackPath = true;
+            console.log('🚔 Cop car using fallback waypoint path (RoadPathfinder not ready)');
+          }
+        }
+        
         if (path && path.length >= 2) {
           this.currentPath = path;
           this.currentPathIndex = 0;
           this.currentSegmentT = 0;
           // Log first successful path build for debugging
-          if (!this._hasLoggedFirstPath) {
+          if (!this._hasLoggedFirstPath && rpReady) {
             this._hasLoggedFirstPath = true;
             console.log('🚔 Cop car first road path built:', path.length, 'waypoints');
           }
