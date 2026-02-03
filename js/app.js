@@ -20492,6 +20492,10 @@ function ensureLandmarkProperties() {
         const mapBg = document.getElementById('map-background');
         if (!viewport || !world || !mapBg) return;
 
+        // Known TurfMap.png dimensions (fallback when DOM isn't rendered yet)
+        const TURF_MAP_WIDTH = 1024;
+        const TURF_MAP_HEIGHT = 1536;
+
         // If we have a real <img>, wait until it has natural dimensions
         const isImg = mapBg.tagName === 'IMG';
         const ready = !isImg || (mapBg.naturalWidth > 0 && mapBg.naturalHeight > 0);
@@ -20511,10 +20515,25 @@ function ensureLandmarkProperties() {
         }
 
         // Use image pixels as the world coordinate system (CoC-style)
-        const baseW = (this.worldIntrinsicW && this.worldIntrinsicH) ? this.worldIntrinsicW : (isImg ? mapBg.naturalWidth : viewport.clientWidth);
-        const baseH = (this.worldIntrinsicW && this.worldIntrinsicH) ? this.worldIntrinsicH : (isImg ? mapBg.naturalHeight : viewport.clientHeight);
+        // Priority: explicit intrinsic > img naturalWidth > viewport clientWidth > known fallback
+        let baseW, baseH;
+        if (this.worldIntrinsicW && this.worldIntrinsicH) {
+          baseW = this.worldIntrinsicW;
+          baseH = this.worldIntrinsicH;
+        } else if (isImg && mapBg.naturalWidth > 0) {
+          baseW = mapBg.naturalWidth;
+          baseH = mapBg.naturalHeight;
+        } else if (viewport.clientWidth > 0 && viewport.clientHeight > 0) {
+          baseW = viewport.clientWidth;
+          baseH = viewport.clientHeight;
+        } else {
+          // Fallback to known TurfMap dimensions when DOM isn't ready
+          baseW = TURF_MAP_WIDTH;
+          baseH = TURF_MAP_HEIGHT;
+          console.log('[TurfTab] ensureWorldSize: Using fallback dimensions', baseW, 'x', baseH);
+        }
 
-        // Don't proceed if we have zero dimensions
+        // Don't proceed if we still have zero dimensions (shouldn't happen with fallback)
         if (baseW <= 0 || baseH <= 0) {
           console.warn('[TurfTab] ensureWorldSize: Invalid dimensions:', baseW, 'x', baseH, '- deferring initialization');
           return;
@@ -20543,13 +20562,18 @@ function ensureLandmarkProperties() {
         const world = document.getElementById('map-world');
         if (!viewport || !world) return;
 
-        const vw = viewport.clientWidth;
-        const vh = viewport.clientHeight;
+        // Known TurfMap dimensions (fallback)
+        const TURF_MAP_WIDTH = 1024;
+        const TURF_MAP_HEIGHT = 1536;
 
-        // Don't proceed if viewport has zero dimensions
+        let vw = viewport.clientWidth;
+        let vh = viewport.clientHeight;
+
+        // Use fallback dimensions if viewport has zero dimensions
         if (vw <= 0 || vh <= 0) {
-          console.warn('[TurfTab] clampPan: Invalid viewport dimensions:', vw, 'x', vh, '- skipping');
-          return;
+          vw = TURF_MAP_WIDTH;
+          vh = TURF_MAP_HEIGHT;
+          console.log('[TurfTab] clampPan: Using fallback viewport dimensions:', vw, 'x', vh);
         }
 
         // Ensure we know the world's base size (map pixels)
@@ -26958,17 +26982,37 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       // for pathfinding. Note: image loading is async, so RoadPathfinder may not be
       // ready immediately, but CopCarSystem will retry building paths until it is.
       console.log('[DEBUG] Initializing static map and RoadPathfinder...');
-      try {
-        // Call initStaticMap directly since it's defined in the same scope
-        // Also exposed to window for external module access
-        if (typeof initStaticMap === 'function') {
-          initStaticMap();
-        } else if (typeof window.initStaticMap === 'function') {
-          window.initStaticMap();
-        } else {
-          console.warn('initStaticMap failed: function not available');
+
+      // Helper function to call initStaticMap with retry logic
+      const callInitStaticMap = (attempt = 1) => {
+        try {
+          // Always prefer window-scoped version for reliability across different call contexts
+          if (typeof window.initStaticMap === 'function') {
+            window.initStaticMap();
+            console.log('[DEBUG] ✅ initStaticMap called successfully via window');
+            return true;
+          } else if (typeof initStaticMap === 'function') {
+            initStaticMap();
+            console.log('[DEBUG] ✅ initStaticMap called successfully via local scope');
+            return true;
+          } else {
+            console.warn(`[DEBUG] initStaticMap not available (attempt ${attempt})`);
+            return false;
+          }
+        } catch (e) {
+          console.warn('[DEBUG] initStaticMap error:', e);
+          return false;
         }
-      } catch (e) { console.warn('initStaticMap failed:', e); }
+      };
+
+      // Try immediately
+      let initSuccess = callInitStaticMap(1);
+
+      // Schedule retries if initial attempt failed (handles timing edge cases)
+      if (!initSuccess) {
+        console.log('[DEBUG] Scheduling initStaticMap retries...');
+        setTimeout(() => { if (!callInitStaticMap(2)) setTimeout(() => callInitStaticMap(3), 500); }, 100);
+      }
       
       console.log('[DEBUG] Initializing cop car patrol system...');
       // Initialize cop car patrol on map (after initStaticMap for road pathfinding)
@@ -26992,35 +27036,77 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       const activeTab = GameState.ui.activeTab;
       TabSystem.renderActiveTab(activeTab);
 
-      // CRITICAL FIX: If turf tab is active on initial load, schedule a delayed re-render
-      // to ensure everything is fully visible after page paint
-      if (activeTab === 'turf') {
-        console.log('[DEBUG] Scheduling delayed turf tab visibility check for initial load...');
+      // CRITICAL FIX: Schedule delayed initialization for all systems that depend on DOM dimensions
+      // This handles cases where the DOM isn't fully rendered when init runs (common on first load)
+      const delayedTurfInit = (delay, reason) => {
         setTimeout(() => {
-          console.log('[DEBUG] 🔍 Running delayed turf tab visibility check...');
+          console.log(`[DEBUG] 🔍 Running delayed turf initialization (${reason})...`);
           const mapContainer = document.getElementById('city-map');
           const mapBackground = document.getElementById('map-background');
+          const mapViewport = document.getElementById('map-viewport');
+          const mapWorld = document.getElementById('map-world');
 
           if (mapContainer && mapBackground) {
-            // Force visibility
+            // Force visibility on all map elements
             mapContainer.style.opacity = '1';
             mapContainer.style.visibility = 'visible';
+            mapContainer.style.display = 'block';
             mapBackground.style.opacity = '1';
             mapBackground.style.visibility = 'visible';
             mapBackground.style.display = 'block';
+            if (mapViewport) {
+              mapViewport.style.opacity = '1';
+              mapViewport.style.visibility = 'visible';
+            }
+            if (mapWorld) {
+              mapWorld.style.opacity = '1';
+              mapWorld.style.visibility = 'visible';
+            }
 
             // Force a repaint
-            mapContainer.offsetHeight; // Trigger reflow
+            mapContainer.offsetHeight;
 
-            console.log('[DEBUG] ✅ Turf tab visibility forced on initial load');
-
-            // Re-render if weather overlay exists
-            if (WeatherOverlay && WeatherOverlay.renderer && WeatherOverlay.scene && WeatherOverlay.camera) {
-              WeatherOverlay.render();
-              console.log('[DEBUG] ✅ Weather overlay re-rendered on initial load');
+            // Re-calculate world size now that elements have dimensions
+            if (typeof TurfTab !== 'undefined' && typeof TurfTab.ensureWorldSize === 'function') {
+              TurfTab.worldSizeReady = false; // Force recalculation
+              TurfTab.ensureWorldSize();
+              console.log('[DEBUG] ✅ TurfTab.ensureWorldSize() called');
             }
+
+            // Re-initialize WeatherOverlay if it failed due to zero dimensions
+            if (typeof WeatherOverlay !== 'undefined') {
+              if (!WeatherOverlay.renderer || !WeatherOverlay.scene) {
+                console.log('[DEBUG] Re-initializing WeatherOverlay...');
+                WeatherOverlay.init();
+              } else {
+                WeatherOverlay.render();
+              }
+              console.log('[DEBUG] ✅ WeatherOverlay handled');
+            }
+
+            // Initialize CopCar3D if available (needs valid map dimensions)
+            if (typeof CopCar3D !== 'undefined' && typeof CopCar3D.init === 'function') {
+              if (!CopCar3D.isInitialized) {
+                CopCar3D.init();
+                console.log('[DEBUG] ✅ CopCar3D initialized');
+              }
+            }
+
+            console.log(`[DEBUG] ✅ Delayed turf initialization complete (${reason})`);
           }
-        }, 300);
+        }, delay);
+      };
+
+      // Always schedule delayed initialization regardless of active tab
+      // This ensures systems are ready when user switches to turf tab
+      delayedTurfInit(300, 'initial-300ms');
+      delayedTurfInit(800, 'followup-800ms'); // Second pass catches slower renders
+
+      // Extra initialization if turf tab is already active
+      if (activeTab === 'turf') {
+        console.log('[DEBUG] Turf tab active on load - scheduling extra visibility checks...');
+        delayedTurfInit(100, 'turf-active-100ms');
+        delayedTurfInit(1500, 'turf-active-1500ms'); // Late pass for very slow renders
       }
 
       console.log('[DEBUG] Static map is now CSS background-image...');
