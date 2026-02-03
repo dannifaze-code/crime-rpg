@@ -991,15 +991,15 @@ const CopCar3D = {
     let targetWorld = null;
 
     const cs = (typeof window !== 'undefined') ? window.CopCarSystem : null;
-    const pose = (cs && cs.copPose) ? cs.copPose : (cs ? cs.position : null);
-    if (!pose) {
+    const positionData = (cs && (cs.copPose || cs.position)) || null;
+    if (!positionData) {
       // No authoritative cop position yet; skip rendering until CopCarSystem is ready.
       this._updateSmoke(dt, 0);
       return;
     }
 
-    const px = Number(pose.x);
-    const py = Number(pose.y);
+    const px = Number(positionData.x);
+    const py = Number(positionData.y);
     if (!isFinite(px) || !isFinite(py)) {
       this._updateSmoke(dt, 0);
       return;
@@ -1011,9 +1011,12 @@ const CopCar3D = {
     this._hasValidPose = true;
 
     // Determine cop speed from system (for stop snapping + smoke) if available
-    const copSpeed = (pose && typeof pose.speed === 'number')
-      ? pose.speed
-      : 0;
+    let copSpeed = 0;
+    if (typeof positionData.speed === 'number') {
+      copSpeed = positionData.speed;
+    } else if (cs && typeof cs.speed === 'number') {
+      copSpeed = cs.speed;
+    }
 
     // Always keep ride height
     targetWorld.y = this.model.position.y;
@@ -1047,11 +1050,11 @@ const CopCar3D = {
     let desiredYaw = null;
     const mv = Math.abs(moveVec.x) + Math.abs(moveVec.z);
 
-    if (pose && typeof pose.heading === 'number' && isFinite(pose.heading)) {
+    if (typeof positionData.heading === 'number' && isFinite(positionData.heading)) {
       // CopCarSystem.heading is atan2(dx, dy) measured counter-clockwise from +Y (down on map).
       // Three.js rotation.y rotates counter-clockwise when viewed from above.
       // We negate the heading to convert to clockwise rotation for proper road alignment.
-      desiredYaw = -pose.heading + this.config.modelYawOffset;
+      desiredYaw = -positionData.heading + this.config.modelYawOffset;
     } else if (mv > 0.0002) {
       desiredYaw = -Math.atan2(moveVec.x, moveVec.z) + this.config.modelYawOffset;
     } else {
