@@ -991,14 +991,15 @@ const CopCar3D = {
     let targetWorld = null;
 
     const cs = (typeof window !== 'undefined') ? window.CopCarSystem : null;
-    if (!cs || !cs.position) {
+    const pose = (cs && cs.copPose) ? cs.copPose : (cs ? cs.position : null);
+    if (!pose) {
       // No authoritative cop position yet; skip rendering until CopCarSystem is ready.
       this._updateSmoke(dt, 0);
       return;
     }
 
-    const px = Number(cs.position.x);
-    const py = Number(cs.position.y);
+    const px = Number(pose.x);
+    const py = Number(pose.y);
     if (!isFinite(px) || !isFinite(py)) {
       this._updateSmoke(dt, 0);
       return;
@@ -1010,8 +1011,8 @@ const CopCar3D = {
     this._hasValidPose = true;
 
     // Determine cop speed from system (for stop snapping + smoke) if available
-    const copSpeed = (cs && typeof cs.speed === 'number')
-      ? cs.speed
+    const copSpeed = (pose && typeof pose.speed === 'number')
+      ? pose.speed
       : 0;
 
     // Always keep ride height
@@ -1046,11 +1047,11 @@ const CopCar3D = {
     let desiredYaw = null;
     const mv = Math.abs(moveVec.x) + Math.abs(moveVec.z);
 
-    if (typeof cs.heading === 'number' && isFinite(cs.heading)) {
+    if (pose && typeof pose.heading === 'number' && isFinite(pose.heading)) {
       // CopCarSystem.heading is atan2(dx, dy) measured counter-clockwise from +Y (down on map).
       // Three.js rotation.y rotates counter-clockwise when viewed from above.
       // We negate the heading to convert to clockwise rotation for proper road alignment.
-      desiredYaw = -cs.heading + this.config.modelYawOffset;
+      desiredYaw = -pose.heading + this.config.modelYawOffset;
     } else if (mv > 0.0002) {
       desiredYaw = -Math.atan2(moveVec.x, moveVec.z) + this.config.modelYawOffset;
     } else {
