@@ -26983,36 +26983,94 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       // ready immediately, but CopCarSystem will retry building paths until it is.
       console.log('[DEBUG] Initializing static map and RoadPathfinder...');
 
-      // Helper function to call initStaticMap with retry logic
-      const callInitStaticMap = (attempt = 1) => {
-        try {
-          // Always prefer window-scoped version for reliability across different call contexts
-          if (typeof window.initStaticMap === 'function') {
-            window.initStaticMap();
-            console.log('[DEBUG] ✅ initStaticMap called successfully via window');
-            return true;
-          } else if (typeof initStaticMap === 'function') {
-            initStaticMap();
-            console.log('[DEBUG] ✅ initStaticMap called successfully via local scope');
-            return true;
+      // INLINE IMPLEMENTATION: Directly load map and build road pathfinder
+      // This bypasses the initStaticMap function which has scoping issues
+      const initRoadPathfinderDirect = (attempt = 1) => {
+        console.log(`[RoadPathfinder] Initialization attempt ${attempt}...`);
+
+        const mapBackground = document.getElementById('map-background');
+        if (!mapBackground) {
+          if (attempt < 5) {
+            console.warn(`[RoadPathfinder] map-background not found, retrying in 200ms... (attempt ${attempt})`);
+            setTimeout(() => initRoadPathfinderDirect(attempt + 1), 200);
           } else {
-            console.warn(`[DEBUG] initStaticMap not available (attempt ${attempt})`);
-            return false;
+            console.error('[RoadPathfinder] ❌ map-background never found after 5 attempts');
           }
-        } catch (e) {
-          console.warn('[DEBUG] initStaticMap error:', e);
-          return false;
+          return;
         }
+
+        const mapImagePath = 'sprites/turf-map/TurfMap.png';
+
+        // Set background image directly
+        mapBackground.style.backgroundImage = `url('${mapImagePath}')`;
+        mapBackground.style.backgroundSize = 'cover';
+        mapBackground.style.backgroundPosition = 'center';
+        mapBackground.style.backgroundRepeat = 'no-repeat';
+        console.log('[RoadPathfinder] ✅ Map background set');
+
+        // Load image for RoadPathfinder
+        const mapImage = new Image();
+        mapImage.crossOrigin = 'anonymous';
+
+        mapImage.onload = () => {
+          console.log('[RoadPathfinder] ✅ Map image loaded');
+
+          // Build road pathfinder graph
+          if (window.RoadPathfinder && typeof window.RoadPathfinder.buildFromImage === 'function') {
+            try {
+              window.RoadPathfinder.buildFromImage(mapImage);
+              console.log('[RoadPathfinder] ✅ buildFromImage called');
+
+              // Verify it's ready
+              setTimeout(() => {
+                if (window.RoadPathfinder && window.RoadPathfinder.ready) {
+                  console.log('[RoadPathfinder] ✅ RoadPathfinder is READY!');
+                } else {
+                  console.warn('[RoadPathfinder] ⚠️ buildFromImage completed but ready is still false');
+                }
+              }, 100);
+            } catch (e) {
+              console.error('[RoadPathfinder] ❌ buildFromImage error:', e);
+            }
+          } else {
+            console.warn('[RoadPathfinder] Not available yet, storing pending image');
+            window.__pendingRoadMaskImage = mapImage;
+
+            // Retry after RoadPathfinder might be available
+            setTimeout(() => {
+              if (window.__pendingRoadMaskImage && window.RoadPathfinder && typeof window.RoadPathfinder.buildFromImage === 'function') {
+                console.log('[RoadPathfinder] Processing pending image...');
+                try {
+                  window.RoadPathfinder.buildFromImage(window.__pendingRoadMaskImage);
+                  window.__pendingRoadMaskImage = null;
+                  console.log('[RoadPathfinder] ✅ Pending image processed');
+                } catch (e) {
+                  console.error('[RoadPathfinder] ❌ Pending image processing failed:', e);
+                }
+              }
+            }, 500);
+          }
+        };
+
+        mapImage.onerror = (e) => {
+          console.error('[RoadPathfinder] ❌ Failed to load map image:', e);
+        };
+
+        mapImage.src = mapImagePath;
       };
 
-      // Try immediately
-      let initSuccess = callInitStaticMap(1);
+      // Execute immediately
+      initRoadPathfinderDirect(1);
 
-      // Schedule retries if initial attempt failed (handles timing edge cases)
-      if (!initSuccess) {
-        console.log('[DEBUG] Scheduling initStaticMap retries...');
-        setTimeout(() => { if (!callInitStaticMap(2)) setTimeout(() => callInitStaticMap(3), 500); }, 100);
-      }
+      // Also schedule a verification check later
+      setTimeout(() => {
+        if (!window.RoadPathfinder || !window.RoadPathfinder.ready) {
+          console.warn('[RoadPathfinder] ⚠️ Still not ready after 2 seconds, attempting rebuild...');
+          initRoadPathfinderDirect(1);
+        } else {
+          console.log('[RoadPathfinder] ✅ Verified ready after 2 seconds');
+        }
+      }, 2000);
       
       console.log('[DEBUG] Initializing cop car patrol system...');
       // Initialize cop car patrol on map (after initStaticMap for road pathfinding)
@@ -27066,11 +27124,29 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
             // Force a repaint
             mapContainer.offsetHeight;
 
-            // Re-calculate world size now that elements have dimensions
-            if (typeof TurfTab !== 'undefined' && typeof TurfTab.ensureWorldSize === 'function') {
-              TurfTab.worldSizeReady = false; // Force recalculation
-              TurfTab.ensureWorldSize();
-              console.log('[DEBUG] ✅ TurfTab.ensureWorldSize() called');
+            // Reset zoom to 1 and pan to center on first load
+            if (typeof TurfTab !== 'undefined') {
+              // Only reset if this looks like an initial load (zoom might be weird)
+              if (!TurfTab._initialZoomApplied) {
+                TurfTab.currentZoom = 1;
+                TurfTab.panX = 0;
+                TurfTab.panY = 0;
+                TurfTab._initialZoomApplied = true;
+                console.log('[DEBUG] ✅ TurfTab zoom reset to 1');
+              }
+
+              // Re-calculate world size now that elements have dimensions
+              if (typeof TurfTab.ensureWorldSize === 'function') {
+                TurfTab.worldSizeReady = false; // Force recalculation
+                TurfTab.ensureWorldSize();
+                console.log('[DEBUG] ✅ TurfTab.ensureWorldSize() called');
+              }
+
+              // Apply the transform to ensure correct display
+              if (typeof TurfTab.applyMapTransform === 'function') {
+                TurfTab.applyMapTransform();
+                console.log('[DEBUG] ✅ TurfTab.applyMapTransform() called');
+              }
             }
 
             // Re-initialize WeatherOverlay if it failed due to zero dimensions
