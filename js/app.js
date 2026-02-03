@@ -11441,6 +11441,7 @@ function updateTurfDefense(dt) {
 
       console.log('==================================');
     }
+    // CRITICAL: Expose to window immediately after definition so callers can use window.initStaticMap()
     window.initStaticMap = initStaticMap;
     // ========================================
     // ROAD-MASK PATHFINDING (A* on a grid) for Cop Patrol
@@ -18944,6 +18945,11 @@ function ensureLandmarkProperties() {
           } catch (e) {
             console.warn('[TabSystem] CopCar3D dispose error:', e);
           }
+        }
+
+        // Create new session ID when switching TO turf tab (ensures fresh init)
+        if (GameState.ui.activeTab !== 'turf' && tabId === 'turf') {
+          window.__turfTabSessionId = Date.now();
         }
         
         // Update UI state
@@ -26949,15 +26955,12 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       // ready immediately, but CopCarSystem will retry building paths until it is.
       console.log('[DEBUG] Initializing static map and RoadPathfinder...');
       try {
-        // initStaticMap is defined in this file (inside the main IIFE). It may not be assigned
-        // onto window yet at this point in startup, so call it directly and then expose it.
-        if (typeof initStaticMap === 'function') {
-          initStaticMap();
-          if (typeof window.initStaticMap !== 'function') window.initStaticMap = initStaticMap;
-        } else if (typeof window.initStaticMap === 'function') {
+        // initStaticMap is exposed to window immediately after its definition,
+        // so we always call via window.initStaticMap() for consistency
+        if (typeof window.initStaticMap === 'function') {
           window.initStaticMap();
         } else {
-          console.warn('initStaticMap failed: initStaticMap not available');
+          console.warn('initStaticMap failed: window.initStaticMap not available');
         }
       } catch (e) { console.warn('initStaticMap failed:', e); }
       
