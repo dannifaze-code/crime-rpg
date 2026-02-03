@@ -447,14 +447,15 @@ const CopCar3D = {
     this.scene.add(this.copRoot);
     this._attachPendingModel();
 
-    // Orthographic camera in "percent space" (0..100) so the 3D car aligns with
+    // Orthographic camera in "percent space" (0..100) centered on (50,50) so the 3D car aligns with
     // the 2D marker which is positioned using % left/top.
     // The layer mirrors #map-world's CSS transform (pan/zoom), keeping alignment
     // correct without nesting the canvas inside the transformed element.
-    this.camera = new THREE.OrthographicCamera(0, 100, 100, 0, 0.1, 500);
+    const halfMap = 50;
+    this.camera = new THREE.OrthographicCamera(-halfMap, halfMap, halfMap, -halfMap, 0.1, 500);
     this.camera.up.set(0, 0, -1); // Set up vector to -Z before lookAt (avoids gimbal lock when looking down Y)
-    this.camera.position.set(50, 120, 50);
-    this._cameraLookAt = new THREE.Vector3(50, 0, 50);
+    this.camera.position.set(0, 120, 0);
+    this._cameraLookAt = new THREE.Vector3(0, 0, 0);
     this.camera.lookAt(this._cameraLookAt);
 
     this.renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, premultipliedAlpha: false });
@@ -577,7 +578,7 @@ const CopCar3D = {
 
     if (!this._debugAxes) {
       this._debugAxes = new THREE.AxesHelper(50);
-      this._debugAxes.position.set(50, 0, 50);
+    this._debugAxes.position.set(0, 0, 0);
       this.scene.add(this._debugAxes);
     }
 
@@ -585,7 +586,7 @@ const CopCar3D = {
       const geometry = new THREE.BoxGeometry(5, 5, 5);
       const material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
       this._debugCube = new THREE.Mesh(geometry, material);
-      this._debugCube.position.set(50, 2.5, 50);
+    this._debugCube.position.set(0, 2.5, 0);
       this.scene.add(this._debugCube);
     }
   },
@@ -893,7 +894,8 @@ const CopCar3D = {
       return;
     }
 
-    targetWorld = new THREE.Vector3(px, 0, py); // x=percentX, z=percentY
+    // Center percent space at (0,0) so camera centered at (50,50) sees full map.
+    targetWorld = new THREE.Vector3(px - 50, 0, py - 50); // x=percentX, z=percentY
 
     this._hasValidPose = true;
 
