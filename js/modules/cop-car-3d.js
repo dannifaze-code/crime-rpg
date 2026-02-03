@@ -52,11 +52,18 @@ const CopCar3D = {
   animationFrameId: null,
   isInitialized: false,
 
+  // Session tracking: ensure init() runs once per turf tab session
+  _turfSessionId: null,
+
   // init/resize guards
   _initPromise: null,
   _pendingInitObserver: null,
   _pendingInitRAF: null,
   _resizeObserver: null,
+
+  // Throttle pending model attach warnings to prevent spam
+  _lastPendingAttachWarn: 0,
+  _pendingAttachWarnCooldown: 2000, // ms
 
   // pose state
   _lastWorldPos: null,
@@ -174,9 +181,20 @@ const CopCar3D = {
 
   /**
    * Safe to call repeatedly (e.g. on each Turf tab entry).
+   * Uses session tracking to ensure only one init per tab session.
    */
   init() {
-    // Fast path: already initialized
+    // Session guard: prevent duplicate init() calls for the same tab session
+    const currentSessionId = this._getCurrentTurfSessionId();
+    if (this._turfSessionId === currentSessionId && this.isInitialized) {
+      // Already initialized for this session
+      return Promise.resolve(true);
+    }
+
+    // Update session ID
+    this._turfSessionId = currentSessionId;
+
+    // Fast path: already initialized (from previous session)
     if (this.isInitialized && this.renderer && this.container) {
       try {
         this.container = document.getElementById('map-viewport') || document.getElementById('city-map');
@@ -255,6 +273,17 @@ const CopCar3D = {
     })();
 
     return this._initPromise;
+  },
+
+  /**
+   * Generate a session ID based on tab visibility timestamp.
+   * Each time the turf tab is shown, this returns a new session ID.
+   */
+  _getCurrentTurfSessionId() {
+    if (!window.__turfTabSessionId) {
+      window.__turfTabSessionId = Date.now();
+    }
+    return window.__turfTabSessionId;
   },
 
   /**
@@ -381,10 +410,15 @@ const CopCar3D = {
     if (attachResult.success) {
       this._pendingModelRoot = null;
     } else {
-      const reason = attachResult.error
-        ? (attachResult.error.message || attachResult.error.toString())
-        : (this.copRoot ? 'attach failed' : 'root not ready');
-      console.warn('[CopCar3D] Pending model attach deferred:', reason);
+      // Throttle warning to prevent spam (max once per cooldown period)
+      const now = performance.now();
+      if (now - this._lastPendingAttachWarn >= this._pendingAttachWarnCooldown) {
+        this._lastPendingAttachWarn = now;
+        const reason = attachResult.error
+          ? (attachResult.error.message || attachResult.error.toString())
+          : (this.copRoot ? 'attach failed' : 'root not ready');
+        console.warn('[CopCar3D] Pending model attach deferred:', reason);
+      }
     }
   },
 
@@ -1410,6 +1444,10 @@ const CopCar3D = {
       this._targetYaw = 0;
       this._currentRoll = 0;
       this._steerCurrent = 0;
+
+      // Clear session tracking to allow fresh init on next tab entry
+      this._turfSessionId = null;
+      this._lastPendingAttachWarn = 0;
     } catch (e) {
       console.warn('[CopCar3D] Dispose error:', e);
     }
