@@ -17,6 +17,8 @@
  * - No "sliding" (pivot recenter + stop snapping + no CSS transition on marker).
  */
 
+const LANE_PX = 28;
+
 const CopCar3D = {
   // three.js objects
   scene: null,
@@ -73,6 +75,12 @@ const CopCar3D = {
   _lastDebugLog: 0,
   _debugAxes: null,
   _debugCube: null,
+  _debugLaneRect: null,
+  _laneWidthPercent: null,
+  _laneWidthPx: null,
+  _carScaledLength: null,
+  _laneWidthRetryAt: 0,
+  _mapBackgroundEl: null,
 
   // wheels
   _wheels: [],
@@ -109,9 +117,19 @@ const CopCar3D = {
       rideHeight: 0
     },
 
+    lanePx: LANE_PX,
+    laneWidthFactor: 0.8,
+    laneDebugLengthFactor: 1.6,
+    // Percent-based sample pairs on the turf map used to estimate lane width in CSS px.
+    laneSamplePairs: [
+      { a: { x: 28, y: 33.5 }, b: { x: 28, y: 36.5 } },
+      { a: { x: 55.5, y: 40 }, b: { x: 58.5, y: 40 } },
+      { a: { x: 72, y: 63.5 }, b: { x: 72, y: 66.5 } }
+    ],
     carWidthPercentUnits: 3.0,
     carLengthPercentUnits: 5.0,
     carWidthSlimFactor: 0.9,
+    carLengthStretchFactor: 1.05,
 
     // dt-based smoothing strengths (higher = tighter)
     positionLerpStrength: 18,
@@ -280,6 +298,48 @@ const CopCar3D = {
       return { w: this.container.offsetWidth || 0, h: this.container.offsetHeight || 0 };
     }
     return { w: 0, h: 0 };
+  },
+
+  _calculateLaneWidthPercent() {
+    const lanePx = this.config?.lanePx ?? LANE_PX;
+    const world = this.mapWorldEl || document.getElementById('map-world');
+    if (!world) return null;
+    const rect = world.getBoundingClientRect();
+    const worldWidth = rect?.width || world.offsetWidth || 0;
+    if (!worldWidth) return null;
+    let measuredLaneWidthPx = null;
+    const samples = this.config?.laneSamplePairs;
+    if (Array.isArray(samples) && samples.length) {
+      this._mapBackgroundEl = this._mapBackgroundEl || document.getElementById('map-background');
+      const container = (this._mapBackgroundEl && this._mapBackgroundEl.getBoundingClientRect)
+        ? this._mapBackgroundEl
+        : world;
+      const containerRect = container.getBoundingClientRect();
+      if (containerRect?.width && containerRect?.height) {
+        let total = 0;
+        let count = 0;
+        samples.forEach((pair) => {
+          if (!pair || !pair.a || !pair.b) return;
+          const ax = containerRect.left + (pair.a.x / 100) * containerRect.width;
+          const ay = containerRect.top + (pair.a.y / 100) * containerRect.height;
+          const bx = containerRect.left + (pair.b.x / 100) * containerRect.width;
+          const by = containerRect.top + (pair.b.y / 100) * containerRect.height;
+          const dx = ax - bx;
+          const dy = ay - by;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (isFinite(dist) && dist > 0) {
+            total += dist;
+            count += 1;
+          }
+        });
+        if (count > 0) measuredLaneWidthPx = total / count;
+      }
+    }
+    const lanePxMeasured = (isFinite(measuredLaneWidthPx) && measuredLaneWidthPx > 0)
+      ? measuredLaneWidthPx
+      : lanePx;
+    this._laneWidthPx = lanePxMeasured;
+    return (lanePxMeasured / worldWidth) * 100;
   },
 
   _ensureLayer() {
@@ -596,6 +656,21 @@ const CopCar3D = {
     this._debugCube.position.set(0, 2.5, 0);
       this.scene.add(this._debugCube);
     }
+
+    if (!this._debugLaneRect) {
+      const geometry = new THREE.PlaneGeometry(1, 1);
+      const material = new THREE.MeshBasicMaterial({
+        color: 0x2cc5ff,
+        transparent: true,
+        opacity: 0.2,
+        side: THREE.DoubleSide,
+        depthWrite: false
+      });
+      this._debugLaneRect = new THREE.Mesh(geometry, material);
+      this._debugLaneRect.rotation.x = -Math.PI / 2;
+      this._debugLaneRect.position.y = 0.02;
+      this.scene.add(this._debugLaneRect);
+    }
   },
 
   async _loadModel() {
@@ -640,27 +715,41 @@ const CopCar3D = {
             const widthAxis = lengthAxis === 'x' ? 'z' : 'x';
             const bboxLength = lengthAxis === 'x' ? size.x : size.z;
             const bboxWidth = widthAxis === 'x' ? size.x : size.z;
-            const desiredLength = this.config?.carLengthPercentUnits ?? 5.0;
-            const scale = (isFinite(bboxLength) && bboxLength > 0) ? (desiredLength / bboxLength) : 1;
-            visual.scale.setScalar(scale);
+            const lanePercent = this._calculateLaneWidthPercent();
+            const laneWidthFactor = this.config?.laneWidthFactor ?? 0.8;
+            const fallbackWidth = this.config?.carWidthPercentUnits ?? 3.0;
+            const desiredWidth = (lanePercent != null) ? (lanePercent * laneWidthFactor) : fallbackWidth;
+            const baseScale = (isFinite(bboxWidth) && bboxWidth > 0) ? (desiredWidth / bboxWidth) : 1;
+            visual.scale.setScalar(baseScale);
             const widthSlim = this.config?.carWidthSlimFactor ?? 0.9;
             if (isFinite(bboxWidth) && bboxWidth > 0) {
               if (widthAxis === 'x') visual.scale.x *= widthSlim;
               if (widthAxis === 'z') visual.scale.z *= widthSlim;
+            }
+            const lengthStretch = this.config?.carLengthStretchFactor ?? 1.05;
+            if (isFinite(bboxLength) && bboxLength > 0) {
+              if (lengthAxis === 'x') visual.scale.x *= lengthStretch;
+              if (lengthAxis === 'z') visual.scale.z *= lengthStretch;
             }
 
             const scaledBox = new THREE.Box3().setFromObject(visual);
             const center = new THREE.Vector3();
             scaledBox.getCenter(center);
             visual.position.set(-center.x, -center.y, -center.z);
+            this._laneWidthPercent = lanePercent ?? null;
+            this._carScaledLength = lengthAxis === 'x'
+              ? (scaledBox.max.x - scaledBox.min.x)
+              : (scaledBox.max.z - scaledBox.min.z);
             if (debugEnabled) {
               console.log('[CopCar3D] GLB bbox', {
                 size: { x: size.x, y: size.y, z: size.z },
                 lengthAxis,
                 widthAxis,
-                desiredLength,
+                lanePercent,
+                desiredWidth,
                 widthSlim,
-                scale,
+                lengthStretch,
+                scale: baseScale,
                 center: { x: center.x, y: center.y, z: center.z }
               });
             }
@@ -890,6 +979,7 @@ const CopCar3D = {
     if (!this.modelLoaded || !this.model || !this.camera || !this._raycaster) {
       this._tickPendingModelAttach();
       this._updateSmoke(dt, 0);
+      this._updateDebugLaneRect();
       return;
     }
 
@@ -994,6 +1084,32 @@ const CopCar3D = {
     // Wheels + exhaust
     this._updateWheels(moveVec, dt, speedDerived, copSpeed);
     this._updateSmoke(dt, speedForEffects);
+    this._updateDebugLaneRect();
+  },
+
+  _updateDebugLaneRect() {
+    const enabled = this._isDebugEnabled();
+    if (enabled && !this._debugLaneRect) {
+      this._setupDebugHelpers();
+    }
+    if (!this._debugLaneRect) return;
+    this._debugLaneRect.visible = !!enabled;
+    if (!enabled || !this.model) return;
+    if (this._laneWidthPercent == null && performance.now() >= this._laneWidthRetryAt) {
+      this._laneWidthPercent = this._calculateLaneWidthPercent();
+      if (this._laneWidthPercent == null) {
+        this._laneWidthRetryAt = performance.now() + 500;
+      }
+    }
+    const lanePercent = this._laneWidthPercent;
+    if (!lanePercent) return;
+    const debugLengthFactor = this.config?.laneDebugLengthFactor ?? 1.6;
+    const length = this._carScaledLength || (lanePercent * debugLengthFactor);
+    const widthFactor = this.config?.laneWidthFactor ?? 0.8;
+    this._debugLaneRect.scale.set(lanePercent * widthFactor, length, 1);
+    this._debugLaneRect.position.x = this.model.position.x;
+    this._debugLaneRect.position.z = this.model.position.z;
+    this._debugLaneRect.rotation.y = this._currentYaw;
   },
 
   _updateWheels(moveVec, dt, speedWorld, speedCop) {
@@ -1176,6 +1292,7 @@ const CopCar3D = {
     this.camera.updateProjectionMatrix();
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.config.maxPixelRatio));
     this.renderer.setSize(width, height, false);
+    this._laneWidthPercent = this._calculateLaneWidthPercent();
   },
 
   dispose() {
@@ -1245,12 +1362,15 @@ const CopCar3D = {
       if (this.scene && this.copRoot) {
         try { this.scene.remove(this.copRoot); } catch (e) {}
       }
-      if (this._debugAxes && this.scene) {
-        try { this.scene.remove(this._debugAxes); } catch (e) {}
-      }
-      if (this._debugCube && this.scene) {
-        try { this.scene.remove(this._debugCube); } catch (e) {}
-      }
+    if (this._debugAxes && this.scene) {
+      try { this.scene.remove(this._debugAxes); } catch (e) {}
+    }
+    if (this._debugCube && this.scene) {
+      try { this.scene.remove(this._debugCube); } catch (e) {}
+    }
+    if (this._debugLaneRect && this.scene) {
+      try { this.scene.remove(this._debugLaneRect); } catch (e) {}
+    }
 
       if (this.renderer) {
         this.renderer.dispose();
@@ -1272,6 +1392,7 @@ const CopCar3D = {
       this._cameraLookAt = null;
       this._debugAxes = null;
       this._debugCube = null;
+      this._debugLaneRect = null;
 
       this._wheels = [];
       this._frontWheels = [];
