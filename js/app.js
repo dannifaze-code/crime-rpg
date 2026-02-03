@@ -27321,6 +27321,10 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
 
     // Boot app when DOM ready
     if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
       
     // ========================================
     // SKILL TREE UI (Diablo-style)
@@ -27780,11 +27784,6 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
         endTurfDefense('debug_escape');
       }
     });
-
-document.addEventListener('DOMContentLoaded', init);
-    } else {
-      init();
-    }
 
 
 // ==== Turf Defense: Camera shake helper (safety) ====
