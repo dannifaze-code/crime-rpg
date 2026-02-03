@@ -21260,10 +21260,11 @@ function ensureLandmarkProperties() {
         }
 
         if (e.touches.length === 1 && viewport) {
-          e.preventDefault();
-          this.isPanning = true;
+          // Don't preventDefault yet - wait to see if it's a scroll or pan
+          this.isPanning = false; // Will be set to true in handleTouchMove if horizontal
           this.isPinching = false;
           this.activePointerId = null;
+          this._isScrolling = false; // Track if user is scrolling page
 
           // Track a potential tap to forward as a click on touchend if the user didn't drag.
           this._touchTapStartX = e.touches[0].clientX;
@@ -21297,9 +21298,8 @@ function ensureLandmarkProperties() {
           return;
         }
 
-        // One-finger pan
-        if (this.isPanning && e.touches.length === 1 && viewport) {
-          e.preventDefault();
+        // One-finger pan - only if we're already panning or need to decide
+        if (e.touches.length === 1 && viewport) {
           const x = e.touches[0].clientX;
           const y = e.touches[0].clientY;
 
@@ -21311,14 +21311,44 @@ function ensureLandmarkProperties() {
           const movedY = Math.abs(y - (this._touchTapStartY ?? y));
           if (movedX > 8 || movedY > 8) this._touchTapMoved = true;
 
-          this.panX += dx;
-          this.panY += dy;
+          // Decide if this is a pan (horizontal) or scroll (vertical)
+          // Only decide after moving a small amount
+          if (!this.isPanning && !this._isScrolling) {
+            const totalDx = Math.abs(x - this._touchTapStartX);
+            const totalDy = Math.abs(y - this._touchTapStartY);
+            const decisionThreshold = 10; // pixels
 
-          this.lastPointerX = x;
-          this.lastPointerY = y;
+            if (totalDx > decisionThreshold || totalDy > decisionThreshold) {
+              // If moving more vertically than horizontally, it's a page scroll
+              if (totalDy > totalDx * 1.2) {
+                this._isScrolling = true;
+                this.isPanning = false;
+                // Don't preventDefault - let the page scroll
+                return;
+              } else {
+                this.isPanning = true;
+                this._isScrolling = false;
+              }
+            }
+          }
 
-          this.clampPan();
-          this.applyMapTransform();
+          // Only pan if we're in panning mode
+          if (this.isPanning) {
+            e.preventDefault();
+            this.panX += dx;
+            this.panY += dy;
+
+            this.lastPointerX = x;
+            this.lastPointerY = y;
+
+            this.clampPan();
+            this.applyMapTransform();
+          }
+          // If scrolling, update last position but don't preventDefault
+          else if (this._isScrolling) {
+            this.lastPointerX = x;
+            this.lastPointerY = y;
+          }
         }
       },
 
@@ -21327,13 +21357,14 @@ function ensureLandmarkProperties() {
         if (e && e.touches && e.touches.length === 1) {
           this.isPinching = false;
           this.isPanning = true;
+          this._isScrolling = false;
           this.lastPointerX = e.touches[0].clientX;
           this.lastPointerY = e.touches[0].clientY;
           return;
         }
 
         // Forward tap to underlying icon/landmark (touch) if this gesture was a tap (no drag, no pinch)
-        if (!this.isPinching && !this._touchTapMoved && e && e.changedTouches && e.changedTouches.length) {
+        if (!this.isPinching && !this._touchTapMoved && !this._isScrolling && e && e.changedTouches && e.changedTouches.length) {
           const t = e.changedTouches[0];
           const el = document.elementFromPoint(t.clientX, t.clientY);
           const viewport = document.getElementById('map-viewport');
@@ -21349,6 +21380,7 @@ function ensureLandmarkProperties() {
         this._touchTapMoved = false;
         this._touchTapStartX = null;
         this._touchTapStartY = null;
+        this._isScrolling = false;
 
         this.isPinching = false;
         this.isPanning = false;
