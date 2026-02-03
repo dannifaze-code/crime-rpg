@@ -26949,7 +26949,12 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       // ready immediately, but CopCarSystem will retry building paths until it is.
       console.log('[DEBUG] Initializing static map and RoadPathfinder...');
       try {
-        if (typeof window.initStaticMap === 'function') {
+        // initStaticMap is defined in this file (inside the main IIFE). It may not be assigned
+        // onto window yet at this point in startup, so call it directly and then expose it.
+        if (typeof initStaticMap === 'function') {
+          initStaticMap();
+          if (typeof window.initStaticMap !== 'function') window.initStaticMap = initStaticMap;
+        } else if (typeof window.initStaticMap === 'function') {
           window.initStaticMap();
         } else {
           console.warn('initStaticMap failed: initStaticMap not available');
