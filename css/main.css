@@ -5036,24 +5036,56 @@
 
 /* ====== BATTLE SPRITE STYLES ====== */
 
+/* ====== BATTLE ARENA BOX - Mobile-first sprite containment ====== */
+/* Arena excludes: top HUD (title ~70px) + enemy HP (~80px) = ~150px top
+   Bottom UI area (bottom-menu = 180px) + player nameplate margin = ~200px bottom
+   This creates a safe "arena box" for sprites to live in */
+
 /* Battle player sprite container - RIGHT side, faces LEFT toward enemy */
 .battle-player-sprite-container {
   position: absolute;
-  right: 22%; /* Moved inward to avoid nameplate overlap */
-  bottom: 240px; /* Raised above nameplate panel */
+  /* Arena-relative positioning: right side with safe padding */
+  right: 15%;
+  /* Position above bottom-menu (180px) + nameplate clearance */
+  bottom: clamp(200px, calc(180px + 5vh), 280px);
   z-index: 25; /* Above background, below UI panels (z-index: 50) */
-  width: 160px;
-  height: 160px;
+  /* Responsive sizing: scale with viewport, max 60% of available arena height */
+  width: clamp(100px, 22vw, 180px);
+  height: clamp(100px, 22vw, 180px);
   pointer-events: none;
+  /* Overflow hidden prevents fallback top-down sprites from extending outside container bounds */
+  overflow: hidden;
 }
 
-/* Battle player sprite - uses free-roam sprite style */
+/* Battle player sprite - uses free-roam sprite style (fallback) */
 .battle-player-sprite {
   position: relative;
   width: 100%;
   height: 100%;
   /* Face LEFT toward enemy (player on right side) */
   transform: scaleX(-1);
+}
+
+/* Battle player portrait - NEW front-facing sprite for battle-only */
+.battle-player-portrait {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.battle-player-portrait img {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  /* Face LEFT toward enemy - horizontal mirror only */
+  transform: scaleX(-1);
+  filter: drop-shadow(0 8px 16px rgba(0,0,0,0.6));
+  image-rendering: auto; /* Better quality for portrait art */
 }
 
 .battle-sprite-layer {
@@ -5083,55 +5115,88 @@
 /* Battle enemy sprite - LEFT side, faces RIGHT toward player */
 .battle-enemy-sprite-container {
   position: absolute;
-  left: 10%; /* Increased padding from left edge for visibility */
-  bottom: 220px; /* Raised to match player sprite positioning */
+  /* Shifted right ~5% for better centering under ENEMY nameplate */
+  left: 12%;
+  /* Position above bottom-menu with same vertical alignment as player */
+  bottom: clamp(200px, calc(180px + 5vh), 280px);
   z-index: 25; /* Above background, below UI panels */
+  /* Overflow visible allows enemy sprites to display drop shadows without clipping */
+  overflow: visible;
 }
 
 .battle-enemy-sprite {
-  max-width: 200px;
-  max-height: 200px;
+  /* Increased size by ~25-30% from original 200px base */
+  max-width: clamp(140px, 30vw, 260px);
+  max-height: clamp(140px, 30vw, 260px);
+  width: auto;
+  height: auto;
+  object-fit: contain;
   filter: drop-shadow(0 8px 16px rgba(0,0,0,0.6));
-  image-rendering: pixelated;
-  /* Face RIGHT toward player (enemy on left side) - no flip needed, sprites face right by default */
+  image-rendering: auto; /* Better quality for gritty enemy art */
+  /* Face RIGHT toward player (enemy on left side) - sprites face right by default */
+  transform: scaleX(1);
 }
 
-/* Mobile responsive battle sprites */
+/* ====== MOBILE RESPONSIVE BATTLE SPRITES ====== */
+/* Mobile-first: smaller screens get proportional sizing */
 @media (max-width: 600px) {
   .battle-player-sprite-container {
-    width: 100px;
-    height: 100px;
-    right: 18%; /* Moved inward to avoid nameplate overlap on mobile */
-    bottom: 260px; /* Raised above nameplate panel */
+    width: clamp(90px, 26vw, 130px);
+    height: clamp(90px, 26vw, 130px);
+    right: 10%;
+    bottom: clamp(190px, calc(170px + 6vh), 270px);
   }
   
   .battle-enemy-sprite {
-    max-width: 120px;
-    max-height: 120px;
+    max-width: clamp(110px, 32vw, 160px);
+    max-height: clamp(110px, 32vw, 160px);
   }
   
   .battle-enemy-sprite-container {
-    left: 8%; /* Ensure visibility on mobile */
-    bottom: 260px; /* Match player sprite vertical position */
+    left: 8%;
+    bottom: clamp(190px, calc(170px + 6vh), 270px);
   }
 }
 
+/* Extra small screens (narrow phones) */
 @media (max-width: 400px) {
   .battle-player-sprite-container {
-    width: 80px;
-    height: 80px;
-    right: 15%; /* Moved inward for small screens */
-    bottom: 240px; /* Above nameplate */
+    width: clamp(70px, 24vw, 100px);
+    height: clamp(70px, 24vw, 100px);
+    right: 8%;
+    bottom: clamp(180px, calc(165px + 5vh), 240px);
   }
   
   .battle-enemy-sprite {
-    max-width: 100px;
-    max-height: 100px;
+    max-width: clamp(90px, 28vw, 120px);
+    max-height: clamp(90px, 28vw, 120px);
   }
   
   .battle-enemy-sprite-container {
-    left: 5%; /* Keep padding on small screens */
-    bottom: 240px; /* Match player vertical position */
+    left: 5%;
+    bottom: clamp(180px, calc(165px + 5vh), 240px);
+  }
+}
+
+/* Tall aspect ratios (20:9 phones) - ensure sprites stay in arena */
+@media (max-aspect-ratio: 9/16) {
+  .battle-player-sprite-container,
+  .battle-enemy-sprite-container {
+    /* Raise sprites higher on tall screens to stay in visible arena */
+    bottom: clamp(220px, calc(180px + 8vh), 320px);
+  }
+}
+
+/* Short/wide aspect ratios - prevent sprites from being too large */
+@media (min-aspect-ratio: 16/10) {
+  .battle-player-sprite-container {
+    width: clamp(100px, 15vw, 160px);
+    height: clamp(100px, 15vw, 160px);
+  }
+  
+  .battle-enemy-sprite {
+    max-width: clamp(120px, 18vw, 200px);
+    max-height: clamp(120px, 18vw, 200px);
   }
 }
 
@@ -5473,24 +5538,21 @@
     font-size: 14px;
   }
 
-  /* Enemy sprite - positioned on the LEFT, higher up to avoid overlap */
+  /* Legacy pokemon-bottom class (enemy sprite on LEFT) - sizing now handled by .battle-enemy-sprite */
   .player-sprite-container img,
   .pokemon-bottom {
-    max-width: 150px;
-    max-height: 150px;
+    /* Sizing handled by .battle-enemy-sprite via clamp() in main styles */
   }
 
-  /* Player sprite - positioned on the RIGHT */
+  /* Legacy pokemon-top class (player sprite on RIGHT) - sizing now handled by .battle-player-sprite-container */
   .enemy-sprite-container img,
   .pokemon-top {
-    max-width: 140px;
-    max-height: 140px;
+    /* Sizing handled by .battle-player-sprite-container via clamp() in main styles */
   }
 
-  /* Enemy sprite container (on left side) - positioned higher for mobile */
+  /* Enemy sprite container (on left side) - positioning now handled by main styles */
   .box-bottom-left.battle-enemy-sprite-container {
-    left: 8% !important;
-    bottom: 280px !important;
+    /* Positioning handled via clamp() in main styles - removed !important overrides */
   }
 
   .bottom-menu {
@@ -5590,22 +5652,19 @@
     bottom: 185px !important;
   }
 
-  /* Enemy sprite - smaller on very small screens, positioned higher */
+  /* Enemy sprite - let main clamp() styles handle positioning */
   .box-bottom-left.battle-enemy-sprite-container {
-    left: 5% !important;
-    bottom: 240px !important;
+    /* Removed !important - using clamp() in main styles */
   }
 
   .player-sprite-container img,
   .pokemon-bottom {
-    max-width: 120px;
-    max-height: 120px;
+    /* Let .battle-enemy-sprite handle sizing via clamp() */
   }
 
   .enemy-sprite-container img,
   .pokemon-top {
-    max-width: 110px;
-    max-height: 110px;
+    /* Let .battle-player-sprite-container handle sizing via clamp() */
   }
 
   .battle-text-top-left,
