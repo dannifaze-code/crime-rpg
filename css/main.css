@@ -5094,7 +5094,6 @@
   filter: drop-shadow(0 8px 16px rgba(0,0,0,0.6));
   image-rendering: pixelated;
   /* Face RIGHT toward player (enemy on left side) - no flip needed, sprites face right by default */
-  transform: scaleX(1);
 }
 
 /* Mobile responsive battle sprites */
