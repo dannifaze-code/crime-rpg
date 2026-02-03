@@ -11537,7 +11537,7 @@ function updateTurfDefense(dt) {
 
           buildRoadGraph();
           setReady(state.nodes.length > 0);
-          console.log(`🛣️ RoadPathfinder ready: ${state.gw}x${state.gh} grid, cellSize=${state.cellSize}px`);
+          console.log(`🛣️ RoadPathfinder ready: ${state.gw}x${state.gh} grid, cellSize=${state.cellSize}px, ${state.nodes.length} nodes, ${state.entryNodes.length} entry points`);
         } catch (e) {
           console.warn('RoadPathfinder failed to initialize (will fall back to straight lines):', e);
           setReady(false);
@@ -14711,7 +14711,10 @@ function ensureLandmarkProperties() {
 
       _buildNextRoadPath() {
         const rp = window.RoadPathfinder;
-        if (!rp || !rp.ready) return;
+        if (!rp || !rp.ready) {
+          // RoadPathfinder not ready yet, will retry on next animation frame
+          return;
+        }
 
         const dbg = rp.getDebugData ? rp.getDebugData() : null;
         const entryNodes = (typeof rp.getEntryNodes === 'function')
@@ -14765,6 +14768,11 @@ function ensureLandmarkProperties() {
           this.currentPath = path;
           this.currentPathIndex = 0;
           this.currentSegmentT = 0;
+          // Log first successful path build for debugging
+          if (!this._hasLoggedFirstPath) {
+            this._hasLoggedFirstPath = true;
+            console.log('🚔 Cop car first road path built:', path.length, 'waypoints');
+          }
         }
       },
 
@@ -26934,14 +26942,12 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       console.log('[DEBUG] Initializing inmate recruitment system...');
       // Initialize inmate recruitment system (police station & hideout)
       initInmateSystem();
-      
-      console.log('[DEBUG] Initializing cop car patrol system...');
-      // Initialize cop car patrol on map
-      CopCarSystem.init();
 
       // Build the road mask used by RoadPathfinder (and set the map background div).
-      // Even though the static map is also set via CSS, we still load the image here
-      // so pathfinding can sample pixels reliably.
+      // This MUST be called BEFORE CopCarSystem.init() so the road graph is ready
+      // for pathfinding. Note: image loading is async, so RoadPathfinder may not be
+      // ready immediately, but CopCarSystem will retry building paths until it is.
+      console.log('[DEBUG] Initializing static map and RoadPathfinder...');
       try {
         if (typeof window.initStaticMap === 'function') {
           window.initStaticMap();
@@ -26949,6 +26955,10 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
           console.warn('initStaticMap failed: initStaticMap not available');
         }
       } catch (e) { console.warn('initStaticMap failed:', e); }
+      
+      console.log('[DEBUG] Initializing cop car patrol system...');
+      // Initialize cop car patrol on map (after initStaticMap for road pathfinding)
+      CopCarSystem.init();
 
       console.log('[DEBUG] Skipping roads and buildings (using static map)...');
       // DISABLED: Roads and buildings generation not needed for static 2D map
