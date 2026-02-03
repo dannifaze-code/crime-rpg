@@ -110,6 +110,8 @@ const CopCar3D = {
     },
 
     carWidthPercentUnits: 3.0,
+    carLengthPercentUnits: 5.0,
+    carWidthSlimFactor: 0.9,
 
     // dt-based smoothing strengths (higher = tighter)
     positionLerpStrength: 18,
@@ -634,11 +636,18 @@ const CopCar3D = {
             const box = new THREE.Box3().setFromObject(visual);
             const size = new THREE.Vector3();
             box.getSize(size);
-            const widthAxis = size.x <= size.z ? 'x' : 'z';
+            const lengthAxis = size.x >= size.z ? 'x' : 'z';
+            const widthAxis = lengthAxis === 'x' ? 'z' : 'x';
+            const bboxLength = lengthAxis === 'x' ? size.x : size.z;
             const bboxWidth = widthAxis === 'x' ? size.x : size.z;
-            const desiredWidth = this.config?.carWidthPercentUnits ?? 3.0;
-            const scale = (isFinite(bboxWidth) && bboxWidth > 0) ? (desiredWidth / bboxWidth) : 1;
+            const desiredLength = this.config?.carLengthPercentUnits ?? 5.0;
+            const scale = (isFinite(bboxLength) && bboxLength > 0) ? (desiredLength / bboxLength) : 1;
             visual.scale.setScalar(scale);
+            const widthSlim = this.config?.carWidthSlimFactor ?? 0.9;
+            if (isFinite(bboxWidth) && bboxWidth > 0) {
+              if (widthAxis === 'x') visual.scale.x *= widthSlim;
+              if (widthAxis === 'z') visual.scale.z *= widthSlim;
+            }
 
             const scaledBox = new THREE.Box3().setFromObject(visual);
             const center = new THREE.Vector3();
@@ -647,8 +656,10 @@ const CopCar3D = {
             if (debugEnabled) {
               console.log('[CopCar3D] GLB bbox', {
                 size: { x: size.x, y: size.y, z: size.z },
+                lengthAxis,
                 widthAxis,
-                desiredWidth,
+                desiredLength,
+                widthSlim,
                 scale,
                 center: { x: center.x, y: center.y, z: center.z }
               });
