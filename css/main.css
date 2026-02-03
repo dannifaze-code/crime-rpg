@@ -5063,6 +5063,7 @@
 
 /* ====== BATTLE PLAYER SPRITE ANIMATIONS ====== */
 /* Idle breathing/bob animation - subtle and continuous */
+/* Note: scaleX(-1) applied on element, animations use simple transforms */
 @keyframes battle-idle-bob {
   0%, 100% { transform: scaleX(-1) translateY(0); }
   50% { transform: scaleX(-1) translateY(-3px); }
@@ -5083,7 +5084,7 @@
   20% { transform: scaleX(-1) translateX(6px); filter: drop-shadow(0 8px 16px rgba(0,0,0,0.6)) brightness(1.5); }
   30% { transform: scaleX(-1) translateX(-5px); filter: drop-shadow(0 8px 16px rgba(0,0,0,0.6)) brightness(1.2); }
   50% { transform: scaleX(-1) translateX(3px); filter: drop-shadow(0 8px 16px rgba(0,0,0,0.6)) brightness(1); }
-  70% { transform: scaleX(-1) translateX(-2px); }
+  70% { transform: scaleX(-1) translateX(-2px); filter: drop-shadow(0 8px 16px rgba(0,0,0,0.6)) brightness(1); }
   100% { transform: scaleX(-1) translateX(0); filter: drop-shadow(0 8px 16px rgba(0,0,0,0.6)) brightness(1); }
 }
 
@@ -5118,7 +5119,7 @@
   width: clamp(140px, 35vw, 280px);
   height: clamp(200px, 45vh, 380px);
   pointer-events: none;
-  /* Allow sprite shadows to render outside bounds */
+  /* Default: allow sprite shadows to render outside bounds */
   overflow: visible;
 }
 
@@ -5129,6 +5130,8 @@
   height: 100%;
   /* Face LEFT toward enemy (player on right side) */
   transform: scaleX(-1);
+  /* Prevent fallback top-down sprites from extending outside container bounds */
+  overflow: hidden;
 }
 
 /* Battle player portrait - NEW side-view sprite for battle-only */
@@ -5139,6 +5142,8 @@
   display: flex;
   align-items: flex-end; /* Anchor sprite to bottom of container */
   justify-content: center;
+  /* Allow portrait shadows to extend outside bounds */
+  overflow: visible;
 }
 
 .battle-player-portrait img {
@@ -5151,13 +5156,13 @@
   transform: scaleX(-1);
   filter: drop-shadow(0 8px 16px rgba(0,0,0,0.6));
   image-rendering: auto; /* Better quality for portrait art */
-  /* Default idle animation - subtle bob */
-  animation: battle-idle-bob 2.5s ease-in-out infinite;
+  /* No default animation - animations applied only via state classes */
   /* Smooth transitions between animation states */
   transition: filter 0.1s ease;
 }
 
 /* Animation state classes - applied via JavaScript */
+/* Idle animation class starts the subtle bob */
 .battle-player-portrait img.battle-anim-idle {
   animation: battle-idle-bob 2.5s ease-in-out infinite;
 }
