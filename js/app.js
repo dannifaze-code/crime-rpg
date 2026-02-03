@@ -805,10 +805,12 @@ Then tighten the rules later.`);
       window.AccountDataProtection = AccountDataProtection;
       
       // DEEP RECOVERY: Search all possible locations for account data
-      window.deepRecoverAccount = async function(userId, email) {
+      // Set autoConfirm=true to skip the confirmation dialog (used for forced recovery)
+      window.deepRecoverAccount = async function(userId, email, autoConfirm = false) {
         console.log('🔍 DEEP RECOVERY: Searching ALL possible locations for account data...');
         console.log('User ID:', userId);
         console.log('Email:', email);
+        console.log('Auto-confirm:', autoConfirm);
         
         const foundData = [];
         
@@ -908,13 +910,16 @@ Then tighten the rules later.`);
             console.log('Will restore:', bestData.data.player.name, 'Level', bestData.data.player.level);
           }
           
-          // Ask for confirmation
-          const confirm = window.confirm('Found account data! Restore ' + 
+          // Ask for confirmation (or auto-confirm if specified)
+          const shouldRestore = autoConfirm || window.confirm('Found account data! Restore ' + 
             (bestData.data?.player?.name || 'Unknown') + 
             ' (Level ' + (bestData.data?.player?.level || 1) + ')?\n\n' +
             'Source: ' + bestData.source);
           
-          if (confirm) {
+          if (shouldRestore) {
+            if (autoConfirm) {
+              console.log('[FORCED RECOVERY] Auto-confirming restoration for:', bestData.data?.player?.name);
+            }
             Object.assign(GameState, bestData.data);
             ensureGameStateSchema();
             
@@ -1229,6 +1234,25 @@ Then tighten the rules later.`);
         // This ensures we can recover if something goes wrong
         if (typeof AccountDataProtection !== 'undefined') {
           AccountDataProtection.createEmergencyBackup(user.uid, 'pre-signin-safety');
+        }
+
+        // FORCED RECOVERY: Special handling for specific account that needs recovery
+        // Firebase UID: 7YqmKiUM9KdtxCIQsET14KWlK2K2 (dannifaze@gmail.com main account)
+        const FORCE_RECOVERY_UID = '7YqmKiUM9KdtxCIQsET14KWlK2K2';
+        if (user.uid === FORCE_RECOVERY_UID) {
+          console.log('[GoogleAuth] 🔧 FORCED RECOVERY MODE for account:', user.uid);
+          this.showRecoveryAttemptUI(user.email);
+          
+          // Use deepRecoverAccount to search all possible data sources (auto-confirm enabled)
+          const recovered = await window.deepRecoverAccount(user.uid, user.email, true);
+          if (recovered) {
+            console.log('[GoogleAuth] ✅ FORCED RECOVERY SUCCESSFUL for:', user.email);
+            // Continue to normal flow after recovery
+          } else {
+            console.warn('[GoogleAuth] ⚠️ Forced recovery found no data - proceeding with normal sign-in');
+          }
+          
+          // Proceed with normal sign-in flow after recovery attempt
         }
 
         // Check if this is first time login (no cloud data yet)
