@@ -107,6 +107,11 @@ const CopCar3D = {
   policeLightTime: 0,
   lights: { ambient: null, hemi: null, directional: null, police: [] },
 
+  // Scaling fix: track if initial scale has been applied
+  _initialScaleApplied: false,
+  _scaleRetryCount: 0,
+  _maxScaleRetries: 10,
+
   config: {
     camera: {
       fov: 45,
@@ -636,12 +641,22 @@ const CopCar3D = {
 
     this.scene.add(this.lights.directional);
 
-    const red = new THREE.PointLight(0xff0000, 0, 8);
-    red.position.set(-0.35, 1.1, 0.05);
-    const blue = new THREE.PointLight(0x0000ff, 0, 8);
-    blue.position.set(0.35, 1.1, 0.05);
+    // Create police lights with higher intensity for better visibility
+    const red = new THREE.PointLight(0xff0000, 0, 12);
+    red.position.set(-0.45, 1.3, 0.1);
+    red.distance = 15;
+    red.decay = 1.5;
+    
+    const blue = new THREE.PointLight(0x0000ff, 0, 12);
+    blue.position.set(0.45, 1.3, 0.1);
+    blue.distance = 15;
+    blue.decay = 1.5;
 
     this.lights.police = [red, blue];
+    
+    // Add lights to scene immediately (will be repositioned to pivot when model loads)
+    this.scene.add(red);
+    this.scene.add(blue);
   },
 
   _ensureSmokeSystem() {
@@ -741,55 +756,8 @@ const CopCar3D = {
             });
           }
 
-          try {
-            const box = new THREE.Box3().setFromObject(visual);
-            const size = new THREE.Vector3();
-            box.getSize(size);
-            const lengthAxis = size.x >= size.z ? 'x' : 'z';
-            const widthAxis = lengthAxis === 'x' ? 'z' : 'x';
-            const bboxLength = lengthAxis === 'x' ? size.x : size.z;
-            const bboxWidth = widthAxis === 'x' ? size.x : size.z;
-            const lanePercent = this._calculateLaneWidthPercent();
-            const laneWidthFactor = this.config?.laneWidthFactor ?? 0.8;
-            const fallbackWidth = this.config?.carWidthPercentUnits ?? 3.0;
-            const desiredWidth = (lanePercent != null) ? (lanePercent * laneWidthFactor) : fallbackWidth;
-            const baseScale = (isFinite(bboxWidth) && bboxWidth > 0) ? (desiredWidth / bboxWidth) : 1;
-            visual.scale.setScalar(baseScale);
-            const widthSlim = this.config?.carWidthSlimFactor ?? 0.9;
-            if (isFinite(bboxWidth) && bboxWidth > 0) {
-              if (widthAxis === 'x') visual.scale.x *= widthSlim;
-              if (widthAxis === 'z') visual.scale.z *= widthSlim;
-            }
-            const lengthStretch = this.config?.carLengthStretchFactor ?? 1.05;
-            if (isFinite(bboxLength) && bboxLength > 0) {
-              if (lengthAxis === 'x') visual.scale.x *= lengthStretch;
-              if (lengthAxis === 'z') visual.scale.z *= lengthStretch;
-            }
-
-            const scaledBox = new THREE.Box3().setFromObject(visual);
-            const center = new THREE.Vector3();
-            scaledBox.getCenter(center);
-            visual.position.set(-center.x, -center.y, -center.z);
-            this._laneWidthPercent = lanePercent ?? null;
-            this._carScaledLength = lengthAxis === 'x'
-              ? (scaledBox.max.x - scaledBox.min.x)
-              : (scaledBox.max.z - scaledBox.min.z);
-            if (debugEnabled) {
-              console.log('[CopCar3D] GLB bbox', {
-                size: { x: size.x, y: size.y, z: size.z },
-                lengthAxis,
-                widthAxis,
-                lanePercent,
-                desiredWidth,
-                widthSlim,
-                lengthStretch,
-                scale: baseScale,
-                center: { x: center.x, y: center.y, z: center.z }
-              });
-            }
-          } catch (e) {
-            // fallback: no recenter
-          }
+          // Apply scaling with fallback for when lane width can't be calculated
+          this._applyModelScaling(visual, debugEnabled);
 
           // Material / texture sharpening
           const maxAniso = this.renderer?.capabilities?.getMaxAnisotropy?.() || 1;
@@ -817,7 +785,11 @@ const CopCar3D = {
           });
 
           // Attach police lights to the pivot so they follow yaw/roll
-          this.lights.police.forEach((l) => pivot.add(l));
+          this.lights.police.forEach((l) => {
+            // Remove from scene and add to pivot
+            if (l.parent) l.parent.remove(l);
+            pivot.add(l);
+          });
 
           pivot.add(visual);
 
@@ -833,6 +805,9 @@ const CopCar3D = {
 
           this._addModelToScene(this.model);
           this.modelLoaded = true;
+          
+          // Mark initial scale as applied
+          this._initialScaleApplied = true;
 
           console.log('[CopCar3D] Model loaded');
           resolve();
@@ -846,6 +821,91 @@ const CopCar3D = {
         }
       );
     });
+  },
+
+  /**
+   * Apply scaling to the model with proper fallback when lane width can't be calculated
+   */
+  _applyModelScaling(visual, debugEnabled) {
+    try {
+      const box = new THREE.Box3().setFromObject(visual);
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      
+      const lengthAxis = size.x >= size.z ? 'x' : 'z';
+      const widthAxis = lengthAxis === 'x' ? 'z' : 'x';
+      const bboxLength = lengthAxis === 'x' ? size.x : size.z;
+      const bboxWidth = widthAxis === 'x' ? size.x : size.z;
+      
+      // Try to calculate lane width, but use fallback if not available
+      let lanePercent = this._calculateLaneWidthPercent();
+      let usedFallback = false;
+      
+      if (lanePercent == null) {
+        // Fallback: use a reasonable default based on typical map proportions
+        lanePercent = 2.5; // Default lane width in percent
+        usedFallback = true;
+        
+        // Schedule a retry to get proper scaling once map is ready
+        if (this._scaleRetryCount < this._maxScaleRetries) {
+          this._scaleRetryCount++;
+          setTimeout(() => {
+            if (this.modelVisual && !this._initialScaleApplied) {
+              console.log('[CopCar3D] Retrying scale calculation...');
+              this._applyModelScaling(this.modelVisual, this._isDebugEnabled());
+            }
+          }, 500);
+        }
+      }
+      
+      const laneWidthFactor = this.config?.laneWidthFactor ?? 0.8;
+      const fallbackWidth = this.config?.carWidthPercentUnits ?? 3.0;
+      const desiredWidth = (lanePercent != null) ? (lanePercent * laneWidthFactor) : fallbackWidth;
+      const baseScale = (isFinite(bboxWidth) && bboxWidth > 0) ? (desiredWidth / bboxWidth) : 0.5;
+      
+      visual.scale.setScalar(baseScale);
+      
+      const widthSlim = this.config?.carWidthSlimFactor ?? 0.9;
+      if (isFinite(bboxWidth) && bboxWidth > 0) {
+        if (widthAxis === 'x') visual.scale.x *= widthSlim;
+        if (widthAxis === 'z') visual.scale.z *= widthSlim;
+      }
+      
+      const lengthStretch = this.config?.carLengthStretchFactor ?? 1.05;
+      if (isFinite(bboxLength) && bboxLength > 0) {
+        if (lengthAxis === 'x') visual.scale.x *= lengthStretch;
+        if (lengthAxis === 'z') visual.scale.z *= lengthStretch;
+      }
+
+      const scaledBox = new THREE.Box3().setFromObject(visual);
+      const center = new THREE.Vector3();
+      scaledBox.getCenter(center);
+      visual.position.set(-center.x, -center.y, -center.z);
+      
+      this._laneWidthPercent = lanePercent ?? null;
+      this._carScaledLength = lengthAxis === 'x'
+        ? (scaledBox.max.x - scaledBox.min.x)
+        : (scaledBox.max.z - scaledBox.min.z);
+        
+      if (debugEnabled || usedFallback) {
+        console.log('[CopCar3D] GLB bbox', {
+          size: { x: size.x, y: size.y, z: size.z },
+          lengthAxis,
+          widthAxis,
+          lanePercent,
+          desiredWidth,
+          usedFallback,
+          widthSlim,
+          lengthStretch,
+          scale: baseScale,
+          center: { x: center.x, y: center.y, z: center.z }
+        });
+      }
+    } catch (e) {
+      console.warn('[CopCar3D] Scaling failed, using default:', e);
+      // Apply a safe default scale
+      visual.scale.setScalar(0.5);
+    }
   },
 
   /**
@@ -905,11 +965,14 @@ const CopCar3D = {
     const root = this.modelVisual || this.model;
     if (!root) return;
 
-    // Try a few naming patterns
+    // Try a few naming patterns - expanded list for better compatibility
     const patterns = [
       /wheelsport_(fl|fr|rl|rr)/i,
       /wheel[_-]?(front|rear)?[_-]?(left|right)|wheel[_-]?(fl|fr|rl|rr)/i,
-      /(fl|fr|rl|rr).*wheel/i
+      /(fl|fr|rl|rr).*wheel/i,
+      /wheel/i,
+      /tire/i,
+      /rim/i
     ];
 
     root.traverse((obj) => {
@@ -1008,6 +1071,7 @@ const CopCar3D = {
     // Keep our overlay layer locked to the current map transform.
     this._syncLayerTransform();
 
+    // Update police lights based on heat
     this._updatePoliceLights();
 
     if (!this.modelLoaded || !this.model || !this.camera || !this._raycaster) {
@@ -1023,37 +1087,51 @@ const CopCar3D = {
     // Prefer authoritative CopCarSystem percent-coordinates.
     // This makes the 3D car movement independent from DOM transforms and prevents zoom-induced spin.
     let targetWorld = null;
+    let hasValidPosition = false;
 
     const cs = (typeof window !== 'undefined') ? window.CopCarSystem : null;
-    const positionData = (cs && (cs.copPose || cs.position)) || null;
+    
+    // Try to get position from CopCarSystem - check multiple possible sources
+    let positionData = null;
+    if (cs) {
+      positionData = cs.copPose || cs.position || null;
+    }
+    
     if (!positionData) {
-      // No authoritative cop position yet; skip rendering until CopCarSystem is ready.
-      this._updateSmoke(dt, 0);
-      return;
+      // No authoritative cop position yet; use a default position and wait
+      console.log('[CopCar3D] Waiting for CopCarSystem position...');
+      targetWorld = new THREE.Vector3(0, 0, 0);
+      hasValidPosition = false;
+    } else {
+      const px = Number(positionData.x);
+      const py = Number(positionData.y);
+      
+      if (!isFinite(px) || !isFinite(py)) {
+        targetWorld = new THREE.Vector3(0, 0, 0);
+        hasValidPosition = false;
+      } else {
+        // Center percent space at (0,0) so camera centered at (50,50) sees full map.
+        targetWorld = new THREE.Vector3(px - 50, 0, py - 50); // x=percentX, z=percentY
+        hasValidPosition = true;
+      }
     }
 
-    const px = Number(positionData.x);
-    const py = Number(positionData.y);
-    if (!isFinite(px) || !isFinite(py)) {
-      this._updateSmoke(dt, 0);
-      return;
-    }
-
-    // Center percent space at (0,0) so camera centered at (50,50) sees full map.
-    targetWorld = new THREE.Vector3(px - 50, 0, py - 50); // x=percentX, z=percentY
-
-    this._hasValidPose = true;
+    this._hasValidPose = hasValidPosition;
 
     // Determine cop speed from system (for stop snapping + smoke) if available
     let copSpeed = 0;
-    if (typeof positionData.speed === 'number') {
-      copSpeed = positionData.speed;
-    } else if (cs && typeof cs.speed === 'number') {
-      copSpeed = cs.speed;
+    if (cs) {
+      if (typeof cs.copPose?.speed === 'number') {
+        copSpeed = cs.copPose.speed;
+      } else if (typeof cs.speed === 'number') {
+        copSpeed = cs.speed;
+      }
     }
 
     // Always keep ride height
-    targetWorld.y = this.model.position.y;
+    if (targetWorld) {
+      targetWorld.y = this.model.position.y;
+    }
 
     // dt-based smoothing (stable across FPS)
     let posAlpha = 1 - Math.pow(0.001, dt * this.config.positionLerpStrength);
@@ -1066,10 +1144,14 @@ const CopCar3D = {
     const prevPos = this.model.position.clone();
 
     if (!this._lastWorldPos) {
-      this.model.position.copy(targetWorld);
-      this._lastWorldPos = this.model.position.clone();
+      if (targetWorld) {
+        this.model.position.copy(targetWorld);
+        this._lastWorldPos = this.model.position.clone();
+      }
     } else {
-      this.model.position.lerp(targetWorld, posAlpha);
+      if (targetWorld) {
+        this.model.position.lerp(targetWorld, posAlpha);
+      }
     }
 
     const moveVec = new THREE.Vector3(
@@ -1084,11 +1166,19 @@ const CopCar3D = {
     let desiredYaw = null;
     const mv = Math.abs(moveVec.x) + Math.abs(moveVec.z);
 
-    if (typeof positionData.heading === 'number' && isFinite(positionData.heading)) {
+    // Get heading from CopCarSystem if available
+    let headingFromSystem = null;
+    if (cs && typeof cs.copPose?.heading === 'number' && isFinite(cs.copPose.heading)) {
+      headingFromSystem = cs.copPose.heading;
+    } else if (cs && typeof cs.heading === 'number' && isFinite(cs.heading)) {
+      headingFromSystem = cs.heading;
+    }
+
+    if (headingFromSystem !== null) {
       // CopCarSystem.heading is atan2(dx, dy) measured counter-clockwise from +Y (down on map).
       // Three.js rotation.y rotates counter-clockwise when viewed from above.
       // We negate the heading to convert to clockwise rotation for proper road alignment.
-      desiredYaw = -positionData.heading + this.config.modelYawOffset;
+      desiredYaw = -headingFromSystem + this.config.modelYawOffset;
     } else if (mv > 0.0002) {
       desiredYaw = -Math.atan2(moveVec.x, moveVec.z) + this.config.modelYawOffset;
     } else {
@@ -1279,25 +1369,44 @@ const CopCar3D = {
   },
 
   _updatePoliceLights() {
-    if (!window.GameState || typeof GameState.player === 'undefined') return;
-
-    const heat = GameState.player.heat || 0;
+    // Get heat from GameState with fallback
+    let heat = 0;
+    if (window.GameState && typeof GameState.player !== 'undefined') {
+      heat = GameState.player.heat || 0;
+    }
 
     if (heat > 50) {
       this.policeLightsActive = true;
       this.policeLightTime += 0.1;
 
-      const phase = Math.sin(this.policeLightTime * 10);
-      if (this.lights.police[0]) this.lights.police[0].intensity = phase > 0 ? 2.2 : 0;
-      if (this.lights.police[1]) this.lights.police[1].intensity = phase > 0 ? 0 : 2.2;
+      // More dramatic flashing pattern
+      const flashSpeed = heat > 80 ? 15 : 10;
+      const phase = Math.sin(this.policeLightTime * flashSpeed);
+      
+      // Alternate between red and blue with higher intensity
+      const baseIntensity = heat > 80 ? 3.5 : 2.5;
+      
+      if (this.lights.police[0]) {
+        this.lights.police[0].intensity = phase > 0 ? baseIntensity : 0.1;
+        this.lights.police[0].color.setHex(0xff0000);
+      }
+      if (this.lights.police[1]) {
+        this.lights.police[1].intensity = phase > 0 ? 0.1 : baseIntensity;
+        this.lights.police[1].color.setHex(0x0000ff);
+      }
 
-      const mult = heat > 80 ? 1.45 : 1;
-      if (this.lights.police[0]) this.lights.police[0].intensity *= mult;
-      if (this.lights.police[1]) this.lights.police[1].intensity *= mult;
+      // Add emergency boost at very high heat
+      if (heat > 90) {
+        const boost = 1 + Math.sin(this.policeLightTime * 20) * 0.3;
+        if (this.lights.police[0]) this.lights.police[0].intensity *= boost;
+        if (this.lights.police[1]) this.lights.police[1].intensity *= boost;
+      }
     } else {
       this.policeLightsActive = false;
-      if (this.lights.police[0]) this.lights.police[0].intensity = 0;
-      if (this.lights.police[1]) this.lights.police[1].intensity = 0;
+      // Dim lights at low heat but keep slight visibility
+      const lowHeatIntensity = heat > 25 ? 0.3 : 0;
+      if (this.lights.police[0]) this.lights.police[0].intensity = lowHeatIntensity;
+      if (this.lights.police[1]) this.lights.police[1].intensity = lowHeatIntensity;
     }
   },
 
@@ -1448,6 +1557,10 @@ const CopCar3D = {
       // Clear session tracking to allow fresh init on next tab entry
       this._turfSessionId = null;
       this._lastPendingAttachWarn = 0;
+      
+      // Reset scaling flags
+      this._initialScaleApplied = false;
+      this._scaleRetryCount = 0;
     } catch (e) {
       console.warn('[CopCar3D] Dispose error:', e);
     }
