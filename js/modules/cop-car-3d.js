@@ -101,14 +101,15 @@ const CopCar3D = {
       lookAt: { x: 0, y: 0, z: 0 }
     },
     debug: {
-      enabled: true,
+      enabled: false,
       logIntervalMs: 1000,
-      modelScale: 10,
       ambientIntensity: 1.0,
       directionalIntensity: 1.0,
       directionalPosition: { x: 50, y: 100, z: 50 },
       rideHeight: 0
     },
+
+    carWidthPercentUnits: 3.0,
 
     // dt-based smoothing strengths (higher = tighter)
     positionLerpStrength: 18,
@@ -263,6 +264,10 @@ const CopCar3D = {
     s.filter = 'none';
   },
 
+  _isDebugEnabled() {
+    return !!(this.config?.debug?.enabled || (typeof window !== 'undefined' && window.COP3D_DEBUG));
+  },
+
   _getWorldBaseSize() {
     // NOTE: offsetWidth/offsetHeight ignore CSS transforms, which is what we want.
     const world = this.mapWorldEl || document.getElementById('map-world');
@@ -324,7 +329,7 @@ const CopCar3D = {
   _addModelToScene(model, allowDefer = true) {
     const result = { success: false, deferred: false, error: null };
     if (!model) return result;
-    const debugEnabled = !!this.config?.debug?.enabled;
+    const debugEnabled = this._isDebugEnabled();
     if (this.copRoot) {
       try {
         if (model.parent && model.parent !== this.copRoot) {
@@ -573,7 +578,7 @@ const CopCar3D = {
   },
 
   _setupDebugHelpers() {
-    if (!this.config?.debug?.enabled) return;
+    if (!this._isDebugEnabled()) return;
     if (!this.scene) return;
 
     if (!this._debugAxes) {
@@ -604,7 +609,7 @@ const CopCar3D = {
           pivot.name = 'CopCarPivot';
 
           const visual = gltf.scene;
-          const debugEnabled = !!this.config?.debug?.enabled;
+          const debugEnabled = this._isDebugEnabled();
           visual.name = 'CopCarVisual';
           if (debugEnabled) {
             let meshCount = 0;
@@ -625,22 +630,26 @@ const CopCar3D = {
             });
           }
 
-          // Scale the model to be visible in the 100-unit coordinate space (temporary debug boost).
-          const modelScale = this.config?.debug?.modelScale ?? 10;
-          visual.scale.setScalar(modelScale);
-
-          // Recenter pivot to bounds center, put wheels on ground (y=0)
           try {
             const box = new THREE.Box3().setFromObject(visual);
-            const center = new THREE.Vector3();
-            box.getCenter(center);
-            const minY = box.min.y;
-            visual.position.set(-center.x, -minY, -center.z);
             const size = new THREE.Vector3();
             box.getSize(size);
+            const widthAxis = size.x <= size.z ? 'x' : 'z';
+            const bboxWidth = widthAxis === 'x' ? size.x : size.z;
+            const desiredWidth = this.config?.carWidthPercentUnits ?? 3.0;
+            const scale = (isFinite(bboxWidth) && bboxWidth > 0) ? (desiredWidth / bboxWidth) : 1;
+            visual.scale.setScalar(scale);
+
+            const scaledBox = new THREE.Box3().setFromObject(visual);
+            const center = new THREE.Vector3();
+            scaledBox.getCenter(center);
+            visual.position.set(-center.x, -center.y, -center.z);
             if (debugEnabled) {
               console.log('[CopCar3D] GLB bbox', {
                 size: { x: size.x, y: size.y, z: size.z },
+                widthAxis,
+                desiredWidth,
+                scale,
                 center: { x: center.x, y: center.y, z: center.z }
               });
             }
@@ -845,7 +854,7 @@ const CopCar3D = {
     const dt = this._lastTickTime ? Math.min(0.05, (now - this._lastTickTime) / 1000) : (1 / 60);
     this._lastTickTime = now;
 
-    if (this.config?.debug?.enabled && (now - this._lastDebugLog >= this.config.debug.logIntervalMs)) {
+    if (this._isDebugEnabled() && (now - this._lastDebugLog >= this.config.debug.logIntervalMs)) {
       this._lastDebugLog = now;
       const cam = this.camera;
       const look = this._cameraLookAt;
