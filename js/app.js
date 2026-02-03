@@ -12123,17 +12123,35 @@ function updateTurfDefense(dt) {
       function isRoadPixel(r, g, b, a) {
         if (a < 10) return false;
 
-        // Roads on your map are bright + low saturation (beige/grey/white),
-        // while parks/water are higher saturation (greens/blues).
-        const { s, v } = rgbToHsv(r,g,b);
-
-        const bright = v > 0.72;
-        const lowSat = s < 0.22;
-
-        // Extra guard: reject very-green pixels (parks)
-        const veryGreen = (g > r + 25) && (g > b + 25);
-
-        return bright && lowSat && !veryGreen;
+        // TurfMap.png has DARK asphalt roads with light sidewalks:
+        // - Dark grey asphalt roads: brightness ~0.20-0.45, low saturation
+        // - Light sidewalks/curbs: brightness ~0.65+, low saturation  
+        // - Brown terrain: higher saturation (~0.25+), medium brightness
+        // - Water: blue hue with higher saturation
+        // - Yellow lane markings: high saturation yellow
+        
+        const { h, s, v } = rgbToHsv(r, g, b);
+        
+        // Detect DARK asphalt road surface
+        const isDarkAsphalt = v >= 0.18 && v <= 0.50 && s < 0.25;
+        
+        // Also include light sidewalks/crosswalks as driveable (bright + low sat)
+        const isSidewalkOrCrosswalk = v > 0.60 && s < 0.20;
+        
+        // Reject brown terrain (has reddish/brownish hue with higher saturation)
+        const isBrownTerrain = s > 0.20 && h >= 0.02 && h <= 0.12;
+        
+        // Reject water (blue hue)
+        const isWater = s > 0.30 && h >= 0.55 && h <= 0.70;
+        
+        // Reject very saturated colors (yellow lane markings, etc.)
+        const isHighSaturation = s > 0.50;
+        
+        if (isWater || isHighSaturation || isBrownTerrain) {
+          return false;
+        }
+        
+        return isDarkAsphalt || isSidewalkOrCrosswalk;
       }
 
       function idx(gx, gy) { return gy * state.gw + gx; }
@@ -15055,88 +15073,95 @@ function ensureLandmarkProperties() {
       
       
       // REALISTIC ROAD-FOLLOWING WAYPOINTS
-      // These follow the actual roads on your turf map image
-      // Carefully plotted to stay only on road/pavement areas
-      // Updated to cover map better with more spread-out patrol
+      // These follow the actual roads on TurfMap.png
+      // The map has a central intersection with roads branching outward
+      // Coordinates are in % of the map (0..100)
       patrolWaypoints: [
-        // Green-path loop (hand-traced from your screenshot)
-        // Coordinates are in % of the map (0..100). Edit points to fine-tune road alignment.
-        // Left roundabout loop
-        { x: 6,  y: 34 },
-        { x: 9,  y: 32 },
-        { x: 12, y: 30 },
-        { x: 15, y: 28 },
-        { x: 18, y: 30 },
-        { x: 16, y: 34 },
-        { x: 12, y: 36 },
-        { x: 8,  y: 36 },
-        { x: 6,  y: 34 },
-
-        // Exit roundabout → upper road sweep
-        { x: 20, y: 34 },
-        { x: 28, y: 34 },
-        { x: 36, y: 34 },
-        { x: 44, y: 34 },
-        { x: 52, y: 34 },
-        { x: 60, y: 34 },
-        { x: 68, y: 34 },
-        { x: 76, y: 34 },
-
-        // Cut through mid blocks (the long green rectangle you drew)
-        { x: 76, y: 40 },
-        { x: 68, y: 40 },
-        { x: 60, y: 40 },
-        { x: 52, y: 40 },
+        // Start at top-left road, heading toward center
+        { x: 12, y: 8 },
+        { x: 18, y: 14 },
+        { x: 24, y: 20 },
+        { x: 30, y: 26 },
+        
+        // Approach central intersection from top-left
+        { x: 38, y: 34 },
         { x: 44, y: 40 },
-        { x: 36, y: 40 },
-        { x: 28, y: 40 },
-        { x: 24, y: 40 },
-
-        // Drop down into the central loop
-        { x: 24, y: 50 },
-        { x: 30, y: 54 },
+        
+        // Central intersection area
+        { x: 50, y: 46 },
+        { x: 52, y: 50 },
+        
+        // Head toward bottom-right road
+        { x: 58, y: 56 },
+        { x: 64, y: 62 },
+        { x: 70, y: 68 },
+        { x: 76, y: 74 },
+        { x: 82, y: 80 },
+        { x: 88, y: 86 },
+        
+        // Turn around at bottom-right
+        { x: 90, y: 90 },
+        
+        // Come back toward center via different route
+        { x: 84, y: 84 },
+        { x: 78, y: 78 },
+        { x: 72, y: 72 },
+        { x: 66, y: 66 },
+        { x: 60, y: 60 },
+        
+        // Back to central area
+        { x: 54, y: 54 },
+        { x: 50, y: 50 },
+        
+        // Head toward top-right road
+        { x: 56, y: 44 },
+        { x: 62, y: 38 },
+        { x: 68, y: 32 },
+        { x: 74, y: 26 },
+        { x: 80, y: 20 },
+        { x: 86, y: 14 },
+        
+        // Turn at top-right
+        { x: 88, y: 10 },
+        
+        // Return toward center
+        { x: 82, y: 16 },
+        { x: 76, y: 22 },
+        { x: 70, y: 28 },
+        { x: 64, y: 34 },
+        { x: 58, y: 40 },
+        
+        // Back to center
+        { x: 52, y: 46 },
+        { x: 48, y: 50 },
+        
+        // Head toward bottom-left (near water)
+        { x: 42, y: 56 },
+        { x: 36, y: 62 },
+        { x: 30, y: 68 },
+        { x: 24, y: 74 },
+        
+        // Near the water/harbor area
+        { x: 20, y: 78 },
+        { x: 18, y: 82 },
+        
+        // Turn around before water
+        { x: 16, y: 80 },
+        
+        // Head back toward center
+        { x: 22, y: 74 },
+        { x: 28, y: 68 },
+        { x: 34, y: 62 },
         { x: 40, y: 56 },
-        { x: 50, y: 56 },
-        { x: 58, y: 54 },
-
-        // Slide toward the right-side park loop
-        { x: 66, y: 52 },
-        { x: 74, y: 50 },
-        { x: 80, y: 48 },
-
-        // Right park perimeter loop (big green box on the right)
-        { x: 86, y: 44 },
-        { x: 92, y: 46 },
-        { x: 94, y: 54 },
-        { x: 92, y: 62 },
-        { x: 86, y: 64 },
-        { x: 80, y: 62 },
-        { x: 78, y: 56 },
-        { x: 80, y: 48 },
-
-        // Bottom-right return rectangle
-        { x: 80, y: 70 },
-        { x: 92, y: 70 },
-        { x: 94, y: 78 },
-        { x: 86, y: 80 },
-        { x: 76, y: 78 },
-
-        // Bottom sweep back to the left
-        { x: 66, y: 78 },
-        { x: 56, y: 78 },
-        { x: 46, y: 78 },
-        { x: 36, y: 78 },
-        { x: 26, y: 78 },
-        { x: 18, y: 76 },
-        { x: 12, y: 72 },
-
-        // Up the left side back to the roundabout
-        { x: 10, y: 64 },
-        { x: 10, y: 56 },
-        { x: 10, y: 48 },
-        { x: 8,  y: 42 },
-        { x: 6,  y: 38 },
-        { x: 6,  y: 34 }
+        { x: 46, y: 50 },
+        
+        // Complete loop back to start
+        { x: 40, y: 44 },
+        { x: 34, y: 38 },
+        { x: 28, y: 32 },
+        { x: 22, y: 26 },
+        { x: 16, y: 20 },
+        { x: 12, y: 14 }
       ],
       currentWaypointIndex: 0,
       currentSegmentProgress: 0,
