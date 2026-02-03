@@ -535,6 +535,448 @@ Then tighten the rules later.`);
 
     // ========================================
     
+    // ========================================
+    // BULLETPROOF ACCOUNT DATA PROTECTION SYSTEM
+    // ========================================
+    // This system prevents accidental data loss during login/logout cycles
+    // by implementing multiple layers of safety checks and automatic backups.
+    
+    const AccountDataProtection = {
+      BACKUP_PREFIX: 'crime_rpg_emergency_backup_',
+      BACKUP_TIMESTAMP_KEY: 'crime_rpg_last_backup_time',
+      MAX_BACKUPS: 5,
+      
+      // Create emergency backup of current GameState
+      createEmergencyBackup(userId, reason = 'unknown') {
+        try {
+          if (!userId) {
+            console.warn('[AccountProtection] Cannot create backup - no userId');
+            return false;
+          }
+          
+          // Don't backup empty/default states
+          if (!this.isValidGameState(GameState)) {
+            console.log('[AccountProtection] Skipping backup - GameState appears empty/default');
+            return false;
+          }
+          
+          const backupKey = this.BACKUP_PREFIX + userId + '_' + Date.now();
+          const backupData = {
+            timestamp: Date.now(),
+            reason: reason,
+            userId: userId,
+            playerName: GameState.player?.name || 'Unknown',
+            playerLevel: GameState.player?.level || 1,
+            playerCash: GameState.player?.cash || 0,
+            gameState: JSON.parse(JSON.stringify(GameState))
+          };
+          
+          localStorage.setItem(backupKey, JSON.stringify(backupData));
+          localStorage.setItem(this.BACKUP_TIMESTAMP_KEY + '_' + userId, Date.now().toString());
+          
+          console.log(`[AccountProtection] ✅ Emergency backup created for ${userId} (reason: ${reason})`);
+          console.log(`[AccountProtection] Backup includes: ${backupData.playerName}, Level ${backupData.playerLevel}, $${backupData.playerCash}`);
+          
+          // Cleanup old backups
+          this.cleanupOldBackups(userId);
+          
+          return true;
+        } catch (e) {
+          console.error('[AccountProtection] Failed to create emergency backup:', e);
+          return false;
+        }
+      },
+      
+      // Check if GameState has meaningful data (not just defaults)
+      isValidGameState(state) {
+        if (!state || typeof state !== 'object') return false;
+        if (!state.player || typeof state.player !== 'object') return false;
+        
+        // Check for signs of actual gameplay progress
+        const hasProgress = (
+          (state.player.level && state.player.level > 1) ||
+          (state.player.xp && state.player.xp > 0) ||
+          (state.player.cash && state.player.cash > 1000) ||
+          (state.player.reputation && state.player.reputation > 0) ||
+          (state.player.name && state.player.name !== 'Rookie' && state.player.name !== 'Unknown')
+        );
+        
+        return hasProgress;
+      },
+      
+      // Check if cloud data has meaningful content
+      isValidCloudData(cloudData) {
+        if (!cloudData || typeof cloudData !== 'object') return false;
+        if (!cloudData.gameState || typeof cloudData.gameState !== 'object') return false;
+        
+        const gs = cloudData.gameState;
+        if (!gs.player || typeof gs.player !== 'object') return false;
+        
+        // Consider data valid if it has any signs of user activity
+        const hasActivity = (
+          (gs.player.level && gs.player.level > 1) ||
+          (gs.player.xp && gs.player.xp > 0) ||
+          (gs.player.cash && gs.player.cash > 100) ||
+          (gs.player.name && gs.player.name !== 'Rookie' && gs.player.name.length > 0) ||
+          (cloudData.createdAt && cloudData.createdAt > 0)
+        );
+        
+        return hasActivity;
+      },
+      
+      // Get all backups for a user
+      getBackupsForUser(userId) {
+        const backups = [];
+        try {
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith(this.BACKUP_PREFIX + userId + '_')) {
+              try {
+                const data = JSON.parse(localStorage.getItem(key));
+                data._backupKey = key;
+                backups.push(data);
+              } catch (e) {}
+            }
+          }
+          // Sort by timestamp descending (newest first)
+          backups.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+        } catch (e) {
+          console.error('[AccountProtection] Failed to get backups:', e);
+        }
+        return backups;
+      },
+      
+      // Restore from the latest backup
+      restoreFromBackup(userId) {
+        try {
+          const backups = this.getBackupsForUser(userId);
+          if (backups.length === 0) {
+            console.warn('[AccountProtection] No backups found for user:', userId);
+            return null;
+          }
+          
+          // Find the best backup (most progress)
+          let bestBackup = backups[0];
+          for (const backup of backups) {
+            if (backup.gameState && backup.gameState.player) {
+              const currentBest = bestBackup.gameState?.player;
+              const candidate = backup.gameState.player;
+              
+              // Prefer backup with more progress
+              if ((candidate.level || 1) > (currentBest?.level || 1) ||
+                  (candidate.cash || 0) > (currentBest?.cash || 0)) {
+                bestBackup = backup;
+              }
+            }
+          }
+          
+          if (bestBackup && bestBackup.gameState) {
+            console.log(`[AccountProtection] ✅ Restoring backup from ${new Date(bestBackup.timestamp).toISOString()}`);
+            console.log(`[AccountProtection] Restoring: ${bestBackup.playerName}, Level ${bestBackup.playerLevel}, $${bestBackup.playerCash}`);
+            return bestBackup.gameState;
+          }
+          
+          return null;
+        } catch (e) {
+          console.error('[AccountProtection] Failed to restore from backup:', e);
+          return null;
+        }
+      },
+      
+      // Cleanup old backups (keep only MAX_BACKUPS most recent)
+      cleanupOldBackups(userId) {
+        try {
+          const backups = this.getBackupsForUser(userId);
+          if (backups.length > this.MAX_BACKUPS) {
+            // Remove oldest backups
+            const toRemove = backups.slice(this.MAX_BACKUPS);
+            for (const backup of toRemove) {
+              if (backup._backupKey) {
+                localStorage.removeItem(backup._backupKey);
+                console.log('[AccountProtection] Removed old backup:', backup._backupKey);
+              }
+            }
+          }
+        } catch (e) {
+          console.error('[AccountProtection] Failed to cleanup backups:', e);
+        }
+      },
+      
+      // CRITICAL: Verify before allowing "new user" treatment
+      // Returns true if user should definitely be treated as new
+      async shouldTreatAsNewUser(userId, cloudData) {
+        console.log('[AccountProtection] Verifying if user should be treated as new:', userId);
+        
+        // Check 1: Does cloud data exist and have content?
+        if (this.isValidCloudData(cloudData)) {
+          console.log('[AccountProtection] ❌ Cloud data exists - NOT a new user');
+          return false;
+        }
+        
+        // Check 2: Do we have local backups for this user?
+        const backups = this.getBackupsForUser(userId);
+        if (backups.length > 0) {
+          console.log(`[AccountProtection] ❌ Found ${backups.length} local backups - NOT a new user`);
+          return false;
+        }
+        
+        // Check 3: Double-check Firebase with retry
+        try {
+          console.log('[AccountProtection] Double-checking Firebase for user data...');
+          await new Promise(resolve => setTimeout(resolve, 500)); // Wait 500ms
+          const snapshot = await database.ref('users/' + userId).once('value');
+          const retryData = snapshot.val();
+          
+          if (retryData && retryData.gameState) {
+            console.log('[AccountProtection] ❌ Found data on retry - NOT a new user');
+            return false;
+          }
+          
+          // Also check for backup node
+          const backupSnapshot = await database.ref('userBackups/' + userId).once('value');
+          const cloudBackup = backupSnapshot.val();
+          if (cloudBackup) {
+            console.log('[AccountProtection] ❌ Found cloud backup - NOT a new user');
+            return false;
+          }
+        } catch (e) {
+          console.warn('[AccountProtection] Firebase verification failed:', e);
+          // If verification fails, err on the side of caution
+          console.log('[AccountProtection] ❌ Verification failed - treating as EXISTING user for safety');
+          return false;
+        }
+        
+        console.log('[AccountProtection] ✅ All checks passed - user appears to be NEW');
+        return true;
+      },
+      
+      // Create cloud backup (in addition to local backup)
+      async createCloudBackup(userId, reason = 'periodic') {
+        try {
+          if (!userId || !database) return false;
+          
+          if (!this.isValidGameState(GameState)) {
+            console.log('[AccountProtection] Skipping cloud backup - GameState appears empty');
+            return false;
+          }
+          
+          const backupData = {
+            timestamp: Date.now(),
+            reason: reason,
+            playerName: GameState.player?.name || 'Unknown',
+            playerLevel: GameState.player?.level || 1,
+            playerCash: GameState.player?.cash || 0,
+            gameState: buildSerializableGameStateForCloud(GameState)
+          };
+          
+          await database.ref('userBackups/' + userId + '/latest').set(backupData);
+          console.log(`[AccountProtection] ✅ Cloud backup created for ${userId}`);
+          return true;
+        } catch (e) {
+          console.error('[AccountProtection] Failed to create cloud backup:', e);
+          return false;
+        }
+      },
+      
+      // Attempt to recover data from cloud backup
+      async recoverFromCloudBackup(userId) {
+        try {
+          if (!userId || !database) return null;
+          
+          const snapshot = await database.ref('userBackups/' + userId + '/latest').once('value');
+          const backup = snapshot.val();
+          
+          if (backup && backup.gameState) {
+            console.log(`[AccountProtection] ✅ Found cloud backup from ${new Date(backup.timestamp).toISOString()}`);
+            console.log(`[AccountProtection] Backup has: ${backup.playerName}, Level ${backup.playerLevel}, $${backup.playerCash}`);
+            return backup.gameState;
+          }
+          
+          return null;
+        } catch (e) {
+          console.error('[AccountProtection] Failed to recover from cloud backup:', e);
+          return null;
+        }
+      }
+    };
+    
+    // Make available globally for debugging/recovery
+    if (typeof window !== 'undefined') {
+      window.AccountDataProtection = AccountDataProtection;
+      
+      // DEEP RECOVERY: Search all possible locations for account data
+      window.deepRecoverAccount = async function(userId, email) {
+        console.log('🔍 DEEP RECOVERY: Searching ALL possible locations for account data...');
+        console.log('User ID:', userId);
+        console.log('Email:', email);
+        
+        const foundData = [];
+        
+        // 1. Check main user data
+        try {
+          console.log('📂 Checking users/' + userId + '...');
+          const mainSnapshot = await database.ref('users/' + userId).once('value');
+          const mainData = mainSnapshot.val();
+          if (mainData) {
+            console.log('✅ Found data in users/' + userId);
+            console.log('  - Email:', mainData.email);
+            console.log('  - Display Name:', mainData.displayName);
+            console.log('  - Created:', mainData.createdAt ? new Date(mainData.createdAt).toISOString() : 'unknown');
+            console.log('  - Last Login:', mainData.lastLogin ? new Date(mainData.lastLogin).toISOString() : 'unknown');
+            if (mainData.gameState && mainData.gameState.player) {
+              console.log('  - Player Name:', mainData.gameState.player.name);
+              console.log('  - Level:', mainData.gameState.player.level);
+              console.log('  - Cash:', mainData.gameState.player.cash);
+              foundData.push({ source: 'main', data: mainData.gameState });
+            }
+          } else {
+            console.log('❌ No data found in users/' + userId);
+          }
+        } catch (e) {
+          console.warn('Error checking main user data:', e);
+        }
+        
+        // 2. Check backup node
+        try {
+          console.log('📂 Checking userBackups/' + userId + '...');
+          const backupSnapshot = await database.ref('userBackups/' + userId).once('value');
+          const backupData = backupSnapshot.val();
+          if (backupData && backupData.latest && backupData.latest.gameState) {
+            console.log('✅ Found backup data!');
+            console.log('  - Backup Time:', backupData.latest.timestamp ? new Date(backupData.latest.timestamp).toISOString() : 'unknown');
+            console.log('  - Player Name:', backupData.latest.playerName);
+            console.log('  - Level:', backupData.latest.playerLevel);
+            console.log('  - Cash:', backupData.latest.playerCash);
+            foundData.push({ source: 'cloudBackup', data: backupData.latest.gameState });
+          } else {
+            console.log('❌ No backup data found');
+          }
+        } catch (e) {
+          console.warn('Error checking backup data:', e);
+        }
+        
+        // 3. Check leaderboard for any trace
+        try {
+          console.log('📂 Checking leaderboard for ' + userId + '...');
+          const leaderboardSnapshot = await database.ref('leaderboard/' + userId).once('value');
+          const leaderboardData = leaderboardSnapshot.val();
+          if (leaderboardData) {
+            console.log('✅ Found leaderboard entry!');
+            console.log('  - Name:', leaderboardData.name);
+            console.log('  - Level:', leaderboardData.level);
+            console.log('  - Cash:', leaderboardData.cash);
+            console.log('  - Reputation:', leaderboardData.reputation);
+          }
+        } catch (e) {
+          console.warn('Error checking leaderboard:', e);
+        }
+        
+        // 4. Check local backups
+        console.log('📂 Checking local storage backups...');
+        const localBackups = AccountDataProtection.getBackupsForUser(userId);
+        if (localBackups.length > 0) {
+          console.log('✅ Found ' + localBackups.length + ' local backup(s)!');
+          for (const backup of localBackups) {
+            console.log('  - Backup from:', new Date(backup.timestamp).toISOString());
+            console.log('    Player:', backup.playerName, 'Level:', backup.playerLevel, 'Cash:', backup.playerCash);
+            foundData.push({ source: 'local', data: backup.gameState, timestamp: backup.timestamp });
+          }
+        } else {
+          console.log('❌ No local backups found');
+        }
+        
+        // 5. Attempt recovery from best source
+        if (foundData.length > 0) {
+          console.log('\n🔧 RECOVERY OPTIONS:');
+          console.log('Found ' + foundData.length + ' data source(s). Choosing best one...');
+          
+          // Prefer the one with highest level/progress
+          let bestData = foundData[0];
+          for (const item of foundData) {
+            if (item.data && item.data.player) {
+              const currentBest = bestData.data?.player;
+              const candidate = item.data.player;
+              if ((candidate.level || 1) > (currentBest?.level || 1) ||
+                  (candidate.cash || 0) > (currentBest?.cash || 0)) {
+                bestData = item;
+              }
+            }
+          }
+          
+          console.log('Best source:', bestData.source);
+          if (bestData.data && bestData.data.player) {
+            console.log('Will restore:', bestData.data.player.name, 'Level', bestData.data.player.level);
+          }
+          
+          // Ask for confirmation
+          const confirm = window.confirm('Found account data! Restore ' + 
+            (bestData.data?.player?.name || 'Unknown') + 
+            ' (Level ' + (bestData.data?.player?.level || 1) + ')?\n\n' +
+            'Source: ' + bestData.source);
+          
+          if (confirm) {
+            Object.assign(GameState, bestData.data);
+            ensureGameStateSchema();
+            
+            // Save to cloud immediately
+            if (typeof GoogleAuthManager !== 'undefined' && GoogleAuthManager.isSignedIn()) {
+              await GoogleAuthManager.saveToCloud();
+              console.log('✅ Recovered data saved to cloud!');
+            }
+            
+            if (typeof UI !== 'undefined' && UI.update) UI.update();
+            console.log('✅ RECOVERY COMPLETE!');
+            return true;
+          }
+        }
+        
+        console.log('\n❌ No recoverable data found.');
+        console.log('If your data existed before, it may have been overwritten.');
+        console.log('The new protection system will prevent this from happening again.');
+        return false;
+      };
+      
+      window.recoverAccount = async function(userId) {
+        console.log('🔧 Attempting account recovery for:', userId);
+        
+        // Try cloud backup first
+        const cloudBackup = await AccountDataProtection.recoverFromCloudBackup(userId);
+        if (cloudBackup) {
+          Object.assign(GameState, cloudBackup);
+          ensureGameStateSchema();
+          console.log('✅ Restored from cloud backup!');
+          if (typeof UI !== 'undefined' && UI.update) UI.update();
+          return true;
+        }
+        
+        // Try local backup
+        const localBackup = AccountDataProtection.restoreFromBackup(userId);
+        if (localBackup) {
+          Object.assign(GameState, localBackup);
+          ensureGameStateSchema();
+          console.log('✅ Restored from local backup!');
+          if (typeof UI !== 'undefined' && UI.update) UI.update();
+          return true;
+        }
+        
+        console.log('❌ No backups found for recovery');
+        console.log('💡 Try: deepRecoverAccount("' + userId + '", "your@email.com") for deeper search');
+        return false;
+      };
+      
+      // Show recovery instructions in console
+      console.log('═══════════════════════════════════════════════════════');
+      console.log('🛡️ ACCOUNT DATA PROTECTION SYSTEM ACTIVE');
+      console.log('═══════════════════════════════════════════════════════');
+      console.log('Recovery Commands (run in browser console):');
+      console.log('  deepRecoverAccount(userId, email) - Deep search all sources');
+      console.log('  recoverAccount(userId) - Quick recovery from backups');
+      console.log('  AccountDataProtection.getBackupsForUser(userId) - List backups');
+      console.log('═══════════════════════════════════════════════════════');
+    }
+    
+    // ========================================
+    
     // ----------------------------------------
     // Cloud Save: make GameState Firebase-safe
     // (Firebase RTDB rejects undefined/functions/cycles/DOM nodes)
@@ -783,18 +1225,67 @@ Then tighten the rules later.`);
         // Ensure schema is intact before we do anything else
         ensureGameStateSchema();
 
+        // BULLETPROOF DATA PROTECTION: Create backup before ANY data operations
+        // This ensures we can recover if something goes wrong
+        if (typeof AccountDataProtection !== 'undefined') {
+          AccountDataProtection.createEmergencyBackup(user.uid, 'pre-signin-safety');
+        }
+
         // Check if this is first time login (no cloud data yet)
         const snapshot = await database.ref('users/' + user.uid).once('value');
         const cloudData = snapshot.val();
         
-        if (!cloudData) {
-          // NEW USER - Create cloud profile
-          console.log('[GoogleAuth] New user detected - creating cloud profile');
+        // BULLETPROOF: Use multi-layer verification before treating as new user
+        const isDefinitelyNewUser = await AccountDataProtection.shouldTreatAsNewUser(user.uid, cloudData);
+        
+        if (isDefinitelyNewUser) {
+          // NEW USER - Create cloud profile (verified through multiple checks)
+          console.log('[GoogleAuth] ✅ VERIFIED NEW USER - creating cloud profile');
           await this.createCloudProfile(user);
+        } else if (!cloudData || !cloudData.gameState) {
+          // POTENTIAL DATA LOSS SCENARIO - Try recovery before creating new profile
+          console.warn('[GoogleAuth] ⚠️ No cloud data but user has backup history - ATTEMPTING RECOVERY');
+          
+          // Show recovery attempt UI
+          this.showRecoveryAttemptUI(user.email);
+          
+          // Try cloud backup first
+          const cloudBackupData = await AccountDataProtection.recoverFromCloudBackup(user.uid);
+          if (cloudBackupData) {
+            console.log('[GoogleAuth] ✅ RECOVERED from cloud backup!');
+            Object.assign(GameState, cloudBackupData);
+            ensureGameStateSchema();
+            // Re-save to main cloud location
+            await this.saveToCloud();
+            await this.loadCloudData(user);
+          } else {
+            // Try local backup
+            const localBackupData = AccountDataProtection.restoreFromBackup(user.uid);
+            if (localBackupData) {
+              console.log('[GoogleAuth] ✅ RECOVERED from local backup!');
+              Object.assign(GameState, localBackupData);
+              ensureGameStateSchema();
+              // Save to cloud
+              await this.saveToCloud();
+              await this.loadCloudData(user);
+            } else {
+              // No recovery possible - truly new user
+              console.log('[GoogleAuth] No backups found - treating as new user');
+              await this.createCloudProfile(user);
+            }
+          }
         } else {
           // RETURNING USER - Load cloud data
           console.log('[GoogleAuth] Returning user - loading cloud data');
           await this.loadCloudData(user);
+        }
+        
+        // BULLETPROOF: Create backup after successful sign-in
+        if (typeof AccountDataProtection !== 'undefined' && AccountDataProtection.isValidGameState(GameState)) {
+          AccountDataProtection.createEmergencyBackup(user.uid, 'post-signin-success');
+          AccountDataProtection.createCloudBackup(user.uid, 'post-signin-success').catch(e => 
+            console.warn('[GoogleAuth] Cloud backup failed:', e)
+          );
         }
         
         // Start session monitoring (single device enforcement)
@@ -1093,14 +1584,92 @@ Then tighten the rules later.`);
         }
       },
       
+      // Show recovery attempt UI overlay
+      showRecoveryAttemptUI(email) {
+        const existingOverlay = document.getElementById('recovery-attempt-overlay');
+        if (existingOverlay) existingOverlay.remove();
+        
+        const overlay = document.createElement('div');
+        overlay.id = 'recovery-attempt-overlay';
+        overlay.style.cssText = `
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background: rgba(0, 0, 0, 0.9);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 10000;
+          font-family: system-ui, -apple-system, sans-serif;
+        `;
+        
+        overlay.innerHTML = `
+          <div style="
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border: 2px solid #e94560;
+            border-radius: 12px;
+            padding: 30px;
+            max-width: 400px;
+            text-align: center;
+            color: #fff;
+            box-shadow: 0 0 30px rgba(233, 69, 96, 0.3);
+          ">
+            <div style="font-size: 48px; margin-bottom: 15px;">🔍</div>
+            <h2 style="margin: 0 0 15px 0; color: #e94560;">Account Recovery</h2>
+            <p style="margin: 0 0 20px 0; opacity: 0.9; line-height: 1.5;">
+              Searching for your account data...
+              <br><br>
+              <strong>${email || 'Unknown'}</strong>
+            </p>
+            <div id="recovery-status" style="
+              background: rgba(255,255,255,0.1);
+              border-radius: 8px;
+              padding: 15px;
+              margin-top: 15px;
+              font-size: 14px;
+              text-align: left;
+            ">
+              <div>⏳ Checking cloud storage...</div>
+              <div>⏳ Checking backup storage...</div>
+              <div>⏳ Checking local backups...</div>
+            </div>
+          </div>
+        `;
+        
+        document.body.appendChild(overlay);
+        
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+          const el = document.getElementById('recovery-attempt-overlay');
+          if (el) el.remove();
+        }, 5000);
+      },
+      
       // Sign out
       async signOut() {
         try {
           console.log('[GoogleAuth] Signing out...');
           
-          // Save game state before signing out
+          // BULLETPROOF: Create backups before ANY sign-out operation
           if (this.currentUser) {
+            const userId = this.currentUser.uid;
+            
+            // Create local emergency backup FIRST (fast, reliable)
+            if (typeof AccountDataProtection !== 'undefined') {
+              AccountDataProtection.createEmergencyBackup(userId, 'pre-signout-safety');
+            }
+            
+            // Save to cloud
             await this.saveToCloud();
+            
+            // Create cloud backup as well
+            if (typeof AccountDataProtection !== 'undefined') {
+              await AccountDataProtection.createCloudBackup(userId, 'pre-signout-safety').catch(e => 
+                console.warn('[GoogleAuth] Pre-signout cloud backup failed:', e)
+              );
+            }
           }
           
           // Stop session monitoring
@@ -1135,6 +1704,40 @@ Then tighten the rules later.`);
         } catch (error) {
           console.error('[GoogleAuth] Failed to save to cloud:', error);
           return false;
+        }
+      },
+      
+      // Start periodic auto-backup (every 2 minutes during gameplay)
+      startAutoBackup() {
+        if (this._autoBackupInterval) return; // Already running
+        
+        console.log('[GoogleAuth] Starting auto-backup system (every 2 minutes)');
+        this._autoBackupInterval = setInterval(() => {
+          if (this.currentUser && typeof AccountDataProtection !== 'undefined') {
+            // Create local backup
+            AccountDataProtection.createEmergencyBackup(this.currentUser.uid, 'periodic-auto');
+            
+            // Also save to cloud
+            this.saveToCloud().catch(e => console.warn('[AutoBackup] Cloud save failed:', e));
+            
+            // Create cloud backup every other interval (4 minutes)
+            if (!this._backupCounter) this._backupCounter = 0;
+            this._backupCounter++;
+            if (this._backupCounter % 2 === 0) {
+              AccountDataProtection.createCloudBackup(this.currentUser.uid, 'periodic-auto').catch(e => 
+                console.warn('[AutoBackup] Cloud backup failed:', e)
+              );
+            }
+          }
+        }, 2 * 60 * 1000); // 2 minutes
+      },
+      
+      // Stop periodic auto-backup
+      stopAutoBackup() {
+        if (this._autoBackupInterval) {
+          clearInterval(this._autoBackupInterval);
+          this._autoBackupInterval = null;
+          console.log('[GoogleAuth] Auto-backup stopped');
         }
       },
       
@@ -1180,6 +1783,9 @@ Then tighten the rules later.`);
           
           console.log('[Session] ✅ Session registered in Firebase');
           
+          // BULLETPROOF: Start auto-backup system
+          this.startAutoBackup();
+          
           // Listen for changes to the active session
           this._sessionListener = sessionRef.on('value', (snapshot) => {
             const activeSession = snapshot.val();
@@ -1204,6 +1810,11 @@ Then tighten the rules later.`);
           this._sessionListener = null;
         }
         
+        // BULLETPROOF: Create backup before forced sign-out
+        if (this.currentUser && typeof AccountDataProtection !== 'undefined') {
+          AccountDataProtection.createEmergencyBackup(this.currentUser.uid, 'session-conflict-safety');
+        }
+        
         // Show alert to user
         alert('⚠️ Your account has been logged in on another device. You have been signed out here.');
         
@@ -1226,6 +1837,10 @@ Then tighten the rules later.`);
             
             console.log('[Session] Session monitoring stopped');
           }
+          
+          // BULLETPROOF: Stop auto-backup
+          this.stopAutoBackup();
+          
         } catch (error) {
           console.error('[Session] Error stopping session monitoring:', error);
         }
