@@ -5039,9 +5039,9 @@
 /* Battle player sprite container - RIGHT side, faces LEFT toward enemy */
 .battle-player-sprite-container {
   position: absolute;
-  right: 12%;
-  bottom: 200px;
-  z-index: 20;
+  right: 22%; /* Moved inward to avoid nameplate overlap */
+  bottom: 240px; /* Raised above nameplate panel */
+  z-index: 25; /* Above background, below UI panels (z-index: 50) */
   width: 160px;
   height: 160px;
   pointer-events: none;
@@ -5083,9 +5083,9 @@
 /* Battle enemy sprite - LEFT side, faces RIGHT toward player */
 .battle-enemy-sprite-container {
   position: absolute;
-  left: 8%;
-  bottom: 200px;
-  z-index: 20;
+  left: 10%; /* Increased padding from left edge for visibility */
+  bottom: 220px; /* Raised to match player sprite positioning */
+  z-index: 25; /* Above background, below UI panels */
 }
 
 .battle-enemy-sprite {
@@ -5101,13 +5101,18 @@
   .battle-player-sprite-container {
     width: 100px;
     height: 100px;
-    right: 8%;
-    bottom: 190px;
+    right: 18%; /* Moved inward to avoid nameplate overlap on mobile */
+    bottom: 260px; /* Raised above nameplate panel */
   }
   
   .battle-enemy-sprite {
     max-width: 120px;
     max-height: 120px;
+  }
+  
+  .battle-enemy-sprite-container {
+    left: 8%; /* Ensure visibility on mobile */
+    bottom: 260px; /* Match player sprite vertical position */
   }
 }
 
@@ -5115,8 +5120,8 @@
   .battle-player-sprite-container {
     width: 80px;
     height: 80px;
-    right: 5%;
-    bottom: 185px;
+    right: 15%; /* Moved inward for small screens */
+    bottom: 240px; /* Above nameplate */
   }
   
   .battle-enemy-sprite {
@@ -5125,7 +5130,8 @@
   }
   
   .battle-enemy-sprite-container {
-    left: 5%;
+    left: 5%; /* Keep padding on small screens */
+    bottom: 240px; /* Match player vertical position */
   }
 }
 
@@ -5481,10 +5487,10 @@
     max-height: 140px;
   }
 
-  /* Enemy sprite container (on left side) - move UP and to the left */
-  .box-bottom-left {
-    left: 2% !important;
-    bottom: 320px !important;
+  /* Enemy sprite container (on left side) - positioned higher for mobile */
+  .box-bottom-left.battle-enemy-sprite-container {
+    left: 8% !important;
+    bottom: 280px !important;
   }
 
   .bottom-menu {
@@ -5585,9 +5591,9 @@
   }
 
   /* Enemy sprite - smaller on very small screens, positioned higher */
-  .box-bottom-left {
-    left: 0% !important;
-    bottom: 280px !important;
+  .box-bottom-left.battle-enemy-sprite-container {
+    left: 5% !important;
+    bottom: 240px !important;
   }
 
   .player-sprite-container img,
