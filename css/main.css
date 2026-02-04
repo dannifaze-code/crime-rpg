@@ -5281,11 +5281,13 @@
 /* Tall aspect ratios (20:9 phones) - ensure sprites stay in arena */
 @media (max-aspect-ratio: 9/16) {
   .battle-player-sprite-container {
-    /* Raise sprites higher on tall screens to stay in visible arena */
+    /* Player sprite raised higher to clear nameplate on tall screens */
+    /* Nameplate is larger relative to screen, needs more clearance */
     bottom: clamp(225px, calc(200px + 6vh), 300px);
   }
   
   .battle-enemy-sprite-container {
+    /* Enemy doesn't have nameplate overlap issue, standard positioning */
     bottom: clamp(200px, calc(180px + 5vh), 260px);
   }
 }
