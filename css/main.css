@@ -5131,7 +5131,8 @@
   width: 100%;
   height: 100%;
   /* Face LEFT toward enemy (player on right side, enemy on left) */
-  /* Sprite natively faces LEFT, no flip needed */
+  /* Sprite natively faces LEFT - explicit scaleX(1) ensures no flip is applied */
+  /* Keep this explicit to prevent future overrides from accidentally flipping */
   transform: scaleX(1);
   /* Prevent fallback top-down sprites from extending outside container bounds */
   overflow: hidden;
@@ -5157,7 +5158,7 @@
   height: auto;
   object-fit: contain;
   /* Face LEFT toward enemy - sprite natively faces LEFT, no flip needed */
-  /* Player is on right, enemy is on left */
+  /* Player is on right, enemy is on left - explicit scaleX(1) prevents accidental flips */
   transform: scaleX(1);
   filter: drop-shadow(0 8px 16px rgba(0,0,0,0.6));
   image-rendering: auto; /* Better quality for portrait art */
