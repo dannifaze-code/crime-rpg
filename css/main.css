@@ -5130,9 +5130,10 @@
   position: relative;
   width: 100%;
   height: 100%;
-  /* Face RIGHT toward enemy (player on right side, enemy on left) */
-  /* Sprite natively faces LEFT, so flip horizontally */
-  transform: scaleX(-1);
+  /* Face LEFT toward enemy (player on right side, enemy on left) */
+  /* Sprite natively faces LEFT - explicit scaleX(1) ensures no flip is applied */
+  /* Keep this explicit to prevent future overrides from accidentally flipping */
+  transform: scaleX(1);
   /* Prevent fallback top-down sprites from extending outside container bounds */
   overflow: hidden;
 }
@@ -5156,9 +5157,9 @@
   width: auto;
   height: auto;
   object-fit: contain;
-  /* Face RIGHT toward enemy - sprite natively faces LEFT, flip to face RIGHT */
-  /* Apply flip directly to img to avoid flex container transform issues */
-  transform: scaleX(-1);
+  /* Face LEFT toward enemy - sprite natively faces LEFT, no flip needed */
+  /* Player is on right, enemy is on left - explicit scaleX(1) prevents accidental flips */
+  transform: scaleX(1);
   filter: drop-shadow(0 8px 16px rgba(0,0,0,0.6));
   image-rendering: auto; /* Better quality for portrait art */
   /* Smooth transitions between animation states */
@@ -5208,25 +5209,31 @@
 }
 
 /* Battle enemy sprite - LEFT side, faces RIGHT toward player */
+/* Positioned in upper-left "white box" area of arena for depth effect */
 .battle-enemy-sprite-container {
   position: absolute;
-  /* Shifted right ~5% for better centering under ENEMY nameplate */
-  left: 12%;
-  /* Position above bottom-menu with same vertical alignment as player */
-  bottom: clamp(200px, calc(180px + 5vh), 280px);
+  /* Arena-relative positioning: upper-left quadrant */
+  /* ~10-14% from left edge for safe padding */
+  left: 10%;
+  /* Position from top: below HUD (top ~150px), ~15% into arena height */
+  /* Arena starts at ~150px (title + enemy HP bar) */
+  top: clamp(160px, calc(150px + 12vh), 220px);
   z-index: 25; /* Above background, below UI panels */
   /* Overflow visible allows enemy sprites to display drop shadows without clipping */
   overflow: visible;
+  /* Transform origin for proper scaling from upper-left */
+  transform-origin: left top;
 }
 
 .battle-enemy-sprite {
-  /* Increased size by ~25-30% from original 200px base */
-  max-width: clamp(140px, 30vw, 260px);
-  max-height: clamp(140px, 30vw, 260px);
+  /* Smaller size for depth effect (enemy appears farther away) */
+  /* Target ~40-50% of arena height for "distant" feel */
+  max-width: clamp(100px, 22vw, 180px);
+  max-height: clamp(120px, 28vh, 200px);
   width: auto;
   height: auto;
   object-fit: contain;
-  filter: drop-shadow(0 8px 16px rgba(0,0,0,0.6));
+  filter: drop-shadow(0 6px 12px rgba(0,0,0,0.5));
   image-rendering: auto; /* Better quality for gritty enemy art */
   /* Face RIGHT toward player (enemy on left side) - sprites face right by default */
   transform: scaleX(1);
@@ -5246,13 +5253,16 @@
   }
   
   .battle-enemy-sprite {
-    max-width: clamp(120px, 35vw, 180px);
-    max-height: clamp(160px, 40vh, 240px);
+    /* Slightly smaller on mobile for depth, but still visible */
+    max-width: clamp(90px, 25vw, 150px);
+    max-height: clamp(110px, 30vh, 180px);
   }
   
   .battle-enemy-sprite-container {
-    left: 5%;
-    bottom: clamp(190px, calc(170px + 4vh), 230px);
+    /* Upper-left positioning: slightly closer to left edge on mobile */
+    left: 6%;
+    /* Position from top: adjust for mobile HUD size */
+    top: clamp(150px, calc(140px + 10vh), 200px);
   }
 }
 
@@ -5268,13 +5278,16 @@
   }
   
   .battle-enemy-sprite {
-    max-width: clamp(100px, 30vw, 140px);
-    max-height: clamp(130px, 35vh, 200px);
+    /* Smaller on narrow phones for depth */
+    max-width: clamp(80px, 22vw, 120px);
+    max-height: clamp(100px, 26vh, 150px);
   }
   
   .battle-enemy-sprite-container {
-    left: 3%;
-    bottom: clamp(185px, calc(165px + 4vh), 210px);
+    /* Upper-left positioning: safe padding on narrow phones */
+    left: 4%;
+    /* Position from top: adjust for narrow screen HUD */
+    top: clamp(145px, calc(135px + 10vh), 190px);
   }
 }
 
@@ -5287,8 +5300,8 @@
   }
   
   .battle-enemy-sprite-container {
-    /* Enemy doesn't have nameplate overlap issue, standard positioning */
-    bottom: clamp(200px, calc(180px + 5vh), 260px);
+    /* Upper-left positioning: adjust for tall aspect ratio */
+    top: clamp(170px, calc(155px + 10vh), 230px);
   }
 }
 
