@@ -5063,17 +5063,18 @@
 
 /* ====== BATTLE PLAYER SPRITE ANIMATIONS ====== */
 /* Idle breathing/bob animation - subtle and continuous */
-/* Note: scaleX(-1) applied on element, animations use simple transforms */
+/* Note: scaleX(-1) must be in keyframes since animations override base transform */
 @keyframes battle-idle-bob {
   0%, 100% { transform: scaleX(-1) translateY(0); }
   50% { transform: scaleX(-1) translateY(-3px); }
 }
 
 /* Attack recoil animation - quick kickback then settle */
+/* Note: translateX values are inverted because of scaleX(-1) */
 @keyframes battle-attack-recoil {
   0% { transform: scaleX(-1) translateX(0) translateY(0); }
-  15% { transform: scaleX(-1) translateX(12px) translateY(-2px); }
-  40% { transform: scaleX(-1) translateX(-4px) translateY(1px); }
+  15% { transform: scaleX(-1) translateX(-12px) translateY(-2px); }
+  40% { transform: scaleX(-1) translateX(4px) translateY(1px); }
   100% { transform: scaleX(-1) translateX(0) translateY(0); }
 }
 
@@ -5101,25 +5102,26 @@
   .battle-player-portrait img.battle-anim-attack,
   .battle-player-portrait img.battle-anim-hit {
     animation: none !important;
-    transform: scaleX(-1) !important;
+    transform: scaleX(-1) !important; /* Preserve flip even without animation */
   }
 }
 
-/* Battle player sprite container - RIGHT side, faces LEFT toward enemy */
-/* INCREASED SIZE: ~65-75% of arena height for better visibility */
+/* Battle player sprite container - RIGHT side, faces RIGHT toward enemy on LEFT */
+/* INCREASED SIZE: ~1.8x-2.5x for better visibility, uniform scaling */
 .battle-player-sprite-container {
   position: absolute;
   /* Arena-relative positioning: right side with safe padding */
-  right: 8%;
-  /* Position above bottom-menu (180px) + nameplate clearance */
-  bottom: clamp(195px, calc(180px + 3vh), 240px);
+  right: 6%;
+  /* Position ABOVE player nameplate (nameplate bottom ~200px, add 20px clearance) */
+  /* Ensures sprite bottom edge sits above nameplate top edge */
+  bottom: clamp(220px, calc(200px + 5vh), 280px);
   z-index: 25; /* Above background, below UI panels (z-index: 50) */
-  /* Responsive sizing: LARGER - scale with viewport height for proper arena coverage */
-  /* Target: 65-75% of arena height (arena ~= 100vh - 150px top - 200px bottom = ~450px on mobile) */
-  width: clamp(140px, 35vw, 280px);
-  height: clamp(200px, 45vh, 380px);
+  /* Responsive sizing: MUCH LARGER (1.8x-2.5x) - uniform scale with arena height */
+  /* Arena ~= 100vh - 150px top - 200px bottom = ~450px on mobile */
+  width: clamp(220px, 45vw, 420px);
+  height: clamp(300px, 55vh, 520px);
   pointer-events: none;
-  /* Default: allow sprite shadows to render outside bounds */
+  /* Allow sprite shadows to render outside bounds */
   overflow: visible;
 }
 
@@ -5128,7 +5130,8 @@
   position: relative;
   width: 100%;
   height: 100%;
-  /* Face LEFT toward enemy (player on right side) */
+  /* Face RIGHT toward enemy (player on right side, enemy on left) */
+  /* Sprite natively faces LEFT, so flip horizontally */
   transform: scaleX(-1);
   /* Prevent fallback top-down sprites from extending outside container bounds */
   overflow: hidden;
@@ -5147,16 +5150,17 @@
 }
 
 .battle-player-portrait img {
+  /* Uniform scaling: use max-height and let width auto-scale */
   max-width: 100%;
   max-height: 100%;
   width: auto;
   height: auto;
   object-fit: contain;
-  /* Face LEFT toward enemy - horizontal mirror only (no rotation) */
+  /* Face RIGHT toward enemy - sprite natively faces LEFT, flip to face RIGHT */
+  /* Apply flip directly to img to avoid flex container transform issues */
   transform: scaleX(-1);
   filter: drop-shadow(0 8px 16px rgba(0,0,0,0.6));
   image-rendering: auto; /* Better quality for portrait art */
-  /* No default animation - animations applied only via state classes */
   /* Smooth transitions between animation states */
   transition: filter 0.1s ease;
 }
@@ -5230,14 +5234,15 @@
 
 /* ====== MOBILE RESPONSIVE BATTLE SPRITES ====== */
 /* Mobile-first: smaller screens get proportional sizing */
-/* Player sprite is larger (~65-75% arena height), enemy matches proportionally */
+/* Player sprite is larger (~1.8x-2.5x base), enemy matches proportionally */
 @media (max-width: 600px) {
   .battle-player-sprite-container {
-    /* Larger size for mobile - maintain visibility */
-    width: clamp(110px, 32vw, 180px);
-    height: clamp(160px, 40vh, 280px);
-    right: 5%;
-    bottom: clamp(190px, calc(170px + 4vh), 230px);
+    /* Larger size for mobile - maintain visibility, uniform scaling */
+    width: clamp(180px, 42vw, 300px);
+    height: clamp(260px, 50vh, 400px);
+    right: 4%;
+    /* Higher bottom to stay above nameplate */
+    bottom: clamp(215px, calc(195px + 5vh), 270px);
   }
   
   .battle-enemy-sprite {
@@ -5254,10 +5259,12 @@
 /* Extra small screens (narrow phones like 360px width) */
 @media (max-width: 400px) {
   .battle-player-sprite-container {
-    width: clamp(90px, 28vw, 140px);
-    height: clamp(130px, 35vh, 220px);
-    right: 3%;
-    bottom: clamp(185px, calc(165px + 4vh), 210px);
+    /* Still bigger than before but scaled for narrow screens */
+    width: clamp(150px, 38vw, 240px);
+    height: clamp(220px, 45vh, 340px);
+    right: 2%;
+    /* Higher bottom to stay above nameplate */
+    bottom: clamp(210px, calc(190px + 5vh), 260px);
   }
   
   .battle-enemy-sprite {
@@ -5273,9 +5280,14 @@
 
 /* Tall aspect ratios (20:9 phones) - ensure sprites stay in arena */
 @media (max-aspect-ratio: 9/16) {
-  .battle-player-sprite-container,
+  .battle-player-sprite-container {
+    /* Player sprite raised higher to clear nameplate on tall screens */
+    /* Nameplate is larger relative to screen, needs more clearance */
+    bottom: clamp(225px, calc(200px + 6vh), 300px);
+  }
+  
   .battle-enemy-sprite-container {
-    /* Raise sprites higher on tall screens to stay in visible arena */
+    /* Enemy doesn't have nameplate overlap issue, standard positioning */
     bottom: clamp(200px, calc(180px + 5vh), 260px);
   }
 }
@@ -5283,8 +5295,8 @@
 /* Short/wide aspect ratios - prevent sprites from being too large */
 @media (min-aspect-ratio: 16/10) {
   .battle-player-sprite-container {
-    width: clamp(120px, 18vw, 200px);
-    height: clamp(180px, 30vh, 280px);
+    width: clamp(180px, 25vw, 320px);
+    height: clamp(260px, 40vh, 400px);
   }
   
   .battle-enemy-sprite {
