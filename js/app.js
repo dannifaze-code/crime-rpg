@@ -10236,6 +10236,7 @@ function updateTurfDefense(dt) {
         this.canvas.id = 'turf-grid-overlay-canvas';
         // z-index 9999: above all map visuals (roads, buildings, icons, NPCs)
         // pointer-events: none ensures no collisions, no interaction, no input blocking
+        // Use position:absolute with inset:0 to match map-world exactly
         this.canvas.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:9999;';
         world.appendChild(this.canvas);
         this.ctx = this.canvas.getContext('2d');
@@ -10247,6 +10248,7 @@ function updateTurfDefense(dt) {
           this.image.onload = () => {
             this.imageLoaded = true;
             console.log('🔲 [TurfGridOverlay] Grid image loaded');
+            this._resize(); // Re-check dimensions after image loads
             this.draw();
           };
           this.image.onerror = () => {
@@ -10259,16 +10261,36 @@ function updateTurfDefense(dt) {
       },
 
       /**
-       * Resize canvas to match map-world dimensions
+       * Resize canvas to match TurfMap.png exact dimensions (1024x1536)
+       * Uses TurfTab's world dimensions for pixel-perfect alignment at all zoom levels
        */
       _resize() {
         if (!this.canvas) return;
-        const world = document.getElementById('map-world');
-        const w = world ? world.offsetWidth : this.canvas.clientWidth;
-        const h = world ? world.offsetHeight : this.canvas.clientHeight;
-        if (w && h) {
+        
+        // Known TurfMap.png dimensions (must match the actual map image)
+        // Both TurfMap.png and trufgridoverlay.png are exactly 1024x1536
+        const TURF_MAP_WIDTH = 1024;
+        const TURF_MAP_HEIGHT = 1536;
+        
+        // Priority: TurfTab's computed world dimensions > fallback to known dimensions
+        // IMPORTANT: Always use the map's actual pixel dimensions, not viewport/container dimensions
+        let w, h;
+        if (typeof TurfTab !== 'undefined' && TurfTab.worldBaseW > 0 && TurfTab.worldBaseH > 0) {
+          // Use TurfTab's authoritative world dimensions (set from TurfMap.png)
+          w = TurfTab.worldBaseW;
+          h = TurfTab.worldBaseH;
+        } else {
+          // Fallback to known TurfMap.png dimensions for pixel-perfect alignment
+          // This ensures the grid matches the map even before TurfTab initializes
+          w = TURF_MAP_WIDTH;
+          h = TURF_MAP_HEIGHT;
+        }
+        
+        // Only update if dimensions are valid and changed
+        if (w > 0 && h > 0 && (this.canvas.width !== w || this.canvas.height !== h)) {
           this.canvas.width = w;
           this.canvas.height = h;
+          console.log('🔲 [TurfGridOverlay] Canvas resized to:', w, 'x', h);
         }
       },
 
@@ -21369,6 +21391,11 @@ function ensureLandmarkProperties() {
             mapBg.style.width = '100%';
             mapBg.style.height = '100%';
             mapBg.style.objectFit = 'fill';
+          }
+
+          // Sync turf grid overlay canvas to match new world dimensions
+          if (typeof TurfGridOverlay !== 'undefined' && TurfGridOverlay._resize) {
+            TurfGridOverlay._resize();
           }
 
           this.worldSizeReady = true;
