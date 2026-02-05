@@ -10266,24 +10266,26 @@ function updateTurfDefense(dt) {
        */
       _resize() {
         if (!this.canvas) return;
+        const worldEl = document.getElementById('map-world');
         
         // Known TurfMap.png dimensions (must match the actual map image)
         // Both TurfMap.png and trufgridoverlay.png are exactly 1024x1536
         const TURF_MAP_WIDTH = 1024;
         const TURF_MAP_HEIGHT = 1536;
         
-        // Priority: TurfTab's computed world dimensions > fallback to known dimensions
-        // IMPORTANT: Always use the map's actual pixel dimensions, not viewport/container dimensions
-        let w, h;
-        if (typeof TurfTab !== 'undefined' && TurfTab.worldBaseW > 0 && TurfTab.worldBaseH > 0) {
-          // Use TurfTab's authoritative world dimensions (set from TurfMap.png)
-          w = TurfTab.worldBaseW;
-          h = TurfTab.worldBaseH;
-        } else {
-          // Fallback to known TurfMap.png dimensions for pixel-perfect alignment
-          // This ensures the grid matches the map even before TurfTab initializes
-          w = TURF_MAP_WIDTH;
-          h = TURF_MAP_HEIGHT;
+        // Priority: actual rendered map-world size > TurfTab base dimensions > fallback constants
+        // Using clientWidth/Height keeps the grid perfectly aligned with the visible turf map,
+        // even if CSS or layout scales the world container.
+        let w = worldEl && worldEl.clientWidth ? worldEl.clientWidth : 0;
+        let h = worldEl && worldEl.clientHeight ? worldEl.clientHeight : 0;
+        if (!(w > 0 && h > 0)) {
+          if (typeof TurfTab !== 'undefined' && TurfTab.worldBaseW > 0 && TurfTab.worldBaseH > 0) {
+            w = TurfTab.worldBaseW;
+            h = TurfTab.worldBaseH;
+          } else {
+            w = TURF_MAP_WIDTH;
+            h = TURF_MAP_HEIGHT;
+          }
         }
         
         // Only update if dimensions are valid and changed
