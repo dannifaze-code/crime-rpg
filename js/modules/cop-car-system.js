@@ -1,613 +1,272 @@
 /**
- * Cop Car System - Node Patrol Version (Generated from patrol_system_saved.html)
+ * Cop Car System — Node Patrol (Percent-Space Runtime)
  *
- * Simulates AI-driven 3D police car movement using the Node/Link navigation
- * layout from the Turf Editor. Updates position, heading, and speed for the 3D renderer.
+ * IMPORTANT:
+ * - Your patrol editor stores nodes in "editor plane units" (x,z) where:
+ *     MAP_W = 66.6, MAP_H = 100.0
+ *     x ∈ [-MAP_W/2, +MAP_W/2], z ∈ [-MAP_H/2, +MAP_H/2]
+ * - The actual game Turf map uses CSS percent space:
+ *     x% ∈ [0..100], y% ∈ [0..100]
  *
- * Source of truth:
- *  - Nodes/Links/Config were extracted from patrol_system_saved.html (INITIAL_NODES / INITIAL_CONNECTIONS / CONFIG)
+ * This module converts your editor units into percent space so:
+ * - #cop-car (DOM marker) uses left/top in %
+ * - CopCar3D reads CopCarSystem.copPose (x/y in %) and stays aligned
  *
- * Coordinate convention:
- *  - copPose.x / copPose.y are in your editor's percent-space.
- *  - heading is radians using Math.atan2(dx, dy) (dx first) to match CopCar3D's convention.
+ * Source of truth extracted from patrol_system_saved.html (50 nodes / 53 links).
  */
 
 /* global requestAnimationFrame, performance */
 
 (function () {
+  // Editor plane dimensions (must match patrol_system_saved.html)
+  const MAP_W = 66.6;
+  const MAP_H = 100.0;
+
+  function editorToPercentX(x) { return (x / MAP_W + 0.5) * 100; }
+  function editorToPercentY(z) { return (z / MAP_H + 0.5) * 100; }
+
+  // Helpful for debugging / future tools
+  function percentToEditorX(px) { return (px / 100 - 0.5) * MAP_W; }
+  function percentToEditorY(py) { return (py / 100 - 0.5) * MAP_H; }
+
   const CopCarSystem = {
-    // --- DATA EXTRACTED FROM patrol_system_saved.html ---
-    nodes: [
-  {
-    "id": "node_1770342713761910",
-    "x": -32.014218009478675,
-    "y": -36.580829566765395
-  },
-  {
-    "id": "node_1770342715541766",
-    "x": -10.450236966824642,
-    "y": -23.14481054223933
-  },
-  {
-    "id": "node_1770342718484543",
-    "x": -32.51184834123223,
-    "y": -6.225379178021324
-  },
-  {
-    "id": "node_1770343027113607",
-    "x": -1.6587677725118422,
-    "y": -17.505000087499997
-  },
-  {
-    "id": "node_1770343033468859",
-    "x": 13.767772511848339,
-    "y": -17.339123309419424
-  },
-  {
-    "id": "node_1770343058711345",
-    "x": 15.426540284360193,
-    "y": -14.18746452588862
-  },
-  {
-    "id": "node_1770343089971972",
-    "x": 8.293838862559248,
-    "y": -6.059502399940755
-  },
-  {
-    "id": "node_1770343097431627",
-    "x": 3.6492890995260603,
-    "y": -5.893625621860187
-  },
-  {
-    "id": "node_1770343198565465",
-    "x": -30.687203791469198,
-    "y": -37.907843791409945
-  },
-  {
-    "id": "node_1770343315449964",
-    "x": -1.9905213270142181,
-    "y": 4.888364953376782
-  },
-  {
-    "id": "node_1770343368039293",
-    "x": -8.293838862559236,
-    "y": 10.528175408116121
-  },
-  {
-    "id": "node_1770343376731237",
-    "x": -18.412322274881515,
-    "y": 15.670355528613749
-  },
-  {
-    "id": "node_1770343398921631",
-    "x": -15.260663507109005,
-    "y": 17.660876865580573
-  },
-  {
-    "id": "node_177034341037863",
-    "x": 0.0,
-    "y": 8.371777293068725
-  },
-  {
-    "id": "node_1770343424699408",
-    "x": 5.639810426540291,
-    "y": 3.727227506812796
-  },
-  {
-    "id": "node_1770343440621198",
-    "x": 9.289099526066352,
-    "y": -1.746706169845969
-  },
-  {
-    "id": "node_1770343477583787",
-    "x": 12.938388625592411,
-    "y": -8.381777293068712
-  },
-  {
-    "id": "node_1770343500297254",
-    "x": 17.251184834123222,
-    "y": -11.865189632760655
-  },
-  {
-    "id": "node_1770343506646569",
-    "x": 23.388625592417064,
-    "y": -13.19220385740521
-  },
-  {
-    "id": "node_17703435255247",
-    "x": 31.84834123222749,
-    "y": -13.19220385740521
-  },
-  {
-    "id": "node_1770343574513389",
-    "x": 29.691943127962084,
-    "y": -15.016848416291465
-  },
-  {
-    "id": "node_1770343633423112",
-    "x": -4.976303317535539,
-    "y": 14.509218082049763
-  },
-  {
-    "id": "node_1770343636362495",
-    "x": -7.298578199052133,
-    "y": 13.182203857405215
-  },
-  {
-    "id": "node_1770343644477390",
-    "x": 2.985781990521333,
-    "y": 14.675094860130327
-  },
-  {
-    "id": "node_1770343729239580",
-    "x": 26.540284360189574,
-    "y": -13.19220385740521
-  },
-  {
-    "id": "node_1770343736293772",
-    "x": 19.90521327014218,
-    "y": -12.860450301244075
-  },
-  {
-    "id": "node_1770343746095650",
-    "x": 15.094786729857818,
-    "y": -10.538175408116109
-  },
-  {
-    "id": "node_1770343755417105",
-    "x": 11.11374407582938,
-    "y": -5.56187206569905
-  },
-  {
-    "id": "node_1770343765374373",
-    "x": 7.630331753554496,
-    "y": 0.9073222794431265
-  },
-  {
-    "id": "node_1770343773314782",
-    "x": 3.3175355450236843,
-    "y": 5.883625621860192
-  },
-  {
-    "id": "node_1770343781294236",
-    "x": -3.815165876777248,
-    "y": 11.02580574235782
-  },
-  {
-    "id": "node_1770343857155133",
-    "x": 6.469194312796218,
-    "y": 16.167985862855446
-  },
-  {
-    "id": "node_1770343863407291",
-    "x": -32.51184834123223,
-    "y": 38.06372056949052
-  },
-  {
-    "id": "node_1770343891667474",
-    "x": -29.857819905213272,
-    "y": 41.04950257494075
-  },
-  {
-    "id": "node_1770343910848683",
-    "x": 10.947867298578206,
-    "y": 17.329123309419433
-  },
-  {
-    "id": "node_1770343937059921",
-    "x": 32.18009478672987,
-    "y": 7.21063984650474
-  },
-  {
-    "id": "node_1770343954510302",
-    "x": 29.691943127962084,
-    "y": 4.888364953376782
-  },
-  {
-    "id": "node_1770343967086157",
-    "x": -3.483412322274885,
-    "y": 21.31016598335308
-  },
-  {
-    "id": "node_1770344234841895",
-    "x": 16.58767772511847,
-    "y": -21.15428920527251
-  },
-  {
-    "id": "node_1770344246675280",
-    "x": 31.682464454976312,
-    "y": -29.116374553139806
-  },
-  {
-    "id": "node_1770344261923450",
-    "x": 29.526066350710906,
-    "y": -30.443388777784353
-  },
-  {
-    "id": "node_1770344271407818",
-    "x": 27.2037914691943,
-    "y": -29.28225133122037
-  },
-  {
-    "id": "node_1770344277147359",
-    "x": 11.11374407582938,
-    "y": -20.656658871030796
-  },
-  {
-    "id": "node_1770344324440983",
-    "x": -32.51184834123223,
-    "y": -17.505000087499997
-  },
-  {
-    "id": "node_1770344367757356",
-    "x": -4.312796208530799,
-    "y": -6.059502399940755
-  },
-  {
-    "id": "node_1770344380028106",
-    "x": -4.478672985781987,
-    "y": -7.884146958827008
-  },
-  {
-    "id": "node_1770344381473689",
-    "x": -2.8199052132701454,
-    "y": -9.377037961552132
-  },
-  {
-    "id": "node_1770344382858717",
-    "x": -1.1611374407582906,
-    "y": -8.215900514988144
-  },
-  {
-    "id": "node_1770344385496322",
-    "x": -1.1611374407582906,
-    "y": -6.225379178021324
-  },
-  {
-    "id": "node_1770344386799938",
-    "x": -2.8199052132701454,
-    "y": -5.230118509537912
-  }
-],
+    // --- DATA CALIBRATED IN EDITOR (editor units) ---
+    _nodesEditor: [
+      {"id":"node_1740000000001","x":-31.91386017464439,"y":-45.83552670758757},
+      {"id":"node_1740000000002","x":-26.92011444580006,"y":-45.845661362468405},
+      {"id":"node_1740000000003","x":-18.39997108421783,"y":-45.81612589648917},
+      {"id":"node_1740000000004","x":-10.399740505381065,"y":-45.80703310175251},
+      {"id":"node_1740000000005","x":-2.772898850898161,"y":-45.78075471698111},
+      {"id":"node_1740000000006","x":6.6266666666666625,"y":-45.74000000000001},
+      {"id":"node_1740000000007","x":15.030744336569575,"y":-45.71215094339623},
+      {"id":"node_1740000000008","x":23.647213114754087,"y":-45.68430188679245},
+      {"id":"node_1740000000009","x":32.137183021108166,"y":-45.65645283018867},
+      {"id":"node_1740000000010","x":32.14748362779043,"y":-41.4377358490566},
+      {"id":"node_1740000000011","x":32.11475409836067,"y":-31.11886792452831},
+      {"id":"node_1740000000012","x":32.081967213114754,"y":-20.799999999999997},
+      {"id":"node_1740000000013","x":32.049180327868846,"y":-10.4811320754717},
+      {"id":"node_1740000000014","x":32.01639344262295,"y":-0.16226415094340467},
+      {"id":"node_1740000000015","x":30.30550185125431,"y":9.599571734475365},
+      {"id":"node_1740000000016","x":23.972489015747863,"y":9.63018867924528},
+      {"id":"node_1740000000017","x":14.872489015747863,"y":9.63018867924528},
+      {"id":"node_1740000000018","x":5.772489015747863,"y":9.63018867924528},
+      {"id":"node_1740000000019","x":-3.3275109842521367,"y":9.63018867924528},
+      {"id":"node_1740000000020","x":-12.427510984252137,"y":9.63018867924528},
+      {"id":"node_1740000000021","x":-21.527510984252137,"y":9.63018867924528},
+      {"id":"node_1740000000022","x":-30.627510984252137,"y":9.63018867924528},
+      {"id":"node_1740000000023","x":-32.11955557872567,"y":5.786807127259612},
+      {"id":"node_1740000000024","x":-32.13333333333334,"y":-2.9792452830188737},
+      {"id":"node_1740000000025","x":-32.146510480255754,"y":-15.163235101837068},
+      {"id":"node_1740000000026","x":-32.11475409836067,"y":-25.082264150943405},
+      {"id":"node_1740000000027","x":-32.081967213114754,"y":-35.401132075471694},
+      {"id":"node_1740000000028","x":-26.92011444580006,"y":-35.401132075471694},
+      {"id":"node_1740000000029","x":-18.39997108421783,"y":-35.401132075471694},
+      {"id":"node_1740000000030","x":-10.399740505381065,"y":-35.401132075471694},
+      {"id":"node_1740000000031","x":-2.772898850898161,"y":-35.401132075471694},
+      {"id":"node_1740000000032","x":6.6266666666666625,"y":-35.401132075471694},
+      {"id":"node_1740000000033","x":15.030744336569575,"y":-35.401132075471694},
+      {"id":"node_1740000000034","x":23.647213114754087,"y":-35.401132075471694},
+      {"id":"node_1740000000035","x":32.137183021108166,"y":-35.401132075471694},
+      {"id":"node_1740000000036","x":32.14748362779043,"y":-25.082264150943405},
+      {"id":"node_1740000000037","x":32.14748362779043,"y":-15.163235101837068},
+      {"id":"node_1740000000038","x":32.14748362779043,"y":-2.9792452830188737},
+      {"id":"node_1740000000039","x":32.14748362779043,"y":5.786807127259612},
+      {"id":"node_1740000000040","x":23.647213114754087,"y":5.786807127259612},
+      {"id":"node_1740000000041","x":15.030744336569575,"y":5.786807127259612},
+      {"id":"node_1740000000042","x":6.6266666666666625,"y":5.786807127259612},
+      {"id":"node_1740000000043","x":-2.772898850898161,"y":5.786807127259612},
+      {"id":"node_1740000000044","x":-10.399740505381065,"y":5.786807127259612},
+      {"id":"node_1740000000045","x":-18.39997108421783,"y":5.786807127259612},
+      {"id":"node_1740000000046","x":-26.92011444580006,"y":5.786807127259612},
+      {"id":"node_1740000000047","x":-26.92011444580006,"y":-2.9792452830188737},
+      {"id":"node_1740000000048","x":-18.39997108421783,"y":-2.9792452830188737},
+      {"id":"node_1740000000049","x":-10.399740505381065,"y":-2.9792452830188737},
+      {"id":"node_1740000000050","x":-2.772898850898161,"y":-2.9792452830188737}
+    ],
     links: [
-  [
-    "node_1770342713761910",
-    "node_1770342715541766"
-  ],
-  [
-    "node_1770342715541766",
-    "node_1770343027113607"
-  ],
-  [
-    "node_1770343027113607",
-    "node_1770343033468859"
-  ],
-  [
-    "node_1770343033468859",
-    "node_1770343058711345"
-  ],
-  [
-    "node_1770343097431627",
-    "node_1770342718484543"
-  ],
-  [
-    "node_1770343089971972",
-    "node_1770343097431627"
-  ],
-  [
-    "node_1770343058711345",
-    "node_1770343089971972"
-  ],
-  [
-    "node_1770342713761910",
-    "node_1770343198565465"
-  ],
-  [
-    "node_1770343315449964",
-    "node_1770343027113607"
-  ],
-  [
-    "node_1770343315449964",
-    "node_1770343368039293"
-  ],
-  [
-    "node_1770343368039293",
-    "node_1770343376731237"
-  ],
-  [
-    "node_1770343376731237",
-    "node_1770343398921631"
-  ],
-  [
-    "node_1770343398921631",
-    "node_177034341037863"
-  ],
-  [
-    "node_177034341037863",
-    "node_1770343424699408"
-  ],
-  [
-    "node_1770343440621198",
-    "node_1770343424699408"
-  ],
-  [
-    "node_1770343440621198",
-    "node_1770343477583787"
-  ],
-  [
-    "node_1770343477583787",
-    "node_1770343500297254"
-  ],
-  [
-    "node_1770343506646569",
-    "node_1770343500297254"
-  ],
-  [
-    "node_17703435255247",
-    "node_1770343506646569"
-  ],
-  [
-    "node_1770343574513389",
-    "node_17703435255247"
-  ],
-  [
-    "node_1770343633423112",
-    "node_1770343636362495"
-  ],
-  [
-    "node_1770343633423112",
-    "node_1770343644477390"
-  ],
-  [
-    "node_1770343574513389",
-    "node_1770343729239580"
-  ],
-  [
-    "node_1770343729239580",
-    "node_1770343736293772"
-  ],
-  [
-    "node_1770343736293772",
-    "node_1770343746095650"
-  ],
-  [
-    "node_1770343746095650",
-    "node_1770343755417105"
-  ],
-  [
-    "node_1770343755417105",
-    "node_1770343765374373"
-  ],
-  [
-    "node_1770343765374373",
-    "node_1770343773314782"
-  ],
-  [
-    "node_1770343773314782",
-    "node_1770343781294236"
-  ],
-  [
-    "node_1770343636362495",
-    "node_1770343781294236"
-  ],
-  [
-    "node_1770343644477390",
-    "node_1770343857155133"
-  ],
-  [
-    "node_1770343863407291",
-    "node_1770343857155133"
-  ],
-  [
-    "node_1770343863407291",
-    "node_1770343891667474"
-  ],
-  [
-    "node_1770343891667474",
-    "node_1770343910848683"
-  ],
-  [
-    "node_1770343910848683",
-    "node_1770343937059921"
-  ],
-  [
-    "node_1770343954510302",
-    "node_1770343937059921"
-  ],
-  [
-    "node_1770343954510302",
-    "node_1770343967086157"
-  ],
-  [
-    "node_1770343398921631",
-    "node_1770343967086157"
-  ],
-  [
-    "node_1770343033468859",
-    "node_1770344234841895"
-  ],
-  [
-    "node_1770344234841895",
-    "node_1770344246675280"
-  ],
-  [
-    "node_1770344246675280",
-    "node_1770344261923450"
-  ],
-  [
-    "node_1770344261923450",
-    "node_1770344271407818"
-  ],
-  [
-    "node_1770344277147359",
-    "node_1770344271407818"
-  ],
-  [
-    "node_1770344277147359",
-    "node_1770343027113607"
-  ],
-  [
-    "node_1770343027113607",
-    "node_1770344324440983"
-  ],
-  [
-    "node_1770342718484543",
-    "node_1770344367757356"
-  ],
-  [
-    "node_1770344367757356",
-    "node_1770344380028106"
-  ],
-  [
-    "node_1770344381473689",
-    "node_1770344380028106"
-  ],
-  [
-    "node_1770344381473689",
-    "node_1770344382858717"
-  ],
-  [
-    "node_1770344385496322",
-    "node_1770344382858717"
-  ],
-  [
-    "node_1770344385496322",
-    "node_1770344386799938"
-  ],
-  [
-    "node_1770344386799938",
-    "node_1770344367757356"
-  ],
-  [
-    "node_1770344386799938",
-    "node_1770343315449964"
-  ]
-],
+      ["node_1740000000001","node_1740000000002"],
+      ["node_1740000000002","node_1740000000003"],
+      ["node_1740000000003","node_1740000000004"],
+      ["node_1740000000004","node_1740000000005"],
+      ["node_1740000000005","node_1740000000006"],
+      ["node_1740000000006","node_1740000000007"],
+      ["node_1740000000007","node_1740000000008"],
+      ["node_1740000000008","node_1740000000009"],
+      ["node_1740000000009","node_1740000000010"],
+      ["node_1740000000010","node_1740000000011"],
+      ["node_1740000000011","node_1740000000012"],
+      ["node_1740000000012","node_1740000000013"],
+      ["node_1740000000013","node_1740000000014"],
+      ["node_1740000000014","node_1740000000015"],
+      ["node_1740000000015","node_1740000000016"],
+      ["node_1740000000016","node_1740000000017"],
+      ["node_1740000000017","node_1740000000018"],
+      ["node_1740000000018","node_1740000000019"],
+      ["node_1740000000019","node_1740000000020"],
+      ["node_1740000000020","node_1740000000021"],
+      ["node_1740000000021","node_1740000000022"],
+      ["node_1740000000022","node_1740000000023"],
+      ["node_1740000000023","node_1740000000024"],
+      ["node_1740000000024","node_1740000000025"],
+      ["node_1740000000025","node_1740000000026"],
+      ["node_1740000000026","node_1740000000027"],
+      ["node_1740000000027","node_1740000000028"],
+      ["node_1740000000028","node_1740000000029"],
+      ["node_1740000000029","node_1740000000030"],
+      ["node_1740000000030","node_1740000000031"],
+      ["node_1740000000031","node_1740000000032"],
+      ["node_1740000000032","node_1740000000033"],
+      ["node_1740000000033","node_1740000000034"],
+      ["node_1740000000034","node_1740000000035"],
+      ["node_1740000000035","node_1740000000036"],
+      ["node_1740000000036","node_1740000000037"],
+      ["node_1740000000037","node_1740000000038"],
+      ["node_1740000000038","node_1740000000039"],
+      ["node_1740000000039","node_1740000000040"],
+      ["node_1740000000040","node_1740000000041"],
+      ["node_1740000000041","node_1740000000042"],
+      ["node_1740000000042","node_1740000000043"],
+      ["node_1740000000043","node_1740000000044"],
+      ["node_1740000000044","node_1740000000045"],
+      ["node_1740000000045","node_1740000000046"],
+      ["node_1740000000046","node_1740000000023"],
+      ["node_1740000000046","node_1740000000047"],
+      ["node_1740000000047","node_1740000000048"],
+      ["node_1740000000048","node_1740000000049"],
+      ["node_1740000000049","node_1740000000050"],
+      ["node_1740000000050","node_1740000000043"],
+      ["node_1740000000028","node_1740000000047"],
+      ["node_1740000000029","node_1740000000048"]
+    ],
 
-    // --- MOVEMENT CONFIG (from CONFIG in patrol_system_saved.html) ---
-    speed: 5.000,      // percent units per second (YES: 5.0)
-    turnSpeed: 8.000,  // heading smoothing
+    // --- MOVEMENT CONFIG (percent-space) ---
+    speed: 5.0,     // percent units / second (DO NOT set to 15)
+    turnSpeed: 8.0, // rotation smoothing
 
-    /**
-     * The current pose of the cop car. CopCar3D reads these values.
-     * x, y: map percentage coordinates.
-     * heading: angle in radians.
-     * speed: current speed (percent units/sec).
-     */
-    copPose: {
-      x: -32.014218009478675,
-      y: -36.580829566765395,
-      heading: 0,
-      speed: 0
-    },
+    // Runtime nodes in percent space
+    nodes: [],
 
-    // Internal Patrol Logic State
-    patrolState: {
-      current: null,
-      target: null,
-      last: null,
-      moving: false
-    },
+    // pose in percent space (authoritative for CopCar3D)
+    copPose: { x: 0, y: 0, heading: 0, speed: 0 },
 
-    // Timing
+    // Compatibility with app.js / older systems that expect these fields
+    position: null,
+    heading: 0,
+    animationFrameId: null,
+    patrolInterval: null,
+
+    patrolState: { current: null, target: null, last: null, moving: false },
     lastUpdateTime: 0,
 
-    // Tuning
-    arriveDistance: 0.5,     // snap-to-node threshold
-    maxDt: 0.05,             // clamp dt to avoid huge jumps after tab-switch/lag spikes
-
-    /**
-     * Initialize the system. Builds initial state and starts animation loop.
-     */
-    init: function () {
-      console.log('🚓 [CopCarSystem] Initializing Node Patrol (Speed: ' + this.speed.toFixed(1) + ')...');
-
-      if (!this.nodes || this.nodes.length < 2) {
-        console.warn('🚓 [CopCarSystem] Not enough nodes to patrol.');
-        return;
-      }
-
-      // Start at first node
-      this.patrolState.current = this.nodes[0].id;
-      this.copPose.x = this.nodes[0].x;
-      this.copPose.y = this.nodes[0].y;
-      this.copPose.heading = 0;
-      this.copPose.speed = 0;
-
-      this.lastUpdateTime = performance.now();
-      requestAnimationFrame(this._update.bind(this));
+    _getNodeById(id) {
+      return this.nodes.find(n => n.id === id) || null;
     },
 
-    /**
-     * The main movement loop.
-     */
-    _update: function (now) {
-      let dt = (now - this.lastUpdateTime) / 1000;
+    _buildPercentNodes() {
+      this.nodes = this._nodesEditor.map(n => ({
+        id: n.id,
+        x: editorToPercentX(n.x),
+        y: editorToPercentY(n.y)
+      }));
+    },
+
+    init() {
+      try {
+        this._buildPercentNodes();
+        console.log('🚓 [CopCarSystem] Node Patrol init (percent-space). Nodes:', this.nodes.length, 'Links:', this.links.length, 'Speed:', this.speed);
+
+        if (this.nodes.length > 0) {
+          this.patrolState.current = this.nodes[0].id;
+          this.copPose.x = this.nodes[0].x;
+          this.copPose.y = this.nodes[0].y;
+        }
+
+        this.position = this.copPose; // alias for DOM marker code paths
+        this.lastUpdateTime = performance.now();
+
+        // first render
+        this.renderCopCar();
+
+        // kick loop
+        const tick = (now) => {
+          this._update(now);
+          this.animationFrameId = requestAnimationFrame(tick);
+        };
+        this.animationFrameId = requestAnimationFrame(tick);
+      } catch (e) {
+        console.error('[CopCarSystem] init failed:', e);
+      }
+    },
+
+    // Optional compatibility: app.js calls this sometimes
+    updateHeatLevel() { this.updateLights(); },
+
+    updateLights() {
+      const copCar = document.getElementById('cop-car');
+      if (!copCar) return;
+
+      // If GameState exists, color siren by heat; otherwise keep default
+      const heat = (typeof window !== 'undefined' && window.GameState && window.GameState.player)
+        ? Number(window.GameState.player.heat || 0)
+        : 0;
+
+      copCar.classList.remove('no-heat', 'medium-heat', 'high-heat');
+      if (heat >= 75) copCar.classList.add('high-heat');
+      else if (heat >= 30) copCar.classList.add('medium-heat');
+      else copCar.classList.add('no-heat');
+    },
+
+    renderCopCar() {
+      const copCar = document.getElementById('cop-car');
+      if (copCar) {
+        copCar.style.left = this.copPose.x + '%';
+        copCar.style.top = this.copPose.y + '%';
+      }
+      this.heading = this.copPose.heading;
+      this.position = this.copPose;
+      this.updateLights();
+    },
+
+    _update(now) {
+      const dt = (now - this.lastUpdateTime) / 1000;
       this.lastUpdateTime = now;
 
-      if (dt > this.maxDt) dt = this.maxDt;
-      if (dt < 0) dt = 0;
-
-      if (!this.nodes || this.nodes.length < 2 || !this.links || this.links.length < 1) {
-        requestAnimationFrame(this._update.bind(this));
-        return;
-      }
+      if (this.nodes.length < 2) return;
 
       const state = this.patrolState;
 
-      if (!state.current) {
-        state.current = this.nodes[0].id;
-      }
-
       if (!state.moving) {
-        // Find links connected to current node
         const neighbors = this.links
           .filter(l => l[0] === state.current || l[1] === state.current)
           .map(l => (l[0] === state.current ? l[1] : l[0]));
 
         if (neighbors.length > 0) {
           let nextId = neighbors[Math.floor(Math.random() * neighbors.length)];
-
-          // Avoid immediate backtrack if other options exist
           if (neighbors.length > 1 && nextId === state.last) {
             nextId = neighbors.find(id => id !== state.last) || nextId;
           }
-
           state.target = nextId;
           state.moving = true;
         }
       } else {
-        const targetNode = this.nodes.find(n => n.id === state.target);
-        if (!targetNode) {
-          state.moving = false;
-          this.copPose.speed = 0;
-          requestAnimationFrame(this._update.bind(this));
-          return;
-        }
+        const targetNode = this._getNodeById(state.target);
+        if (!targetNode) { state.moving = false; return; }
 
         const dx = targetNode.x - this.copPose.x;
         const dy = targetNode.y - this.copPose.y;
-        const dist = Math.sqrt(dx * dx + dy * dy) || 0.00001;
+        const dist = Math.sqrt(dx * dx + dy * dy);
 
-        // Arrived?
-        if (dist < this.arriveDistance) {
-          this.copPose.x = targetNode.x;
-          this.copPose.y = targetNode.y;
-
+        if (dist < 0.5) {
           state.last = state.current;
           state.current = state.target;
-          state.target = null;
           state.moving = false;
-
           this.copPose.speed = 0;
         } else {
-          // Move toward target
           const moveDist = this.speed * dt;
           this.copPose.x += (dx / dist) * moveDist;
           this.copPose.y += (dy / dist) * moveDist;
           this.copPose.speed = this.speed;
 
-          // Smooth heading toward movement direction
           const targetHeading = Math.atan2(dx, dy);
           let diff = targetHeading - this.copPose.heading;
           while (diff < -Math.PI) diff += Math.PI * 2;
@@ -616,23 +275,20 @@
         }
       }
 
-      requestAnimationFrame(this._update.bind(this));
-    }
+      this.renderCopCar();
+    },
+
+    // Debug helpers if you ever want to cross-check conversions
+    _debug_percentToEditor: { percentToEditorX, percentToEditorY },
+    _debug_editorToPercent: { editorToPercentX, editorToPercentY }
   };
 
-  // Expose to window for CopCar3D
   if (typeof window !== 'undefined') {
     window.CopCarSystem = CopCarSystem;
-
-    if (typeof document !== 'undefined') {
-      if (document.readyState === 'complete' || document.readyState === 'interactive') {
-        CopCarSystem.init();
-      } else {
-        window.addEventListener('DOMContentLoaded', () => CopCarSystem.init());
-      }
-    } else {
-      // No document, just init immediately
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
       CopCarSystem.init();
+    } else {
+      window.addEventListener('DOMContentLoaded', () => CopCarSystem.init());
     }
   }
 })();
