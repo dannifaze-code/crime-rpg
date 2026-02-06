@@ -884,8 +884,13 @@ const CopCar3D = {
 
           root.position.set(worldX, -minY, worldZ);
 
-          // Optional: slight rotate to face "down-map" if needed; keep 0 for now.
-          // root.rotation.y = 0;
+          // Face toward camera on initial load (will be billboarded each frame)
+          if (this.camera) {
+            root.rotation.y = Math.atan2(
+              this.camera.position.x - worldX,
+              this.camera.position.z - worldZ
+            );
+          }
 
           this.scene.add(root);
           this.drugLabRoot = root;
@@ -1293,6 +1298,15 @@ const CopCar3D = {
     this._updateWheels(moveVec, dt, speedDerived, copSpeed);
     this._updateSmoke(dt, speedForEffects);
     this._updateDebugLaneRect();
+
+    // Billboard the Drug Lab building so it always faces the camera
+    if (this.drugLabRoot && this.camera) {
+      const dlPos = this.drugLabRoot.position;
+      this.drugLabRoot.rotation.y = Math.atan2(
+        this.camera.position.x - dlPos.x,
+        this.camera.position.z - dlPos.z
+      );
+    }
   },
 
   _updateDebugLaneRect() {

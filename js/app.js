@@ -10465,6 +10465,10 @@ function updateTurfDefense(dt) {
             flex-direction: column;
             gap: 10px;
           }
+          .druglab-ui-img-wrap {
+            position: relative;
+            width: 100%;
+          }
           .druglab-ui-img {
             width: 100%;
             height: auto;
@@ -10472,21 +10476,31 @@ function updateTurfDefense(dt) {
             border-radius: 12px;
             border: 1px solid rgba(255,255,255,0.08);
           }
-          .druglab-ui-actions {
-            display:flex;
-            gap: 10px;
-          }
-          .druglab-ui-btn {
-            flex: 1;
+          .druglab-img-hitbox {
+            position: absolute;
+            background: transparent;
             border: 0;
-            border-radius: 14px;
-            padding: 12px 10px;
-            font-weight: 800;
             cursor: pointer;
-            background: rgba(255,255,255,0.12);
-            color: #fff;
+            z-index: 2;
+            outline: none;
+            -webkit-tap-highlight-color: transparent;
           }
-          .druglab-ui-btn:active { transform: translateY(1px); }
+          .druglab-img-hitbox:active {
+            background: rgba(255,255,255,0.12);
+            border-radius: 6px;
+          }
+          .druglab-img-hitbox.brew-hit {
+            left: 4%;
+            top: 39%;
+            width: 43%;
+            height: 7.5%;
+          }
+          .druglab-img-hitbox.cook-hit {
+            left: 53%;
+            top: 39%;
+            width: 43%;
+            height: 7.5%;
+          }
           .druglab-progress {
             height: 14px;
             border-radius: 999px;
@@ -10575,29 +10589,31 @@ function updateTurfDefense(dt) {
         const body = document.createElement('div');
         body.className = 'druglab-ui-body';
 
+        // Image wrapper with invisible hitboxes over the PNG Brew/Cook buttons
+        const imgWrap = document.createElement('div');
+        imgWrap.className = 'druglab-ui-img-wrap';
+
         const img = document.createElement('img');
         img.className = 'druglab-ui-img';
         img.alt = 'Drug Lab';
         img.src = 'sprites/druglabs/druglabs.png';
-        body.appendChild(img);
+        imgWrap.appendChild(img);
 
-        const actions = document.createElement('div');
-        actions.className = 'druglab-ui-actions';
+        const brewHit = document.createElement('button');
+        brewHit.className = 'druglab-img-hitbox brew-hit';
+        brewHit.setAttribute('aria-label', 'Brew');
+        brewHit.addEventListener('click', (e) => { e.stopPropagation(); this.startJob('brew'); });
+        imgWrap.appendChild(brewHit);
 
-        const brewBtn = document.createElement('button');
-        brewBtn.className = 'druglab-ui-btn';
-        brewBtn.textContent = 'Brew';
-        brewBtn.addEventListener('click', () => this.startJob('brew'));
+        const cookHit = document.createElement('button');
+        cookHit.className = 'druglab-img-hitbox cook-hit';
+        cookHit.setAttribute('aria-label', 'Cook');
+        cookHit.addEventListener('click', (e) => { e.stopPropagation(); this.startJob('cook'); });
+        imgWrap.appendChild(cookHit);
 
-        const cookBtn = document.createElement('button');
-        cookBtn.className = 'druglab-ui-btn';
-        cookBtn.textContent = 'Cook';
-        cookBtn.addEventListener('click', () => this.startJob('cook'));
+        body.appendChild(imgWrap);
 
-        actions.appendChild(brewBtn);
-        actions.appendChild(cookBtn);
-        body.appendChild(actions);
-
+        // Progress + batch output positioned right under the image (under Street Price text)
         const progress = document.createElement('div');
         progress.className = 'druglab-progress';
         progress.innerHTML = '<div class="druglab-progress-fill" id="druglab-progress-fill"></div>';
