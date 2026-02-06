@@ -10368,6 +10368,335 @@ function updateTurfDefense(dt) {
     };
 
     // ========================================
+    // TURF MAP: Drug Lab Building (3D + UI)
+    // ========================================
+    // Places the Drug Lab 3D building on Turf Grid #35 (centered, fills the square)
+    // and opens the Drug Lab UI (sprites/druglabs/druglabs.png) when clicked.
+    const DrugLabSystem = {
+      // Grid calibration derived from sprites/turf-map/trufgridoverlay.png (8 cols x 11 rows)
+      // Cell #35 bounds (percent of map-world): left/right/top/bottom
+      cellIndex: 35,
+      cellBoundsPct: { left: 25.390625, right: 37.402344, top: 37.532552, bottom: 45.735677 },
+      get cellCenterPct() {
+        const b = this.cellBoundsPct;
+        return { x: (b.left + b.right) / 2, y: (b.top + b.bottom) / 2 };
+      },
+      get cellSizePct() {
+        const b = this.cellBoundsPct;
+        return { w: (b.right - b.left), h: (b.bottom - b.top) };
+      },
+
+      // UI / crafting state
+      state: {
+        jobs: [], // { type: 'brew'|'cook', start: ms, duration: ms, done: bool, label: string }
+        completed: [] // strings
+      },
+
+      _initialized: false,
+      _hitboxEl: null,
+      _uiEl: null,
+      _progressEl: null,
+      _productEl: null,
+      _raf: 0,
+
+      init() {
+        if (this._initialized) return;
+        this._initialized = true;
+
+        // Store on GameState for session persistence
+        if (typeof GameState !== 'undefined') {
+          if (!GameState.drugLab) GameState.drugLab = this.state;
+          this.state = GameState.drugLab;
+        }
+
+        this._injectStyles();
+        this._ensureHitbox();
+      },
+
+      _injectStyles() {
+        if (document.getElementById('druglab-ui-style')) return;
+        const style = document.createElement('style');
+        style.id = 'druglab-ui-style';
+        style.textContent = `
+          .druglab-hitbox {
+            position:absolute;
+            background: rgba(0,0,0,0);
+            cursor: pointer;
+            z-index: 9000;
+          }
+          .druglab-ui-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.72);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 20000;
+            padding: 16px;
+          }
+          .druglab-ui-panel {
+            width: min(520px, 96vw);
+            max-height: 92vh;
+            background: rgba(10,14,20,0.96);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 18px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.55);
+            overflow: hidden;
+          }
+          .druglab-ui-header {
+            display:flex;
+            align-items:center;
+            justify-content: space-between;
+            padding: 10px 12px;
+            border-bottom: 1px solid rgba(255,255,255,0.10);
+            font-weight: 700;
+          }
+          .druglab-ui-close {
+            border: 0;
+            background: rgba(255,255,255,0.10);
+            color: #fff;
+            border-radius: 12px;
+            padding: 6px 10px;
+            cursor: pointer;
+          }
+          .druglab-ui-body {
+            padding: 12px;
+            display:flex;
+            flex-direction: column;
+            gap: 10px;
+          }
+          .druglab-ui-img {
+            width: 100%;
+            height: auto;
+            display:block;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.08);
+          }
+          .druglab-ui-actions {
+            display:flex;
+            gap: 10px;
+          }
+          .druglab-ui-btn {
+            flex: 1;
+            border: 0;
+            border-radius: 14px;
+            padding: 12px 10px;
+            font-weight: 800;
+            cursor: pointer;
+            background: rgba(255,255,255,0.12);
+            color: #fff;
+          }
+          .druglab-ui-btn:active { transform: translateY(1px); }
+          .druglab-progress {
+            height: 14px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.10);
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.10);
+          }
+          .druglab-progress-fill {
+            height: 100%;
+            width: 0%;
+            background: rgba(0,255,170,0.75);
+            transition: width 120ms linear;
+          }
+          .druglab-product {
+            min-height: 26px;
+            padding: 8px 10px;
+            border-radius: 12px;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.10);
+            font-weight: 700;
+            display:flex;
+            align-items:center;
+            justify-content: space-between;
+            gap: 10px;
+          }
+          .druglab-product small {
+            opacity: 0.75;
+            font-weight: 600;
+          }
+        `;
+        document.head.appendChild(style);
+      },
+
+      _ensureHitbox() {
+        const world = document.getElementById('map-world');
+        if (!world) {
+          setTimeout(() => this._ensureHitbox(), 400);
+          return;
+        }
+
+        if (!this._hitboxEl || !this._hitboxEl.isConnected) {
+          const hb = document.createElement('div');
+          hb.id = 'druglab-hitbox';
+          hb.className = 'druglab-hitbox';
+          const b = this.cellBoundsPct;
+          hb.style.left = b.left + '%';
+          hb.style.top = b.top + '%';
+          hb.style.width = (b.right - b.left) + '%';
+          hb.style.height = (b.bottom - b.top) + '%';
+          hb.title = 'Drug Lab';
+          hb.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.openUI();
+          });
+          world.appendChild(hb);
+          this._hitboxEl = hb;
+        }
+
+        this._ensureUI();
+      },
+
+      _ensureUI() {
+        if (this._uiEl && this._uiEl.isConnected) return;
+
+        const backdrop = document.createElement('div');
+        backdrop.id = 'druglab-ui';
+        backdrop.className = 'druglab-ui-backdrop';
+        backdrop.addEventListener('click', (e) => {
+          if (e.target === backdrop) this.closeUI();
+        });
+
+        const panel = document.createElement('div');
+        panel.className = 'druglab-ui-panel';
+
+        const header = document.createElement('div');
+        header.className = 'druglab-ui-header';
+        header.innerHTML = '<div>🧪 Drug Lab</div>';
+
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'druglab-ui-close';
+        closeBtn.textContent = 'Close';
+        closeBtn.addEventListener('click', () => this.closeUI());
+        header.appendChild(closeBtn);
+
+        const body = document.createElement('div');
+        body.className = 'druglab-ui-body';
+
+        const img = document.createElement('img');
+        img.className = 'druglab-ui-img';
+        img.alt = 'Drug Lab';
+        img.src = 'sprites/druglabs/druglabs.png';
+        body.appendChild(img);
+
+        const actions = document.createElement('div');
+        actions.className = 'druglab-ui-actions';
+
+        const brewBtn = document.createElement('button');
+        brewBtn.className = 'druglab-ui-btn';
+        brewBtn.textContent = 'Brew';
+        brewBtn.addEventListener('click', () => this.startJob('brew'));
+
+        const cookBtn = document.createElement('button');
+        cookBtn.className = 'druglab-ui-btn';
+        cookBtn.textContent = 'Cook';
+        cookBtn.addEventListener('click', () => this.startJob('cook'));
+
+        actions.appendChild(brewBtn);
+        actions.appendChild(cookBtn);
+        body.appendChild(actions);
+
+        const progress = document.createElement('div');
+        progress.className = 'druglab-progress';
+        progress.innerHTML = '<div class="druglab-progress-fill" id="druglab-progress-fill"></div>';
+        body.appendChild(progress);
+        this._progressEl = progress.querySelector('#druglab-progress-fill');
+
+        const product = document.createElement('div');
+        product.className = 'druglab-product';
+        product.innerHTML = '<div id="druglab-product-label">No product yet</div><small id="druglab-product-sub">Tap Brew or Cook</small>';
+        body.appendChild(product);
+        this._productEl = {
+          label: product.querySelector('#druglab-product-label'),
+          sub: product.querySelector('#druglab-product-sub'),
+        };
+
+        panel.appendChild(header);
+        panel.appendChild(body);
+        backdrop.appendChild(panel);
+        document.body.appendChild(backdrop);
+        this._uiEl = backdrop;
+
+        window.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape' && this._uiEl && this._uiEl.style.display === 'flex') {
+            this.closeUI();
+          }
+        });
+      },
+
+      openUI() {
+        this._ensureUI();
+        this._uiEl.style.display = 'flex';
+        this._startUIRaf();
+      },
+
+      closeUI() {
+        if (this._uiEl) this._uiEl.style.display = 'none';
+        if (this._raf) cancelAnimationFrame(this._raf);
+        this._raf = 0;
+      },
+
+      startJob(type) {
+        const now = performance.now();
+        const duration = (type === 'brew') ? 12000 : 18000;
+        const label = (type === 'brew') ? 'Brewed batch' : 'Cooked batch';
+
+        const active = this.state.jobs.find(j => !j.done);
+        if (active) {
+          this._setStatus('Working…', 'Already ' + active.type.toUpperCase());
+          return;
+        }
+
+        this.state.jobs.push({ type, start: now, duration, done: false, label });
+        this._setStatus('Working…', type.toUpperCase() + ' started');
+        this._startUIRaf();
+      },
+
+      _setStatus(main, sub) {
+        if (!this._productEl) return;
+        this._productEl.label.textContent = main;
+        this._productEl.sub.textContent = sub;
+      },
+
+      _startUIRaf() {
+        if (this._raf) return;
+        const tick = () => {
+          this._raf = requestAnimationFrame(tick);
+
+          const job = this.state.jobs.find(j => !j.done);
+          if (!job) {
+            if (this._progressEl) this._progressEl.style.width = '0%';
+            const last = this.state.completed[this.state.completed.length - 1];
+            if (last) this._setStatus(last, 'Finished');
+            return;
+          }
+
+          const now = performance.now();
+          const t = Math.max(0, Math.min(1, (now - job.start) / job.duration));
+          if (this._progressEl) this._progressEl.style.width = (t * 100).toFixed(1) + '%';
+
+          if (t >= 1) {
+            job.done = true;
+            const stamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const result = job.label + ' • ' + stamp;
+            this.state.completed.push(result);
+            this._setStatus(result, 'Finished');
+            if (this._progressEl) this._progressEl.style.width = '0%';
+          } else {
+            const pct = Math.round(t * 100);
+            this._setStatus('Working…', job.type.toUpperCase() + ' ' + pct + '%');
+          }
+        };
+        this._raf = requestAnimationFrame(tick);
+      },
+    };
+
+    window.DrugLabSystem = DrugLabSystem;
+
+
+    // ========================================
     // CORE: Seed Generation Utilities
     // ========================================
     // (Moved here from later in code for Phase 7.4A dependency)
@@ -28176,6 +28505,7 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
 
       console.log('🎮 [GameLoop] Game loop initialized for Turf Defense');
 
+      if (typeof DrugLabSystem !== 'undefined') { DrugLabSystem.init(); }
       console.log('=== [DEBUG] initializeGame() COMPLETE ===');
       console.log('==========================================');
     }
