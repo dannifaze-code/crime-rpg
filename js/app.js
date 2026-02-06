@@ -15211,7 +15211,10 @@ function ensureLandmarkProperties() {
     // COP CAR PATROL SYSTEM
     // ========================================
     
-    const CopCarSystem = {
+    if (typeof window !== 'undefined' && window.CopCarSystem) {
+      console.log('[app.js] CopCarSystem already provided by module; skipping embedded CopCarSystem.');
+    } else {
+      const CopCarSystem = {
       copPose: { x: 15, y: 15, heading: 0, speed: 0 }, // Authoritative pose
       position: null,
       targetPosition: null,
@@ -15814,6 +15817,8 @@ function ensureLandmarkProperties() {
     // Expose so external modules (e.g. js/modules/cop-car-3d.js) can read
     // authoritative cop position/heading/speed without relying on DOM measurements.
     window.CopCarSystem = CopCarSystem;
+
+    }
 
     // ========================================
     // INMATE RECRUITMENT SYSTEM
