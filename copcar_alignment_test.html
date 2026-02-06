@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Cop Car Node Patrol Alignment Test</title>
+  <style>
+    html, body { margin:0; padding:0; height:100%; background:#0b0f14; color:#e6edf3; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    #wrap { display:flex; flex-direction:column; height:100%; }
+    #hud {
+      padding:10px 12px;
+      background: rgba(10, 14, 20, 0.92);
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      display:flex; flex-wrap:wrap; gap:10px 14px; align-items:center;
+    }
+    #hud b { font-weight:700; }
+    #hud .pill { padding:6px 10px; border:1px solid rgba(255,255,255,0.14); border-radius:999px; background:rgba(255,255,255,0.04); }
+    #hud label { display:inline-flex; align-items:center; gap:6px; cursor:pointer; user-select:none; }
+    #hud input[type="range"] { width:140px; }
+    #canvasWrap { position:relative; flex:1; overflow:hidden; display:flex; align-items:center; justify-content:center; }
+    canvas { width:100%; height:100%; touch-action:none; }
+    #hint {
+      position:absolute; left:10px; bottom:10px;
+      padding:8px 10px; border-radius:10px;
+      background: rgba(0,0,0,0.45);
+      border: 1px solid rgba(255,255,255,0.10);
+      font-size:12px; line-height:1.25;
+      max-width: min(520px, calc(100% - 20px));
+    }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .warn { color:#fbbf24; }
+  </style>
+</head>
+<body>
+<div id="wrap">
+  <div id="hud">
+    <div class="pill"><b>Cop Car Alignment Test</b></div>
+    <div class="pill">Nodes: <span id="nodeCount">?</span> • Links: <span id="linkCount">?</span></div>
+    <div class="pill">Speed: <span id="spd">?</span></div>
+    <div class="pill">Pose: <span id="pose">?</span></div>
+
+    <label class="pill"><input id="showNodes" type="checkbox" checked /> nodes</label>
+    <label class="pill"><input id="showLinks" type="checkbox" checked /> links</label>
+    <label class="pill"><input id="showTrail" type="checkbox" checked /> trail</label>
+    <label class="pill"><input id="showBounds" type="checkbox" /> bounds</label>
+
+    <label class="pill">Node size <input id="nodeSize" type="range" min="2" max="14" step="1" value="7" /></label>
+    <label class="pill">Line width <input id="lineW" type="range" min="1" max="10" step="1" value="3" /></label>
+    <label class="pill">Car size <input id="carSize" type="range" min="6" max="30" step="1" value="14" /></label>
+  </div>
+
+  <div id="canvasWrap">
+    <canvas id="c"></canvas>
+    <div id="hint">
+      <div><b>Goal:</b> the green overlay should sit on the roads of <code>sprites/turf-map/TurfMap.png</code>.</div>
+      <div style="margin-top:6px;">
+        <span class="warn">If TurfMap.png won’t load on mobile</span>, open this via a local web server (some phone viewers block <code>file://</code> image access).
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Load your in-game system (50 nodes / 53 links / speed 5) -->
+<script src="js/modules/cop-car-system.js"></script>
+
+<script>
+(() => {
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+
+  const elNodeCount = document.getElementById('nodeCount');
+  const elLinkCount = document.getElementById('linkCount');
+  const elSpd = document.getElementById('spd');
+  const elPose = document.getElementById('pose');
+
+  const showNodes = document.getElementById('showNodes');
+  const showLinks = document.getElementById('showLinks');
+  const showTrail = document.getElementById('showTrail');
+  const showBounds = document.getElementById('showBounds');
+
+  const nodeSize = document.getElementById('nodeSize');
+  const lineW = document.getElementById('lineW');
+  const carSize = document.getElementById('carSize');
+
+  // Load TurfMap.png (same file your game uses)
+  const img = new Image();
+  img.src = "sprites/turf-map/TurfMap.png";
+
+  const sys = window.CopCarSystem;
+  if (!sys) {
+    alert("CopCarSystem not found. Make sure js/modules/cop-car-system.js exists and loads.");
+    return;
+  }
+
+  // Editor plane dimensions from patrol_system_saved.html
+  const MAP_W = 66.6;
+  const MAP_H = 100.0;
+
+  // editor-space -> canvas pixels
+  function toPxX(x) { return (x / MAP_W + 0.5) * canvas.width; }
+  function toPxY(y) { return (y / MAP_H + 0.5) * canvas.height; }
+
+  const trail = [];
+  const TRAIL_MAX = 500;
+
+  function fitCanvasToImage() {
+    const wrap = document.getElementById('canvasWrap');
+    const cssW = wrap.clientWidth;
+    const cssH = wrap.clientHeight;
+
+    const imgAspect = (img.naturalWidth && img.naturalHeight)
+      ? (img.naturalWidth / img.naturalHeight)
+      : (MAP_W / MAP_H);
+
+    let drawW, drawH;
+    if (cssW / cssH > imgAspect) {
+      drawH = cssH;
+      drawW = Math.round(cssH * imgAspect);
+    } else {
+      drawW = cssW;
+      drawH = Math.round(cssW / imgAspect);
+    }
+
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    canvas.style.width = drawW + "px";
+    canvas.style.height = drawH + "px";
+    canvas.width = Math.round(drawW * dpr);
+    canvas.height = Math.round(drawH * dpr);
+
+    ctx.setTransform(1,0,0,1,0,0);
+  }
+
+  function draw() {
+    ctx.clearRect(0,0,canvas.width, canvas.height);
+
+    if (img.complete && img.naturalWidth) {
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    } else {
+      ctx.fillStyle = "#0b0f14";
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+      ctx.fillStyle = "rgba(255,255,255,0.75)";
+      ctx.font = "16px system-ui, sans-serif";
+      ctx.fillText("Loading TurfMap.png…", 14, 28);
+    }
+
+    if (showBounds.checked) {
+      ctx.save();
+      ctx.strokeStyle = "rgba(255,255,255,0.85)";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(1,1,canvas.width-2,canvas.height-2);
+      ctx.restore();
+    }
+
+    if (showLinks.checked) {
+      ctx.save();
+      ctx.lineWidth = Number(lineW.value);
+      ctx.strokeStyle = "rgba(0, 255, 170, 0.65)";
+      for (const [aId,bId] of sys.links) {
+        const a = sys.nodes.find(n => n.id === aId);
+        const b = sys.nodes.find(n => n.id === bId);
+        if (!a || !b) continue;
+        ctx.beginPath();
+        ctx.moveTo(toPxX(a.x), toPxY(a.y));
+        ctx.lineTo(toPxX(b.x), toPxY(b.y));
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    if (showNodes.checked) {
+      ctx.save();
+      const r = Number(nodeSize.value);
+      for (const n of sys.nodes) {
+        const x = toPxX(n.x), y = toPxY(n.y);
+        ctx.fillStyle = "rgba(0,255,170,0.95)";
+        ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+        ctx.strokeStyle = "rgba(0,0,0,0.55)";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    if (showTrail.checked) {
+      ctx.save();
+      ctx.strokeStyle = "rgba(255, 255, 0, 0.55)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (let i=0;i<trail.length;i++) {
+        const p = trail[i];
+        const x = toPxX(p.x), y = toPxY(p.y);
+        if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    const pose = sys.copPose || {x:0,y:0,heading:0,speed:0};
+    const cx = toPxX(pose.x), cy = toPxY(pose.y);
+    const size = Number(carSize.value);
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(pose.heading);
+
+    ctx.fillStyle = "rgba(255, 80, 80, 0.95)";
+    ctx.strokeStyle = "rgba(0,0,0,0.6)";
+    ctx.lineWidth = 2;
+
+    ctx.beginPath();
+    ctx.moveTo(0, -size * 0.9);
+    ctx.lineTo(size * 0.6, size * 0.9);
+    ctx.lineTo(-size * 0.6, size * 0.9);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.strokeStyle = "rgba(255,255,255,0.85)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-size*0.35, size*0.55);
+    ctx.lineTo(size*0.35, size*0.55);
+    ctx.stroke();
+
+    ctx.restore();
+
+    elNodeCount.textContent = String(sys.nodes?.length ?? 0);
+    elLinkCount.textContent = String(sys.links?.length ?? 0);
+    elSpd.textContent = String(sys.speed ?? "?");
+    elPose.textContent = `x ${pose.x.toFixed(2)} • y ${pose.y.toFixed(2)} • heading ${pose.heading.toFixed(2)}`;
+
+    trail.push({x: pose.x, y: pose.y});
+    if (trail.length > TRAIL_MAX) trail.splice(0, trail.length - TRAIL_MAX);
+
+    requestAnimationFrame(draw);
+  }
+
+  function onResize() { fitCanvasToImage(); }
+
+  window.addEventListener('resize', onResize);
+  img.addEventListener('load', onResize);
+
+  onResize();
+  requestAnimationFrame(draw);
+})();
+</script>
+</body>
+</html>
