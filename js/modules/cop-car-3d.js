@@ -48,6 +48,14 @@ const CopCar3D = {
   _pendingModelRoot: null,
   modelPath: 'sprites/3d-models/cop-car.glb',
 
+  // Drug Lab building (static 3D building on Turf Grid #35)
+  drugLabEnabled: true,
+  drugLabModelPath: 'sprites/3d-models/base_basic_pbr_glow_window_orange.glb',
+  drugLabRoot: null,
+  _drugLabLoaded: false,
+  // Grid #35 bounds (percent) derived from trufgridoverlay.png
+  drugLabCellBoundsPct: { left: 25.390625, right: 37.402344, top: 37.532552, bottom: 45.735677 },
+
   // loop
   animationFrameId: null,
   isInitialized: false,
@@ -809,6 +817,9 @@ const CopCar3D = {
           // Mark initial scale as applied
           this._initialScaleApplied = true;
 
+          // Also load the Drug Lab building once the Three.js scene is ready.
+          this._ensureDrugLab();
+
           console.log('[CopCar3D] Model loaded');
           resolve();
         },
@@ -821,7 +832,76 @@ const CopCar3D = {
         }
       );
     });
-  },
+  }
+,
+  async _ensureDrugLab() {
+    try {
+      if (!this.drugLabEnabled) return;
+      if (this._drugLabLoaded) return;
+      if (!this.scene || typeof THREE === 'undefined' || typeof THREE.GLTFLoader === 'undefined') return;
+
+      // If app.js created DrugLabSystem, prefer its bounds (keeps one source of truth)
+      if (typeof window !== 'undefined' && window.DrugLabSystem && window.DrugLabSystem.cellBoundsPct) {
+        this.drugLabCellBoundsPct = window.DrugLabSystem.cellBoundsPct;
+      }
+
+      const loader = new THREE.GLTFLoader();
+      loader.load(
+        this.drugLabModelPath,
+        (gltf) => {
+          const root = gltf.scene;
+          root.name = 'DrugLabBuilding';
+
+          // Position: center of the target grid cell in world space (percent -> world [-50..50])
+          const b = this.drugLabCellBoundsPct;
+          const cx = (b.left + b.right) / 2;
+          const cy = (b.top + b.bottom) / 2;
+          const worldX = cx - 50;
+          const worldZ = cy - 50;
+
+          // Target footprint in world units (map plane is 100x100)
+          const cellW = (b.right - b.left);
+          const cellH = (b.bottom - b.top);
+
+          // Compute bounds for scaling
+          const box = new THREE.Box3().setFromObject(root);
+          const size = new THREE.Vector3();
+          box.getSize(size);
+
+          // If model is degenerate, fallback scale
+          let s = 1;
+          if (size.x > 0.0001 && size.z > 0.0001) {
+            s = Math.min(cellW / size.x, cellH / size.z);
+          } else if (size.x > 0.0001) {
+            s = (cellW / size.x);
+          }
+
+          root.scale.setScalar(s);
+
+          // Recompute bounds after scaling and lift so it sits on y=0 ground
+          const box2 = new THREE.Box3().setFromObject(root);
+          const minY = box2.min.y;
+
+          root.position.set(worldX, -minY, worldZ);
+
+          // Optional: slight rotate to face "down-map" if needed; keep 0 for now.
+          // root.rotation.y = 0;
+
+          this.scene.add(root);
+          this.drugLabRoot = root;
+          this._drugLabLoaded = true;
+          console.log('[CopCar3D] ✅ Drug Lab building loaded at grid #35');
+        },
+        undefined,
+        (err) => {
+          console.warn('[CopCar3D] Drug Lab building failed to load:', err);
+        }
+      );
+    } catch (e) {
+      console.warn('[CopCar3D] _ensureDrugLab error:', e);
+    }
+  }
+,
 
   /**
    * Apply scaling to the model with proper fallback when lane width can't be calculated
