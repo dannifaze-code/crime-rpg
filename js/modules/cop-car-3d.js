@@ -83,6 +83,9 @@ const CopCar3D = {
   // dt
   _lastTickTime: 0,
 
+  // aspect ratio for coordinate mapping
+  _mapAspect: 1,
+
   // ray
   _raycaster: null,
   _groundPlane: null,
@@ -148,16 +151,17 @@ const CopCar3D = {
     ],
     carWidthPercentUnits: 3.0,
     carLengthPercentUnits: 5.0,
-    carWidthSlimFactor: 0.9,
-    carLengthStretchFactor: 1.05,
+    carWidthSlimFactor: 1.0,
+    carLengthStretchFactor: 1.0,
 
     // dt-based smoothing strengths (higher = tighter)
     positionLerpStrength: 18,
-    yawLerpStrength: 14,
-    rollLerpStrength: 10,
+    yawLerpStrength: 10,
+    rollLerpStrength: 8,
 
-    // If your GLB forward axis differs, adjust this (radians)
-    modelYawOffset: 0,
+    // GLB models use -Z forward (glTF convention).
+    // Math.PI rotates 180° so the front faces the direction of travel.
+    modelYawOffset: Math.PI,
 
     // When CopCarSystem.speed is basically 0, snap position to prevent micro-glide
     stopSnapSpeed: 0.03,
@@ -565,8 +569,16 @@ const CopCar3D = {
     // the 2D marker which is positioned using % left/top.
     // The layer mirrors #map-world's CSS transform (pan/zoom), keeping alignment
     // correct without nesting the canvas inside the transformed element.
-    const halfMap = 50;
-    this.camera = new THREE.OrthographicCamera(-halfMap, halfMap, halfMap, -halfMap, 0.1, 500);
+    //
+    // ASPECT-CORRECT frustum: We adjust the frustum based on the canvas aspect ratio
+    // so that 1 world unit in X equals 1 world unit in Z on screen. This prevents the
+    // cop car from appearing to change shape when rotating.
+    // The X coordinate mapping accounts for the wider frustum: worldX = (pctX - 50) * aspect.
+    const aspect = width / height;
+    this._mapAspect = aspect;
+    const halfW = 50 * aspect;  // Wider frustum for portrait displays
+    const halfH = 50;
+    this.camera = new THREE.OrthographicCamera(-halfW, halfW, halfH, -halfH, 0.1, 500);
     this.camera.up.set(0, 0, -1); // Set up vector to -Z before lookAt (avoids gimbal lock when looking down Y)
     this.camera.position.set(0, 120, 0);
     this._cameraLookAt = new THREE.Vector3(0, 0, 0);
@@ -852,15 +864,16 @@ const CopCar3D = {
           const root = gltf.scene;
           root.name = 'DrugLabBuilding';
 
-          // Position: center of the target grid cell in world space (percent -> world [-50..50])
+          // Position: center of the target grid cell in world space (percent -> world)
           const b = this.drugLabCellBoundsPct;
           const cx = (b.left + b.right) / 2;
           const cy = (b.top + b.bottom) / 2;
-          const worldX = cx - 50;
+          const asp = this._mapAspect || 1;
+          const worldX = (cx - 50) * asp;
           const worldZ = cy - 50;
 
-          // Target footprint in world units (map plane is 100x100)
-          const cellW = (b.right - b.left);
+          // Target footprint in world units (scaled by aspect for X)
+          const cellW = (b.right - b.left) * asp;
           const cellH = (b.bottom - b.top);
 
           // Compute bounds for scaling
@@ -1196,7 +1209,9 @@ const CopCar3D = {
         hasValidPosition = false;
       } else {
         // Center percent space at (0,0) so camera centered at (50,50) sees full map.
-        targetWorld = new THREE.Vector3(px - 50, 0, py - 50); // x=percentX, z=percentY
+        // X is scaled by the map aspect ratio to match the aspect-correct frustum.
+        const asp = this._mapAspect || 1;
+        targetWorld = new THREE.Vector3((px - 50) * asp, 0, py - 50);
         hasValidPosition = true;
       }
     }
@@ -1260,12 +1275,14 @@ const CopCar3D = {
     }
 
     if (headingFromSystem !== null) {
-      // CopCarSystem.heading is atan2(dx, dy) measured counter-clockwise from +Y (down on map).
-      // Three.js rotation.y rotates counter-clockwise when viewed from above.
-      // We negate the heading to convert to clockwise rotation for proper road alignment.
-      desiredYaw = -headingFromSystem + this.config.modelYawOffset;
+      // CopCarSystem.heading is atan2(dx, dy) where +dy = screen down = +Z in 3D.
+      // The GLB model's forward is -Z (glTF convention), so modelYawOffset = PI
+      // rotates 180° to face +Z when heading=0 (moving down).
+      // The heading is added (not negated) because atan2(dx,dy) naturally maps to rotation.y
+      // with the PI offset for the -Z→+Z flip.
+      desiredYaw = headingFromSystem + this.config.modelYawOffset;
     } else if (mv > 0.0002) {
-      desiredYaw = -Math.atan2(moveVec.x, moveVec.z) + this.config.modelYawOffset;
+      desiredYaw = Math.atan2(moveVec.x, moveVec.z) + this.config.modelYawOffset;
     } else {
       // If stopped, keep current yaw. (prevents jitter at intersections)
       desiredYaw = this._currentYaw;
@@ -1528,8 +1545,14 @@ const CopCar3D = {
   _handleResize(width, height) {
     if (!this.camera || !this.renderer) return;
 
-    // Keep the frustum at fixed 100x100 units to match the map's percent coordinate system.
-    // Any aspect ratio distortion matches the 2D map distortion via CSS.
+    // Update aspect-correct frustum so the car doesn't distort when rotating.
+    const aspect = width / height;
+    this._mapAspect = aspect;
+    const halfW = 50 * aspect;
+    this.camera.left = -halfW;
+    this.camera.right = halfW;
+    this.camera.top = 50;
+    this.camera.bottom = -50;
     this.camera.updateProjectionMatrix();
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.config.maxPixelRatio));
     this.renderer.setSize(width, height, false);

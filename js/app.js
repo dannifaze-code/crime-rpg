@@ -15405,7 +15405,7 @@ function ensureLandmarkProperties() {
       heading: 0,
       speed: 0,
       cruiseSpeed: 6.2,
-      turnRate: 8.0,
+      turnRate: 4.5,
       pauseUntil: 0,
       stopMinMs: 350,
       stopMaxMs: 900,
@@ -15652,13 +15652,6 @@ function ensureLandmarkProperties() {
               // Brief pause at node
               this.pauseUntil = now + (this.stopMinMs + Math.random() * (this.stopMaxMs - this.stopMinMs));
             } else {
-              // Move toward target node
-              const moveDist = Math.min(this.cruiseSpeed * dt, dist);
-              this.copPose.x += (dx / dist) * moveDist;
-              this.copPose.y += (dy / dist) * moveDist;
-              this.speed = this.cruiseSpeed;
-              this.copPose.speed = this.cruiseSpeed;
-
               // Smooth heading toward target
               const targetHeading = Math.atan2(dx, dy);
               let headingDiff = targetHeading - this.heading;
@@ -15666,6 +15659,18 @@ function ensureLandmarkProperties() {
               while (headingDiff < -Math.PI) headingDiff += Math.PI * 2;
               this.heading += headingDiff * this.turnRate * dt;
               this.copPose.heading = this.heading;
+
+              // Slow down during sharp turns for realistic cornering
+              const absDiff = Math.abs(headingDiff);
+              const turnSlowdown = Math.max(0.35, 1.0 - (absDiff / Math.PI) * 0.65);
+              const effectiveSpeed = this.cruiseSpeed * turnSlowdown;
+
+              // Move toward target node
+              const moveDist = Math.min(effectiveSpeed * dt, dist);
+              this.copPose.x += (dx / dist) * moveDist;
+              this.copPose.y += (dy / dist) * moveDist;
+              this.speed = effectiveSpeed;
+              this.copPose.speed = effectiveSpeed;
             }
           } else {
             this._targetNodeId = null;
@@ -15787,6 +15792,15 @@ function ensureLandmarkProperties() {
       visible: false,
       svgEl: null,
       animFrameId: null,
+      // Editor state
+      editMode: false,       // When true, nodes are draggable
+      linkMode: false,       // When true, clicking nodes creates/removes links
+      _dragNode: null,       // Node currently being dragged
+      _dragOffset: null,     // Offset from node center to pointer
+      _linkSource: null,     // First node in link creation
+      _selectedNode: null,   // Currently selected node for deletion
+      _nextNodeId: 54,       // Next auto-increment ID for new nodes
+      _toolbarEl: null,      // Editor toolbar element
 
       toggle() {
         this.visible = !this.visible;
@@ -15796,9 +15810,19 @@ function ensureLandmarkProperties() {
         } else {
           this._destroy();
         }
-        // Update button text
         const btn = document.getElementById('cop-node-debug-btn');
         if (btn) btn.textContent = this.visible ? 'Hide Nodes' : 'Show Nodes';
+      },
+
+      _svgPoint(svg, clientX, clientY) {
+        // Convert screen coordinates to SVG viewBox coordinates (0-100%)
+        const pt = svg.createSVGPoint();
+        pt.x = clientX;
+        pt.y = clientY;
+        const ctm = svg.getScreenCTM();
+        if (!ctm) return { x: 0, y: 0 };
+        const svgPt = pt.matrixTransform(ctm.inverse());
+        return { x: svgPt.x, y: svgPt.y };
       },
 
       _create() {
@@ -15812,67 +15836,35 @@ function ensureLandmarkProperties() {
           return;
         }
 
-        // Create SVG overlay — uses viewBox 0 0 100 100 so percent coords map directly
+        // Compute next node ID
+        let maxId = 0;
+        sys._patrolNodes.forEach(n => {
+          const num = parseInt(n.id.replace('node_', ''), 10);
+          if (num > maxId) maxId = num;
+        });
+        this._nextNodeId = maxId + 1;
+
+        // Create SVG overlay
         const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
         svg.setAttribute('id', 'cop-node-debug-svg');
         svg.setAttribute('viewBox', '0 0 100 100');
         svg.setAttribute('preserveAspectRatio', 'none');
         svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;z-index:50;pointer-events:none;';
 
-        // Draw path links (lines between connected nodes)
+        // Link group
         const linkGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         linkGroup.setAttribute('id', 'cop-debug-links');
-        sys._patrolLinks.forEach(link => {
-          const a = sys._getNodeById(link[0]);
-          const b = sys._getNodeById(link[1]);
-          if (!a || !b) return;
-          const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-          line.setAttribute('x1', a.x);
-          line.setAttribute('y1', a.y);
-          line.setAttribute('x2', b.x);
-          line.setAttribute('y2', b.y);
-          line.setAttribute('stroke', 'rgba(0,200,255,0.5)');
-          line.setAttribute('stroke-width', '0.25');
-          line.setAttribute('stroke-dasharray', '0.5,0.3');
-          linkGroup.appendChild(line);
-        });
         svg.appendChild(linkGroup);
 
-        // Draw nodes (circles with labels)
+        // Node group
         const nodeGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         nodeGroup.setAttribute('id', 'cop-debug-nodes');
-        sys._patrolNodes.forEach(node => {
-          // Node circle
-          const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-          circle.setAttribute('cx', node.x);
-          circle.setAttribute('cy', node.y);
-          circle.setAttribute('r', '0.6');
-          circle.setAttribute('fill', 'rgba(255,255,0,0.85)');
-          circle.setAttribute('stroke', 'rgba(0,0,0,0.7)');
-          circle.setAttribute('stroke-width', '0.15');
-          circle.dataset.nodeId = node.id;
-          nodeGroup.appendChild(circle);
-
-          // Node label (short number only)
-          const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-          label.setAttribute('x', node.x);
-          label.setAttribute('y', node.y - 1.0);
-          label.setAttribute('text-anchor', 'middle');
-          label.setAttribute('font-size', '1.0');
-          label.setAttribute('fill', '#fff');
-          label.setAttribute('stroke', '#000');
-          label.setAttribute('stroke-width', '0.15');
-          label.setAttribute('paint-order', 'stroke');
-          label.textContent = node.id.replace('node_', '');
-          nodeGroup.appendChild(label);
-        });
         svg.appendChild(nodeGroup);
 
-        // Active indicator group (current node, target node, movement line)
+        // Active indicator group
         const activeGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         activeGroup.setAttribute('id', 'cop-debug-active');
 
-        // Current node ring
         const currentRing = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
         currentRing.setAttribute('id', 'cop-debug-current');
         currentRing.setAttribute('r', '1.2');
@@ -15881,7 +15873,6 @@ function ensureLandmarkProperties() {
         currentRing.setAttribute('stroke-width', '0.25');
         activeGroup.appendChild(currentRing);
 
-        // Target node ring
         const targetRing = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
         targetRing.setAttribute('id', 'cop-debug-target');
         targetRing.setAttribute('r', '1.2');
@@ -15891,7 +15882,6 @@ function ensureLandmarkProperties() {
         targetRing.setAttribute('stroke-dasharray', '0.4,0.3');
         activeGroup.appendChild(targetRing);
 
-        // Movement vector line (cop position → target)
         const moveLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
         moveLine.setAttribute('id', 'cop-debug-moveline');
         moveLine.setAttribute('stroke', '#ff3333');
@@ -15899,7 +15889,6 @@ function ensureLandmarkProperties() {
         moveLine.setAttribute('stroke-dasharray', '0.3,0.2');
         activeGroup.appendChild(moveLine);
 
-        // Cop car position dot
         const copDot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
         copDot.setAttribute('id', 'cop-debug-pos');
         copDot.setAttribute('r', '0.8');
@@ -15910,7 +15899,7 @@ function ensureLandmarkProperties() {
 
         svg.appendChild(activeGroup);
 
-        // Info text at top of overlay
+        // Info text
         const infoText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         infoText.setAttribute('id', 'cop-debug-info');
         infoText.setAttribute('x', '1');
@@ -15924,9 +15913,488 @@ function ensureLandmarkProperties() {
 
         container.appendChild(svg);
         this.svgEl = svg;
+
+        // Draw initial state
+        this._rebuildLinks();
+        this._rebuildNodes();
+      },
+
+      _rebuildLinks() {
+        const linkGroup = document.getElementById('cop-debug-links');
+        if (!linkGroup) return;
+        const sys = window.CopCarSystem;
+        if (!sys) return;
+
+        // Clear existing links
+        while (linkGroup.firstChild) linkGroup.removeChild(linkGroup.firstChild);
+
+        sys._patrolLinks.forEach((link, idx) => {
+          const a = sys._getNodeById(link[0]);
+          const b = sys._getNodeById(link[1]);
+          if (!a || !b) return;
+          const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          line.setAttribute('x1', a.x);
+          line.setAttribute('y1', a.y);
+          line.setAttribute('x2', b.x);
+          line.setAttribute('y2', b.y);
+          line.setAttribute('stroke', 'rgba(0,200,255,0.5)');
+          line.setAttribute('stroke-width', '0.25');
+          line.setAttribute('stroke-dasharray', '0.5,0.3');
+          line.dataset.linkIdx = idx;
+          line.dataset.nodeA = link[0];
+          line.dataset.nodeB = link[1];
+          // Make links clickable in edit mode for removal
+          if (this.editMode && this.linkMode) {
+            line.style.pointerEvents = 'stroke';
+            line.setAttribute('stroke-width', '0.8');
+            line.style.cursor = 'pointer';
+          }
+          linkGroup.appendChild(line);
+        });
+      },
+
+      _rebuildNodes() {
+        const nodeGroup = document.getElementById('cop-debug-nodes');
+        if (!nodeGroup) return;
+        const sys = window.CopCarSystem;
+        if (!sys) return;
+
+        // Clear existing
+        while (nodeGroup.firstChild) nodeGroup.removeChild(nodeGroup.firstChild);
+
+        sys._patrolNodes.forEach(node => {
+          const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+          circle.setAttribute('cx', node.x);
+          circle.setAttribute('cy', node.y);
+          circle.setAttribute('r', this.editMode ? '1.2' : '0.6');
+          circle.setAttribute('fill', 'rgba(255,255,0,0.85)');
+          circle.setAttribute('stroke', 'rgba(0,0,0,0.7)');
+          circle.setAttribute('stroke-width', '0.15');
+          circle.dataset.nodeId = node.id;
+
+          if (this.editMode) {
+            circle.style.pointerEvents = 'all';
+            circle.style.cursor = this.linkMode ? 'crosshair' : 'grab';
+          }
+
+          nodeGroup.appendChild(circle);
+
+          const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          label.setAttribute('x', node.x);
+          label.setAttribute('y', node.y - 1.4);
+          label.setAttribute('text-anchor', 'middle');
+          label.setAttribute('font-size', '1.0');
+          label.setAttribute('fill', '#fff');
+          label.setAttribute('stroke', '#000');
+          label.setAttribute('stroke-width', '0.15');
+          label.setAttribute('paint-order', 'stroke');
+          label.textContent = node.id.replace('node_', '');
+          label.style.pointerEvents = 'none';
+          nodeGroup.appendChild(label);
+        });
+      },
+
+      _enableEdit() {
+        this.editMode = true;
+        this.linkMode = false;
+        this._linkSource = null;
+        this._selectedNode = null;
+
+        if (!this.svgEl) return;
+        // Enable pointer events on the SVG for drag operations
+        this.svgEl.style.pointerEvents = 'all';
+
+        this._rebuildNodes();
+        this._rebuildLinks();
+        this._createToolbar();
+        this._bindEditEvents();
+      },
+
+      _disableEdit() {
+        this.editMode = false;
+        this.linkMode = false;
+        this._dragNode = null;
+        this._linkSource = null;
+        this._selectedNode = null;
+
+        if (this.svgEl) {
+          this.svgEl.style.pointerEvents = 'none';
+        }
+
+        this._removeToolbar();
+        this._unbindEditEvents();
+        this._rebuildNodes();
+        this._rebuildLinks();
+      },
+
+      _createToolbar() {
+        this._removeToolbar();
+        const mapEl = document.getElementById('city-map');
+        if (!mapEl) return;
+
+        const toolbar = document.createElement('div');
+        toolbar.id = 'cop-node-editor-toolbar';
+        toolbar.style.cssText = 'position:absolute;top:6px;left:6px;z-index:110;display:flex;gap:4px;flex-wrap:wrap;max-width:280px;';
+
+        const btnStyle = 'padding:4px 8px;font-size:10px;font-family:monospace;border-radius:3px;cursor:pointer;border:1px solid;';
+
+        // Add Node button
+        const addBtn = document.createElement('button');
+        addBtn.textContent = '+ Node';
+        addBtn.style.cssText = btnStyle + 'background:#1a4d1a;color:#0f0;border-color:#0f0;';
+        addBtn.addEventListener('click', () => this._addNodeAtCenter());
+        toolbar.appendChild(addBtn);
+
+        // Delete Node button
+        const delBtn = document.createElement('button');
+        delBtn.id = 'cop-editor-del-btn';
+        delBtn.textContent = 'Delete';
+        delBtn.style.cssText = btnStyle + 'background:#4d1a1a;color:#f66;border-color:#f66;opacity:0.5;';
+        delBtn.addEventListener('click', () => this._deleteSelectedNode());
+        toolbar.appendChild(delBtn);
+
+        // Link Mode toggle
+        const linkBtn = document.createElement('button');
+        linkBtn.id = 'cop-editor-link-btn';
+        linkBtn.textContent = 'Link Mode';
+        linkBtn.style.cssText = btnStyle + 'background:#1a1a4d;color:#6cf;border-color:#6cf;';
+        linkBtn.addEventListener('click', () => {
+          this.linkMode = !this.linkMode;
+          this._linkSource = null;
+          linkBtn.style.background = this.linkMode ? '#3344aa' : '#1a1a4d';
+          linkBtn.textContent = this.linkMode ? 'Link Mode ON' : 'Link Mode';
+          this._rebuildNodes();
+          this._rebuildLinks();
+          this._bindEditEvents();
+        });
+        toolbar.appendChild(linkBtn);
+
+        // Save button
+        const saveBtn = document.createElement('button');
+        saveBtn.textContent = 'Save';
+        saveBtn.style.cssText = btnStyle + 'background:#4d4d1a;color:#ff0;border-color:#ff0;';
+        saveBtn.addEventListener('click', () => this._saveNodes());
+        toolbar.appendChild(saveBtn);
+
+        // Done button
+        const doneBtn = document.createElement('button');
+        doneBtn.textContent = 'Done';
+        doneBtn.style.cssText = btnStyle + 'background:#333;color:#fff;border-color:#999;';
+        doneBtn.addEventListener('click', () => this._disableEdit());
+        toolbar.appendChild(doneBtn);
+
+        // Status text
+        const status = document.createElement('div');
+        status.id = 'cop-editor-status';
+        status.style.cssText = 'width:100%;font-size:10px;font-family:monospace;color:#0f0;background:rgba(0,0,0,0.7);padding:2px 6px;border-radius:3px;margin-top:2px;';
+        status.textContent = 'Drag nodes to reposition. Click to select.';
+        toolbar.appendChild(status);
+
+        mapEl.appendChild(toolbar);
+        this._toolbarEl = toolbar;
+      },
+
+      _removeToolbar() {
+        if (this._toolbarEl) {
+          this._toolbarEl.remove();
+          this._toolbarEl = null;
+        }
+      },
+
+      _setStatus(msg) {
+        const el = document.getElementById('cop-editor-status');
+        if (el) el.textContent = msg;
+      },
+
+      // Bind mouse/touch events for node editing
+      _boundHandlers: null,
+      _bindEditEvents() {
+        this._unbindEditEvents();
+        if (!this.svgEl) return;
+
+        const svg = this.svgEl;
+        const self = this;
+
+        const handlers = {
+          pointerdown(e) { self._onPointerDown(e); },
+          pointermove(e) { self._onPointerMove(e); },
+          pointerup(e) { self._onPointerUp(e); }
+        };
+
+        svg.addEventListener('pointerdown', handlers.pointerdown);
+        window.addEventListener('pointermove', handlers.pointermove);
+        window.addEventListener('pointerup', handlers.pointerup);
+        this._boundHandlers = handlers;
+      },
+
+      _unbindEditEvents() {
+        if (!this._boundHandlers) return;
+        if (this.svgEl) {
+          this.svgEl.removeEventListener('pointerdown', this._boundHandlers.pointerdown);
+        }
+        window.removeEventListener('pointermove', this._boundHandlers.pointermove);
+        window.removeEventListener('pointerup', this._boundHandlers.pointerup);
+        this._boundHandlers = null;
+      },
+
+      _onPointerDown(e) {
+        if (!this.editMode || !this.svgEl) return;
+        const sys = window.CopCarSystem;
+        if (!sys) return;
+
+        const target = e.target;
+        const nodeId = target.dataset?.nodeId;
+
+        if (this.linkMode && nodeId) {
+          // Link mode: first click selects source, second click creates/toggles link
+          e.preventDefault();
+          e.stopPropagation();
+          if (!this._linkSource) {
+            this._linkSource = nodeId;
+            this._selectedNode = nodeId;
+            target.setAttribute('stroke', '#6cf');
+            target.setAttribute('stroke-width', '0.4');
+            this._setStatus('Link: click another node to connect/disconnect from ' + nodeId.replace('node_', '#'));
+          } else {
+            if (this._linkSource !== nodeId) {
+              this._toggleLink(this._linkSource, nodeId);
+            }
+            this._linkSource = null;
+            this._setStatus('Link toggled. Click a node to start new link.');
+            this._rebuildNodes();
+            this._rebuildLinks();
+            this._bindEditEvents();
+          }
+          return;
+        }
+
+        if (nodeId && !this.linkMode) {
+          // Drag mode: start dragging
+          e.preventDefault();
+          e.stopPropagation();
+          const svgPt = this._svgPoint(this.svgEl, e.clientX, e.clientY);
+          const node = sys._getNodeById(nodeId);
+          if (!node) return;
+
+          this._dragNode = nodeId;
+          this._selectedNode = nodeId;
+          this._dragOffset = { x: svgPt.x - node.x, y: svgPt.y - node.y };
+
+          // Highlight selected
+          const circle = target;
+          circle.setAttribute('stroke', '#ff0');
+          circle.setAttribute('stroke-width', '0.4');
+          circle.style.cursor = 'grabbing';
+
+          // Enable delete button
+          const delBtn = document.getElementById('cop-editor-del-btn');
+          if (delBtn) { delBtn.style.opacity = '1'; }
+
+          this._setStatus('Dragging ' + nodeId.replace('node_', '#') + '. Release to place.');
+        }
+      },
+
+      _onPointerMove(e) {
+        if (!this._dragNode || !this.svgEl) return;
+        e.preventDefault();
+
+        const sys = window.CopCarSystem;
+        if (!sys) return;
+
+        const svgPt = this._svgPoint(this.svgEl, e.clientX, e.clientY);
+        const newX = Math.max(0.5, Math.min(99.5, svgPt.x - (this._dragOffset?.x || 0)));
+        const newY = Math.max(0.5, Math.min(99.5, svgPt.y - (this._dragOffset?.y || 0)));
+
+        // Update percent-space node
+        const node = sys._patrolNodes.find(n => n.id === this._dragNode);
+        if (node) {
+          node.x = newX;
+          node.y = newY;
+        }
+
+        // Update editor-space node
+        const edNode = sys._nodesEditor.find(n => n.id === this._dragNode);
+        if (edNode) {
+          edNode.x = (newX / 100 - 0.5) * sys._MAP_W;
+          edNode.y = (newY / 100 - 0.5) * sys._MAP_H;
+        }
+
+        // Update SVG elements for this node
+        const nodeGroup = document.getElementById('cop-debug-nodes');
+        if (nodeGroup) {
+          const circles = nodeGroup.querySelectorAll('circle');
+          circles.forEach(c => {
+            if (c.dataset.nodeId === this._dragNode) {
+              c.setAttribute('cx', newX);
+              c.setAttribute('cy', newY);
+            }
+          });
+          const texts = nodeGroup.querySelectorAll('text');
+          texts.forEach(t => {
+            if (t.textContent === this._dragNode.replace('node_', '')) {
+              t.setAttribute('x', newX);
+              t.setAttribute('y', newY - 1.4);
+            }
+          });
+        }
+
+        // Update connected links
+        this._updateLinkPositions(this._dragNode);
+
+        this._setStatus(this._dragNode.replace('node_', '#') + ' @ (' + newX.toFixed(1) + '%, ' + newY.toFixed(1) + '%)');
+      },
+
+      _onPointerUp(e) {
+        if (!this._dragNode) return;
+        this._setStatus('Node placed. Drag another or click to select.');
+        this._dragNode = null;
+        this._dragOffset = null;
+        // Refresh node display
+        this._rebuildNodes();
+        this._rebuildLinks();
+        this._bindEditEvents();
+      },
+
+      _updateLinkPositions(nodeId) {
+        const sys = window.CopCarSystem;
+        if (!sys) return;
+        const node = sys._getNodeById(nodeId);
+        if (!node) return;
+
+        const linkGroup = document.getElementById('cop-debug-links');
+        if (!linkGroup) return;
+        const lines = linkGroup.querySelectorAll('line');
+        lines.forEach(line => {
+          if (line.dataset.nodeA === nodeId) {
+            line.setAttribute('x1', node.x);
+            line.setAttribute('y1', node.y);
+          }
+          if (line.dataset.nodeB === nodeId) {
+            line.setAttribute('x2', node.x);
+            line.setAttribute('y2', node.y);
+          }
+        });
+      },
+
+      _toggleLink(nodeA, nodeB) {
+        const sys = window.CopCarSystem;
+        if (!sys) return;
+
+        // Check if link already exists
+        const existingIdx = sys._patrolLinks.findIndex(l =>
+          (l[0] === nodeA && l[1] === nodeB) || (l[0] === nodeB && l[1] === nodeA)
+        );
+
+        if (existingIdx >= 0) {
+          // Remove existing link
+          sys._patrolLinks.splice(existingIdx, 1);
+          this._setStatus('Removed link ' + nodeA.replace('node_', '#') + ' - ' + nodeB.replace('node_', '#'));
+        } else {
+          // Add new link
+          sys._patrolLinks.push([nodeA, nodeB]);
+          this._setStatus('Added link ' + nodeA.replace('node_', '#') + ' - ' + nodeB.replace('node_', '#'));
+        }
+      },
+
+      _addNodeAtCenter() {
+        const sys = window.CopCarSystem;
+        if (!sys) return;
+
+        const newId = 'node_' + this._nextNodeId;
+        this._nextNodeId++;
+
+        // Place at center of the map
+        const pctX = 50;
+        const pctY = 50;
+        const edX = (pctX / 100 - 0.5) * sys._MAP_W;
+        const edY = (pctY / 100 - 0.5) * sys._MAP_H;
+
+        sys._nodesEditor.push({ id: newId, x: edX, y: edY });
+        sys._patrolNodes.push({ id: newId, x: pctX, y: pctY });
+
+        this._rebuildNodes();
+        this._rebuildLinks();
+        this._bindEditEvents();
+        this._setStatus('Added ' + newId.replace('node_', '#') + ' at center. Drag to position.');
+      },
+
+      _deleteSelectedNode() {
+        if (!this._selectedNode) {
+          this._setStatus('Select a node first by clicking it.');
+          return;
+        }
+
+        const sys = window.CopCarSystem;
+        if (!sys) return;
+
+        const nodeId = this._selectedNode;
+
+        // Don't delete if cop is currently at or targeting this node
+        if (sys._currentNodeId === nodeId || sys._targetNodeId === nodeId) {
+          this._setStatus('Cannot delete: cop is using this node. Wait for it to move.');
+          return;
+        }
+
+        // Remove from patrol nodes
+        sys._patrolNodes = sys._patrolNodes.filter(n => n.id !== nodeId);
+
+        // Remove from editor nodes
+        sys._nodesEditor = sys._nodesEditor.filter(n => n.id !== nodeId);
+
+        // Remove all links involving this node
+        sys._patrolLinks = sys._patrolLinks.filter(l => l[0] !== nodeId && l[1] !== nodeId);
+
+        this._selectedNode = null;
+        const delBtn = document.getElementById('cop-editor-del-btn');
+        if (delBtn) delBtn.style.opacity = '0.5';
+
+        this._rebuildNodes();
+        this._rebuildLinks();
+        this._bindEditEvents();
+        this._setStatus('Deleted ' + nodeId.replace('node_', '#') + ' and its links.');
+      },
+
+      _saveNodes() {
+        const sys = window.CopCarSystem;
+        if (!sys) return;
+
+        // Build the output data
+        const nodesJson = JSON.stringify(sys._nodesEditor.map(n => ({
+          id: n.id,
+          x: parseFloat(n.x.toFixed(3)),
+          y: parseFloat(n.y.toFixed(3))
+        })), null, 2);
+
+        const linksJson = JSON.stringify(sys._patrolLinks, null, 2);
+
+        const output = '// === PATROL NODES (paste into _nodesEditor) ===\n' +
+                       nodesJson + '\n\n' +
+                       '// === PATROL LINKS (paste into _patrolLinks) ===\n' +
+                       linksJson;
+
+        // Copy to clipboard
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(output).then(() => {
+            this._setStatus('Saved! Node & link data copied to clipboard.');
+          }).catch(() => {
+            this._saveToConsole(output);
+          });
+        } else {
+          this._saveToConsole(output);
+        }
+
+        // Also log to console
+        console.log('[CopNodeDebug] === SAVED NODE DATA ===');
+        console.log(output);
+      },
+
+      _saveToConsole(output) {
+        console.log(output);
+        this._setStatus('Saved to console (Ctrl+Shift+J). Clipboard unavailable.');
       },
 
       _destroy() {
+        this._disableEdit();
         if (this.animFrameId) {
           cancelAnimationFrame(this.animFrameId);
           this.animFrameId = null;
@@ -15997,34 +16465,35 @@ function ensureLandmarkProperties() {
         if (info) {
           const curId = sys._currentNodeId ? sys._currentNodeId.replace('node_', '#') : '?';
           const tgtId = sys._targetNodeId ? sys._targetNodeId.replace('node_', '#') : 'none';
-          info.textContent = `Cop @ (${sys.copPose.x.toFixed(1)}%, ${sys.copPose.y.toFixed(1)}%) | Node: ${curId} → ${tgtId} | Speed: ${sys.copPose.speed.toFixed(1)}`;
+          info.textContent = `Cop @ (${sys.copPose.x.toFixed(1)}%, ${sys.copPose.y.toFixed(1)}%) | Node: ${curId} \u2192 ${tgtId} | Speed: ${sys.copPose.speed.toFixed(1)}`;
         }
 
-        // Highlight current/target nodes in the static node circles
-        const nodeGroup = document.getElementById('cop-debug-nodes');
-        if (nodeGroup) {
-          const circles = nodeGroup.querySelectorAll('circle');
-          circles.forEach(c => {
-            const nid = c.dataset.nodeId;
-            if (nid === sys._currentNodeId) {
-              c.setAttribute('fill', 'rgba(0,255,0,0.9)');
-              c.setAttribute('r', '0.9');
-            } else if (nid === sys._targetNodeId) {
-              c.setAttribute('fill', 'rgba(255,50,50,0.9)');
-              c.setAttribute('r', '0.9');
-            } else {
-              c.setAttribute('fill', 'rgba(255,255,0,0.85)');
-              c.setAttribute('r', '0.6');
-            }
-          });
+        // Highlight current/target nodes in the static node circles (skip in edit mode to avoid conflicts)
+        if (!this.editMode) {
+          const nodeGroup = document.getElementById('cop-debug-nodes');
+          if (nodeGroup) {
+            const circles = nodeGroup.querySelectorAll('circle');
+            circles.forEach(c => {
+              const nid = c.dataset.nodeId;
+              if (nid === sys._currentNodeId) {
+                c.setAttribute('fill', 'rgba(0,255,0,0.9)');
+                c.setAttribute('r', '0.9');
+              } else if (nid === sys._targetNodeId) {
+                c.setAttribute('fill', 'rgba(255,50,50,0.9)');
+                c.setAttribute('r', '0.9');
+              } else {
+                c.setAttribute('fill', 'rgba(255,255,0,0.85)');
+                c.setAttribute('r', '0.6');
+              }
+            });
+          }
         }
       },
 
-      // Inject toggle button into map UI
+      // Inject toggle button + edit button into map UI
       injectButton() {
         const mapEl = document.getElementById('city-map');
         if (!mapEl) return;
-        // Avoid duplicates
         if (document.getElementById('cop-node-debug-btn')) return;
 
         const btn = document.createElement('button');
@@ -16033,6 +16502,29 @@ function ensureLandmarkProperties() {
         btn.style.cssText = 'position:absolute;top:6px;right:6px;z-index:100;padding:4px 10px;font-size:11px;background:rgba(0,0,0,0.7);color:#0f0;border:1px solid #0f0;border-radius:4px;cursor:pointer;font-family:monospace;';
         btn.addEventListener('click', () => this.toggle());
         mapEl.appendChild(btn);
+
+        // Edit Nodes button
+        const editBtn = document.createElement('button');
+        editBtn.id = 'cop-node-edit-btn';
+        editBtn.textContent = 'Edit Nodes';
+        editBtn.style.cssText = 'position:absolute;top:6px;right:94px;z-index:100;padding:4px 10px;font-size:11px;background:rgba(0,0,0,0.7);color:#ff0;border:1px solid #ff0;border-radius:4px;cursor:pointer;font-family:monospace;';
+        editBtn.addEventListener('click', () => {
+          if (!this.visible) {
+            this.toggle(); // Show nodes first
+          }
+          if (this.editMode) {
+            this._disableEdit();
+            editBtn.textContent = 'Edit Nodes';
+            editBtn.style.color = '#ff0';
+            editBtn.style.borderColor = '#ff0';
+          } else {
+            this._enableEdit();
+            editBtn.textContent = 'Editing...';
+            editBtn.style.color = '#f60';
+            editBtn.style.borderColor = '#f60';
+          }
+        });
+        mapEl.appendChild(editBtn);
       }
     };
 
