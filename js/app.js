@@ -72,7 +72,7 @@ try {
     // ========================================
     const BUILD_STAMP = "TD_DEBUG_" + new Date().toISOString();
     const DEBUG_OVERLAY_ENABLED = true; // Set to false to disable debug overlay
-    const SHOW_TURF_GRID = false; // Set to false to disable developer grid overlay for turf map
+
 
     // Log build stamp on load
     console.log('🏗️ BUILD_STAMP:', BUILD_STAMP);
@@ -7417,10 +7417,6 @@ function updateTurfDefense(dt) {
       if (typeof RoadDebugOverlay !== 'undefined' && RoadDebugOverlay.enabled) {
         RoadDebugOverlay.draw();
       }
-      // DEVELOPER: Draw turf grid overlay (topmost layer for building placement visualization)
-      if (typeof TurfGridOverlay !== 'undefined' && SHOW_TURF_GRID) {
-        TurfGridOverlay.draw();
-      }
     }
 
     // ========================================
@@ -10210,170 +10206,12 @@ function updateTurfDefense(dt) {
     };
 
     // ========================================
-    // TURF GRID OVERLAY (Developer Placement Visualization)
-    // ========================================
-    // Purpose: Visual-only grid overlay for positioning buildings on the turf map.
-    // Toggle with SHOW_TURF_GRID constant at top of file.
-    const TurfGridOverlay = {
-      enabled: SHOW_TURF_GRID,
-      canvas: null,
-      ctx: null,
-      image: null,
-      imageLoaded: false,
-
-      /**
-       * Initialize the grid overlay canvas and load the grid image
-       */
-      init() {
-        // Skip if already initialized
-        if (this.canvas && this.canvas.isConnected) return;
-
-        const world = document.getElementById('map-world');
-        if (!world) return;
-
-        // Create canvas element
-        this.canvas = document.createElement('canvas');
-        this.canvas.id = 'turf-grid-overlay-canvas';
-        // z-index 9999: above all map visuals (roads, buildings, icons, NPCs)
-        // pointer-events: none ensures no collisions, no interaction, no input blocking
-        // Use position:absolute with inset:0 to match map-world exactly
-        this.canvas.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:9999;';
-        world.appendChild(this.canvas);
-        this.ctx = this.canvas.getContext('2d');
-        this._resize();
-
-        // Load grid overlay image if not already loaded
-        if (!this.image) {
-          this.image = new Image();
-          this.image.onload = () => {
-            this.imageLoaded = true;
-            console.log('🔲 [TurfGridOverlay] Grid image loaded');
-            this._resize(); // Re-check dimensions after image loads
-            this.draw();
-          };
-          this.image.onerror = () => {
-            console.error('❌ [TurfGridOverlay] Failed to load grid image');
-          };
-          this.image.src = 'sprites/turf-map/trufgridoverlay.png';
-        }
-
-        window.addEventListener('resize', () => this._resize());
-      },
-
-      /**
-       * Resize canvas to match TurfMap.png exact dimensions (1024x1536)
-       * Uses TurfTab's world dimensions for pixel-perfect alignment at all zoom levels
-       */
-      _resize() {
-        if (!this.canvas) return;
-        const worldEl = document.getElementById('map-world');
-        
-        // Known TurfMap.png dimensions (must match the actual map image)
-        // Both TurfMap.png and trufgridoverlay.png are exactly 1024x1536
-        const TURF_MAP_WIDTH = 1024;
-        const TURF_MAP_HEIGHT = 1536;
-        
-        // Priority: actual rendered map-world size > TurfTab base dimensions > fallback constants
-        // Using clientWidth/Height keeps the grid perfectly aligned with the visible turf map,
-        // even if CSS or layout scales the world container.
-        let w = worldEl && worldEl.clientWidth ? worldEl.clientWidth : 0;
-        let h = worldEl && worldEl.clientHeight ? worldEl.clientHeight : 0;
-        if (!(w > 0 && h > 0)) {
-          if (typeof TurfTab !== 'undefined' && TurfTab.worldBaseW > 0 && TurfTab.worldBaseH > 0) {
-            w = TurfTab.worldBaseW;
-            h = TurfTab.worldBaseH;
-          } else {
-            w = TURF_MAP_WIDTH;
-            h = TURF_MAP_HEIGHT;
-          }
-        }
-        
-        // Only update if dimensions are valid and changed
-        if (w > 0 && h > 0 && (this.canvas.width !== w || this.canvas.height !== h)) {
-          this.canvas.width = w;
-          this.canvas.height = h;
-          console.log('🔲 [TurfGridOverlay] Canvas resized to:', w, 'x', h);
-        }
-      },
-
-      /**
-       * Clear the canvas
-       */
-      _clear() {
-        if (!this.ctx || !this.canvas) return;
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-      },
-
-      /**
-       * Draw the grid overlay (scaled to fill entire turf map evenly, edge-to-edge)
-       */
-      draw() {
-        // Skip if disabled or not initialized
-        if (!this.enabled || !SHOW_TURF_GRID) {
-          this._clear();
-          return;
-        }
-
-        // Initialize if needed
-        this.init();
-
-        if (!this.ctx || !this.canvas || !this.imageLoaded) return;
-
-        this._resize();
-        this._clear();
-
-        const ctx = this.ctx;
-        ctx.save();
-
-        // Draw the grid image scaled to fill the entire canvas (turf map bounds)
-        // This ensures edge-to-edge coverage with proper proportional scaling
-        ctx.drawImage(this.image, 0, 0, this.canvas.width, this.canvas.height);
-
-        ctx.restore();
-      },
-
-      /**
-       * Toggle the overlay on/off
-       */
-      toggle(force) {
-        if (typeof force === 'boolean') {
-          this.enabled = force;
-        } else {
-          this.enabled = !this.enabled;
-        }
-        if (this.enabled) {
-          this.draw();
-        } else {
-          this._clear();
-        }
-        console.log('🔲 [TurfGridOverlay] ' + (this.enabled ? 'Enabled' : 'Disabled'));
-      },
-
-      /**
-       * Destroy the overlay canvas
-       */
-      destroy() {
-        if (this.canvas && this.canvas.parentNode) {
-          this.canvas.parentNode.removeChild(this.canvas);
-        }
-        this.canvas = null;
-        this.ctx = null;
-        this._clear();
-      }
-    };
-
-    // Expose toggle function to window for easy developer access
-    window.toggleTurfGrid = function() {
-      TurfGridOverlay.toggle();
-    };
-
-    // ========================================
     // TURF MAP: Drug Lab Building (3D + UI)
     // ========================================
     // Places the Drug Lab 3D building on Turf Grid #35 (centered, fills the square)
     // and opens the Drug Lab UI (sprites/druglabs/druglabs.png) when clicked.
     const DrugLabSystem = {
-      // Grid calibration derived from sprites/turf-map/trufgridoverlay.png (8 cols x 11 rows)
+      // Grid calibration: 8 cols x 11 rows over 1024x1536 turf map
       // Cell #35 bounds (percent of map-world): left/right/top/bottom
       cellIndex: 35,
       cellBoundsPct: { left: 25.390625, right: 37.402344, top: 37.532552, bottom: 45.735677 },
@@ -21519,11 +21357,6 @@ function ensureLandmarkProperties() {
             mapBg.style.objectFit = 'fill';
           }
 
-          // Sync turf grid overlay canvas to match new world dimensions
-          if (typeof TurfGridOverlay !== 'undefined' && TurfGridOverlay._resize) {
-            TurfGridOverlay._resize();
-          }
-
           this.worldSizeReady = true;
         }
       },
@@ -25631,11 +25464,6 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
         this.renderIcons();
         this.renderCharacter();
         renderPropertyBuildings(); // Render player-owned property buildings
-        
-        // DEVELOPER: Draw turf grid overlay for building placement visualization
-        if (typeof TurfGridOverlay !== 'undefined' && SHOW_TURF_GRID) {
-          TurfGridOverlay.draw();
-        }
         
         this.updateStatusButtons();
         this.updateStatusIndicator();
