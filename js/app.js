@@ -72,7 +72,7 @@ try {
     // ========================================
     const BUILD_STAMP = "TD_DEBUG_" + new Date().toISOString();
     const DEBUG_OVERLAY_ENABLED = true; // Set to false to disable debug overlay
-    const SHOW_TURF_GRID = true; // Set to false to disable developer grid overlay for turf map
+    const SHOW_TURF_GRID = false; // Set to false to disable developer grid overlay for turf map
 
     // Log build stamp on load
     console.log('🏗️ BUILD_STAMP:', BUILD_STAMP);
@@ -15575,7 +15575,7 @@ function ensureLandmarkProperties() {
       animationFrameId: null,
 
       // NODE-BASED PATROL SYSTEM
-      // 50 hand-placed nodes along actual roads, 53 links between them
+      // 53 nodes along actual roads with interior grid cross-links
       // Nodes in editor coords (MAP_W=66.6, MAP_H=100.0), converted to percent at init
       _MAP_W: 66.6,
       _MAP_H: 100.0,
@@ -15629,9 +15629,13 @@ function ensureLandmarkProperties() {
         {"id":"node_47","x":-26.920,"y":-2.979},
         {"id":"node_48","x":-18.400,"y":-2.979},
         {"id":"node_49","x":-10.400,"y":-2.979},
-        {"id":"node_50","x":-2.773,"y":-2.979}
+        {"id":"node_50","x":-2.773,"y":-2.979},
+        {"id":"node_51","x":6.627,"y":-2.979},
+        {"id":"node_52","x":15.031,"y":-2.979},
+        {"id":"node_53","x":23.647,"y":-2.979}
       ],
       _patrolLinks: [
+        // --- Perimeter links (original outer loop) ---
         ["node_1","node_2"],["node_2","node_3"],["node_3","node_4"],
         ["node_4","node_5"],["node_5","node_6"],["node_6","node_7"],
         ["node_7","node_8"],["node_8","node_9"],["node_9","node_10"],
@@ -15640,16 +15644,38 @@ function ensureLandmarkProperties() {
         ["node_16","node_17"],["node_17","node_18"],["node_18","node_19"],
         ["node_19","node_20"],["node_20","node_21"],["node_21","node_22"],
         ["node_22","node_23"],["node_23","node_24"],["node_24","node_25"],
-        ["node_25","node_26"],["node_26","node_27"],["node_27","node_28"],
-        ["node_28","node_29"],["node_29","node_30"],["node_30","node_31"],
-        ["node_31","node_32"],["node_32","node_33"],["node_33","node_34"],
-        ["node_34","node_35"],["node_35","node_36"],["node_36","node_37"],
+        ["node_25","node_26"],["node_26","node_27"],
+        // --- Interior E-W rows ---
+        ["node_27","node_28"],["node_28","node_29"],["node_29","node_30"],
+        ["node_30","node_31"],["node_31","node_32"],["node_32","node_33"],
+        ["node_33","node_34"],["node_34","node_35"],
+        ["node_35","node_36"],["node_36","node_37"],
         ["node_37","node_38"],["node_38","node_39"],["node_39","node_40"],
         ["node_40","node_41"],["node_41","node_42"],["node_42","node_43"],
         ["node_43","node_44"],["node_44","node_45"],["node_45","node_46"],
-        ["node_46","node_23"],["node_46","node_47"],["node_47","node_48"],
+        ["node_46","node_23"],
+        // --- Middle row (y~-3) full span ---
+        ["node_46","node_47"],["node_47","node_48"],
         ["node_48","node_49"],["node_49","node_50"],["node_50","node_43"],
-        ["node_28","node_47"],["node_29","node_48"]
+        ["node_50","node_51"],["node_51","node_52"],
+        ["node_52","node_53"],["node_53","node_38"],
+        // --- N-S cross-links: top row to y=-35 row ---
+        ["node_2","node_28"],["node_3","node_29"],["node_4","node_30"],
+        ["node_5","node_31"],["node_6","node_32"],["node_7","node_33"],
+        ["node_8","node_34"],
+        // --- N-S cross-links: y=-35 row to middle row (y~-3) ---
+        ["node_28","node_47"],["node_29","node_48"],
+        ["node_30","node_49"],["node_31","node_50"],
+        ["node_32","node_51"],["node_33","node_52"],["node_34","node_53"],
+        // --- N-S cross-links: middle row (y~-3) to y=5.8 row ---
+        ["node_48","node_45"],["node_49","node_44"],
+        ["node_51","node_42"],["node_52","node_41"],["node_53","node_40"],
+        // --- Left edge shortcut ---
+        ["node_24","node_47"],
+        // --- Right-edge inner↔outer shortcut ---
+        ["node_11","node_35"],
+        // --- Right-edge outer↔inner cross-links ---
+        ["node_12","node_36"],["node_13","node_37"]
       ],
       _patrolNodes: [],      // Built at init (percent space)
       _currentNodeId: null,  // Current node in graph traversal
@@ -27963,7 +27989,7 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
 
       // Build the road mask used by RoadPathfinder (and set the map background div).
       // RoadPathfinder is used by the player sprite for road-following movement.
-      // CopCarSystem uses its own 50-node patrol graph and does not depend on RoadPathfinder.
+      // CopCarSystem uses its own 53-node patrol graph and does not depend on RoadPathfinder.
       console.log('[DEBUG] Initializing static map and RoadPathfinder...');
 
       // INLINE IMPLEMENTATION: Directly load map and build road pathfinder
