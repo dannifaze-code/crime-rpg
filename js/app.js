@@ -1458,7 +1458,21 @@ Then tighten the rules later.`);
                 Object.assign(GameState, userData.gameState);
                 console.log('[GoogleAuth] ✅ Cloud data loaded');
               } else {
-                console.log('[GoogleAuth] No cloud data found, using default state');
+                console.log('[GoogleAuth] No cloud data found, attempting backup recovery...');
+                // Auto-recover from cloud backup if main data is missing
+                try {
+                  const backupState = await AccountDataProtection.recoverFromCloudBackup(user.uid);
+                  if (backupState) {
+                    Object.assign(GameState, backupState);
+                    // Re-save recovered data as main save
+                    await database.ref('users/' + user.uid + '/gameState').set(backupState);
+                    console.log('[GoogleAuth] ✅ Account recovered from cloud backup!');
+                  } else {
+                    console.log('[GoogleAuth] No backup found either, using default state');
+                  }
+                } catch (recoverErr) {
+                  console.warn('[GoogleAuth] Backup recovery failed:', recoverErr);
+                }
               }
 
               // ALWAYS repair schema for older cloud saves (prevents undefined.forEach crashes)
@@ -1468,6 +1482,11 @@ Then tighten the rules later.`);
               // Ensure user info is up to date
               GameState.accountId = user.uid;
               GameState.player.id = user.uid;
+              // Fix "Unknown" player name from Google profile
+              if (!GameState.player.name || GameState.player.name === 'Unknown' || GameState.player.name === 'Player') {
+                GameState.player.name = user.displayName || user.email.split('@')[0];
+                console.log('[GoogleAuth] Fixed player name to:', GameState.player.name);
+              }
               
               // Update last login
               await database.ref('users/' + user.uid + '/lastLogin').set(Date.now());
@@ -5541,25 +5560,28 @@ const CartoonSpriteGenerator = {
     // Clean out legacy local-only accounts/saves (optional, used when switching to Google auth)
     function clearLegacyLocalTestDataOnce() {
       try {
-        const FLAG = 'crime_rpg_local_testdata_cleared_v1';
+        const FLAG = 'crime_rpg_local_testdata_cleared_v2';
         if (localStorage.getItem(FLAG) === 'true') return;
 
         // Remove local account system keys
         localStorage.removeItem('crime_rpg_accounts');
         localStorage.removeItem('crime_rpg_current_account');
         localStorage.removeItem('crime_rpg_save');
+        localStorage.removeItem('crime_rpg_migrated');
+        localStorage.removeItem('crime_rpg_auth_state');
 
-        // Remove per-account local saves (we now trust cloud saves for Google users)
+        // Remove per-account local saves and backups (cloud saves are the source of truth)
         const keysToRemove = [];
         for (let i = 0; i < localStorage.length; i++) {
           const k = localStorage.key(i);
           if (!k) continue;
           if (k.startsWith('crime_rpg_save_')) keysToRemove.push(k);
+          if (k.startsWith('crime_rpg_backup_')) keysToRemove.push(k);
         }
         keysToRemove.forEach(k => localStorage.removeItem(k));
 
         localStorage.setItem(FLAG, 'true');
-        console.log('[SCHEMA] Cleared legacy local test accounts/saves');
+        console.log('[SCHEMA] v2: Cleared all local accounts and saves (cloud is source of truth)');
       } catch (e) {
         console.warn('[SCHEMA] Failed to clear legacy local data:', e);
       }
@@ -15548,7 +15570,7 @@ function ensureLandmarkProperties() {
       },
 
       init() {
-        // Load saved patrol layout from localStorage if available
+        // Load saved patrol layout from localStorage as fast cache
         try {
           const savedNodes = localStorage.getItem('crime_rpg_patrol_nodes');
           const savedLinks = localStorage.getItem('crime_rpg_patrol_links');
@@ -15556,18 +15578,48 @@ function ensureLandmarkProperties() {
             const parsed = JSON.parse(savedNodes);
             if (Array.isArray(parsed) && parsed.length > 0) {
               this._nodesEditor = parsed;
-              console.log('[CopCarSystem] Loaded saved patrol nodes from localStorage:', parsed.length);
+              console.log('[CopCarSystem] Loaded patrol nodes from localStorage:', parsed.length);
             }
           }
           if (savedLinks) {
             const parsed = JSON.parse(savedLinks);
             if (Array.isArray(parsed)) {
               this._patrolLinks = parsed;
-              console.log('[CopCarSystem] Loaded saved patrol links from localStorage:', parsed.length);
+              console.log('[CopCarSystem] Loaded patrol links from localStorage:', parsed.length);
             }
           }
         } catch (e) {
-          console.warn('[CopCarSystem] Failed to load saved patrol data:', e);
+          console.warn('[CopCarSystem] Failed to load local patrol data:', e);
+        }
+
+        // Also load from Firebase (global source of truth) and update if newer
+        if (typeof database !== 'undefined' && database) {
+          database.ref('gameConfig/patrolLayout').once('value').then((snapshot) => {
+            const data = snapshot.val();
+            if (data && data.nodes && Array.isArray(data.nodes) && data.nodes.length > 0) {
+              this._nodesEditor = data.nodes;
+              if (Array.isArray(data.links)) {
+                this._patrolLinks = data.links;
+              }
+              this._buildPercentNodes();
+              // Update local cache
+              try {
+                localStorage.setItem('crime_rpg_patrol_nodes', JSON.stringify(data.nodes));
+                localStorage.setItem('crime_rpg_patrol_links', JSON.stringify(data.links || []));
+              } catch (e) { /* ignore */ }
+              // Reset cop to first node with new layout
+              const startNode = this._patrolNodes[0];
+              if (startNode) {
+                this.copPose = { x: startNode.x, y: startNode.y, heading: 0, speed: 0 };
+                this.position = this.copPose;
+                this._currentNodeId = startNode.id;
+                this._targetNodeId = null;
+              }
+              console.log('[CopCarSystem] ✅ Patrol layout loaded from Firebase:', data.nodes.length, 'nodes,', (data.links || []).length, 'links');
+            }
+          }).catch((err) => {
+            console.warn('[CopCarSystem] Firebase patrol load failed (using local):', err);
+          });
         }
 
         this._buildPercentNodes();
@@ -16469,11 +16521,16 @@ function ensureLandmarkProperties() {
         sys._currentNodeId = null;
         sys._targetNodeId = null;
 
-        // Clear saved layout from localStorage
+        // Clear saved layout from localStorage and Firebase
         try {
           localStorage.removeItem('crime_rpg_patrol_nodes');
           localStorage.removeItem('crime_rpg_patrol_links');
         } catch (e) { /* ignore */ }
+        if (typeof database !== 'undefined' && database) {
+          database.ref('gameConfig/patrolLayout').remove()
+            .then(() => console.log('[CopNodeDebug] Cleared patrol layout from Firebase'))
+            .catch((err) => console.warn('[CopNodeDebug] Firebase clear failed:', err));
+        }
         this._selectedNode = null;
         this._nextNodeId = 1;
 
@@ -16498,7 +16555,7 @@ function ensureLandmarkProperties() {
         }));
         const cleanLinks = sys._patrolLinks.slice();
 
-        // Persist to localStorage so edits survive page reloads
+        // Persist to localStorage as fast local cache
         try {
           localStorage.setItem('crime_rpg_patrol_nodes', JSON.stringify(cleanNodes));
           localStorage.setItem('crime_rpg_patrol_links', JSON.stringify(cleanLinks));
@@ -16506,12 +16563,27 @@ function ensureLandmarkProperties() {
           console.warn('[CopNodeDebug] localStorage save failed:', e);
         }
 
+        // Save globally to Firebase so all devices get the same layout
+        if (typeof database !== 'undefined' && database) {
+          const payload = { nodes: cleanNodes, links: cleanLinks, updatedAt: Date.now() };
+          database.ref('gameConfig/patrolLayout').set(payload)
+            .then(() => {
+              console.log('[CopNodeDebug] ✅ Patrol layout saved to Firebase globally');
+              this._setStatus('Saved globally! (' + cleanNodes.length + ' nodes, ' + cleanLinks.length + ' links)');
+            })
+            .catch((err) => {
+              console.warn('[CopNodeDebug] Firebase save failed:', err);
+              this._setStatus('Saved locally only. Firebase error: ' + err.message);
+            });
+        } else {
+          this._setStatus('Saved locally (' + cleanNodes.length + ' nodes, ' + cleanLinks.length + ' links). Firebase not available.');
+        }
+
         // Rebuild live patrol nodes from the saved editor data
         sys._nodesEditor = cleanNodes;
         sys._buildPercentNodes();
 
-        this._setStatus('Saved! Node layout persisted (' + cleanNodes.length + ' nodes, ' + cleanLinks.length + ' links).');
-        console.log('[CopNodeDebug] Patrol nodes saved to localStorage:', cleanNodes.length, 'nodes,', cleanLinks.length, 'links');
+        console.log('[CopNodeDebug] Patrol nodes saved:', cleanNodes.length, 'nodes,', cleanLinks.length, 'links');
       },
 
       _saveToConsole(output) {
