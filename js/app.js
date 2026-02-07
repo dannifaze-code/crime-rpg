@@ -15583,117 +15583,129 @@ function ensureLandmarkProperties() {
       headingSmooth: 0.18,
       
       
-      // REALISTIC ROAD-FOLLOWING WAYPOINTS
-      // These follow the actual roads on TurfMap.png
-      // The map has a central intersection with roads branching outward
-      // Coordinates are in % of the map (0..100)
-      patrolWaypoints: [
-        // Start at top-left road, heading toward center
-        { x: 12, y: 8 },
-        { x: 18, y: 14 },
-        { x: 24, y: 20 },
-        { x: 30, y: 26 },
-        
-        // Approach central intersection from top-left
-        { x: 38, y: 34 },
-        { x: 44, y: 40 },
-        
-        // Central intersection area
-        { x: 50, y: 46 },
-        { x: 52, y: 50 },
-        
-        // Head toward bottom-right road
-        { x: 58, y: 56 },
-        { x: 64, y: 62 },
-        { x: 70, y: 68 },
-        { x: 76, y: 74 },
-        { x: 82, y: 80 },
-        { x: 88, y: 86 },
-        
-        // Turn around at bottom-right
-        { x: 90, y: 90 },
-        
-        // Come back toward center via different route
-        { x: 84, y: 84 },
-        { x: 78, y: 78 },
-        { x: 72, y: 72 },
-        { x: 66, y: 66 },
-        { x: 60, y: 60 },
-        
-        // Back to central area
-        { x: 54, y: 54 },
-        { x: 50, y: 50 },
-        
-        // Head toward top-right road
-        { x: 56, y: 44 },
-        { x: 62, y: 38 },
-        { x: 68, y: 32 },
-        { x: 74, y: 26 },
-        { x: 80, y: 20 },
-        { x: 86, y: 14 },
-        
-        // Turn at top-right
-        { x: 88, y: 10 },
-        
-        // Return toward center
-        { x: 82, y: 16 },
-        { x: 76, y: 22 },
-        { x: 70, y: 28 },
-        { x: 64, y: 34 },
-        { x: 58, y: 40 },
-        
-        // Back to center
-        { x: 52, y: 46 },
-        { x: 48, y: 50 },
-        
-        // Head toward bottom-left (near water)
-        { x: 42, y: 56 },
-        { x: 36, y: 62 },
-        { x: 30, y: 68 },
-        { x: 24, y: 74 },
-        
-        // Near the water/harbor area
-        { x: 20, y: 78 },
-        { x: 18, y: 82 },
-        
-        // Turn around before water
-        { x: 16, y: 80 },
-        
-        // Head back toward center
-        { x: 22, y: 74 },
-        { x: 28, y: 68 },
-        { x: 34, y: 62 },
-        { x: 40, y: 56 },
-        { x: 46, y: 50 },
-        
-        // Complete loop back to start
-        { x: 40, y: 44 },
-        { x: 34, y: 38 },
-        { x: 28, y: 32 },
-        { x: 22, y: 26 },
-        { x: 16, y: 20 },
-        { x: 12, y: 14 }
+      // NODE-BASED PATROL SYSTEM
+      // 50 hand-placed nodes along actual roads, 53 links between them
+      // Nodes in editor coords (MAP_W=66.6, MAP_H=100.0), converted to percent at init
+      _MAP_W: 66.6,
+      _MAP_H: 100.0,
+      _nodesEditor: [
+        {"id":"node_1","x":-31.914,"y":-45.836},
+        {"id":"node_2","x":-26.920,"y":-45.846},
+        {"id":"node_3","x":-18.400,"y":-45.816},
+        {"id":"node_4","x":-10.400,"y":-45.807},
+        {"id":"node_5","x":-2.773,"y":-45.781},
+        {"id":"node_6","x":6.627,"y":-45.740},
+        {"id":"node_7","x":15.031,"y":-45.712},
+        {"id":"node_8","x":23.647,"y":-45.684},
+        {"id":"node_9","x":32.137,"y":-45.656},
+        {"id":"node_10","x":32.147,"y":-41.438},
+        {"id":"node_11","x":32.115,"y":-31.119},
+        {"id":"node_12","x":32.082,"y":-20.800},
+        {"id":"node_13","x":32.049,"y":-10.481},
+        {"id":"node_14","x":32.016,"y":-0.162},
+        {"id":"node_15","x":30.306,"y":9.600},
+        {"id":"node_16","x":23.972,"y":9.630},
+        {"id":"node_17","x":14.872,"y":9.630},
+        {"id":"node_18","x":5.772,"y":9.630},
+        {"id":"node_19","x":-3.328,"y":9.630},
+        {"id":"node_20","x":-12.428,"y":9.630},
+        {"id":"node_21","x":-21.528,"y":9.630},
+        {"id":"node_22","x":-30.628,"y":9.630},
+        {"id":"node_23","x":-32.120,"y":5.787},
+        {"id":"node_24","x":-32.133,"y":-2.979},
+        {"id":"node_25","x":-32.147,"y":-15.163},
+        {"id":"node_26","x":-32.115,"y":-25.082},
+        {"id":"node_27","x":-32.082,"y":-35.401},
+        {"id":"node_28","x":-26.920,"y":-35.401},
+        {"id":"node_29","x":-18.400,"y":-35.401},
+        {"id":"node_30","x":-10.400,"y":-35.401},
+        {"id":"node_31","x":-2.773,"y":-35.401},
+        {"id":"node_32","x":6.627,"y":-35.401},
+        {"id":"node_33","x":15.031,"y":-35.401},
+        {"id":"node_34","x":23.647,"y":-35.401},
+        {"id":"node_35","x":32.137,"y":-35.401},
+        {"id":"node_36","x":32.147,"y":-25.082},
+        {"id":"node_37","x":32.147,"y":-15.163},
+        {"id":"node_38","x":32.147,"y":-2.979},
+        {"id":"node_39","x":32.147,"y":5.787},
+        {"id":"node_40","x":23.647,"y":5.787},
+        {"id":"node_41","x":15.031,"y":5.787},
+        {"id":"node_42","x":6.627,"y":5.787},
+        {"id":"node_43","x":-2.773,"y":5.787},
+        {"id":"node_44","x":-10.400,"y":5.787},
+        {"id":"node_45","x":-18.400,"y":5.787},
+        {"id":"node_46","x":-26.920,"y":5.787},
+        {"id":"node_47","x":-26.920,"y":-2.979},
+        {"id":"node_48","x":-18.400,"y":-2.979},
+        {"id":"node_49","x":-10.400,"y":-2.979},
+        {"id":"node_50","x":-2.773,"y":-2.979}
       ],
-      currentWaypointIndex: 0,
-      currentSegmentProgress: 0,
+      _patrolLinks: [
+        ["node_1","node_2"],["node_2","node_3"],["node_3","node_4"],
+        ["node_4","node_5"],["node_5","node_6"],["node_6","node_7"],
+        ["node_7","node_8"],["node_8","node_9"],["node_9","node_10"],
+        ["node_10","node_11"],["node_11","node_12"],["node_12","node_13"],
+        ["node_13","node_14"],["node_14","node_15"],["node_15","node_16"],
+        ["node_16","node_17"],["node_17","node_18"],["node_18","node_19"],
+        ["node_19","node_20"],["node_20","node_21"],["node_21","node_22"],
+        ["node_22","node_23"],["node_23","node_24"],["node_24","node_25"],
+        ["node_25","node_26"],["node_26","node_27"],["node_27","node_28"],
+        ["node_28","node_29"],["node_29","node_30"],["node_30","node_31"],
+        ["node_31","node_32"],["node_32","node_33"],["node_33","node_34"],
+        ["node_34","node_35"],["node_35","node_36"],["node_36","node_37"],
+        ["node_37","node_38"],["node_38","node_39"],["node_39","node_40"],
+        ["node_40","node_41"],["node_41","node_42"],["node_42","node_43"],
+        ["node_43","node_44"],["node_44","node_45"],["node_45","node_46"],
+        ["node_46","node_23"],["node_46","node_47"],["node_47","node_48"],
+        ["node_48","node_49"],["node_49","node_50"],["node_50","node_43"],
+        ["node_28","node_47"],["node_29","node_48"]
+      ],
+      _patrolNodes: [],      // Built at init (percent space)
+      _currentNodeId: null,  // Current node in graph traversal
+      _lastNodeId: null,     // Previous node (avoid backtracking)
       currentPath: null,
       currentPathIndex: 0,
- // 0-1 progress through current segment
       animationFrameId: null,
-      exitPending: false,
-      exitRespawnAt: 0,
-      lastExitNodeId: -1,
-      lastTargetNodeId: -1,
       
-      init() {
-        console.log('🚔 Realistic Cop Car Patrol System initialized');
-        console.log(`📍 Patrol route: ${this.patrolWaypoints.length} waypoints`);
-        console.log(`⏱️ Speed: ${this.movementSpeed}ms per segment`);
+      _buildPercentNodes() {
+        this._patrolNodes = this._nodesEditor.map(n => ({
+          id: n.id,
+          x: (n.x / this._MAP_W + 0.5) * 100,
+          y: (n.y / this._MAP_H + 0.5) * 100
+        }));
+      },
 
-        // Start at the first waypoint position (not at 15,15)
-        this.copPose = { x: this.patrolWaypoints[0].x, y: this.patrolWaypoints[0].y, heading: 0, speed: 0 };
+      _getNodeById(id) {
+        return this._patrolNodes.find(n => n.id === id) || null;
+      },
+
+      _findNearestNode(pos) {
+        let best = null, bestDist = Infinity;
+        for (const n of this._patrolNodes) {
+          const d = Math.hypot(n.x - pos.x, n.y - pos.y);
+          if (d < bestDist) { bestDist = d; best = n.id; }
+        }
+        return best;
+      },
+
+      _getNeighbors(nodeId) {
+        return this._patrolLinks
+          .filter(l => l[0] === nodeId || l[1] === nodeId)
+          .map(l => (l[0] === nodeId ? l[1] : l[0]));
+      },
+
+      init() {
+        // Build percent-space nodes from editor coordinates
+        this._buildPercentNodes();
+        console.log('🚔 Node-based Cop Car Patrol System initialized');
+        console.log(`📍 Patrol nodes: ${this._patrolNodes.length}, Links: ${this._patrolLinks.length}`);
+
+        // Start at the first node
+        const startNode = this._patrolNodes[0];
+        this.copPose = { x: startNode.x, y: startNode.y, heading: 0, speed: 0 };
         this.position = this.copPose;
-        this.currentWaypointIndex = 0;
+        this._currentNodeId = startNode.id;
+        this._lastNodeId = null;
         this.currentPath = null;
         this.currentPathIndex = 0;
         this.currentSegmentT = 0;
@@ -15702,10 +15714,6 @@ function ensureLandmarkProperties() {
         this.copPose.heading = this.heading;
         this.copPose.speed = this.speed;
         this.pauseUntil = 0;
-        this.exitPending = false;
-        this.exitRespawnAt = 0;
-        this.lastExitNodeId = -1;
-        this.lastTargetNodeId = -1;
 
         this.startPatrol();
 
@@ -15717,9 +15725,8 @@ function ensureLandmarkProperties() {
       
       startPatrol() {
         if (this.isPatrolling) return;
-        
+
         this.isPatrolling = true;
-        this.currentSegmentProgress = 0;
         this.animateMovement();
       },
       
@@ -15752,17 +15759,6 @@ function ensureLandmarkProperties() {
         const dt = Math.min(0.05, Math.max(0.001, (now - this.lastUpdateTs) / 1000)); // clamp 1ms..50ms
         this.lastUpdateTs = now;
 
-        // Off-map handling: despawn for a moment, then re-enter at another entry node
-        if (this.exitPending) {
-          this.speed = 0;
-          if (now >= this.exitRespawnAt) {
-            this._respawnFromExit();
-          }
-          this.renderCopCar();
-          this.animationFrameId = requestAnimationFrame(() => this.animateMovement());
-          return;
-        }
-
         // Stop at intersections / sharp turns
         if (this.pauseUntil && now < this.pauseUntil) {
           this.speed = 0;
@@ -15771,7 +15767,7 @@ function ensureLandmarkProperties() {
           return;
         }
 
-        // Ensure we have a path (road-following via RoadPathfinder graph)
+        // Ensure we have a path (node-based graph traversal)
         if (!this.currentPath || this.currentPath.length < 2) {
           this._buildNextRoadPath();
           if (!this.currentPath || this.currentPath.length < 2) {
@@ -15840,17 +15836,10 @@ function ensureLandmarkProperties() {
 
             const reachedEnd = this.currentPathIndex >= this.currentPath.length - 1;
 
-            // Stop when reaching end-of-path (waypoint), or a sharp turn node
+            // Stop when reaching end-of-path (node reached)
             if (reachedEnd) {
-              this.currentWaypointIndex = (this.currentWaypointIndex + 1) % this.patrolWaypoints.length;
               this.currentPath = null;
               this.currentPathIndex = 0;
-
-              if (this._shouldExitMap()) {
-                this._scheduleExit();
-                this.speed = 0;
-                break;
-              }
 
               this.pauseUntil = now + (this.stopMinMs + Math.random() * (this.stopMaxMs - this.stopMinMs));
               this.speed = 0;
@@ -15886,126 +15875,43 @@ function ensureLandmarkProperties() {
       },
 
       _buildNextRoadPath() {
-        const rp = window.RoadPathfinder;
-        const rpReady = rp && rp.ready;
+        // Node-based pathfinding: pick a connected neighbor and drive there
+        if (!this._patrolNodes || this._patrolNodes.length < 2) return;
 
-        let fromPt = this.position;
-        let toPt = null;
-
-        if (rpReady) {
-          // Use RoadPathfinder for smart road-following pathfinding
-          const dbg = rp.getDebugData ? rp.getDebugData() : null;
-          const entryNodes = (typeof rp.getEntryNodes === 'function')
-            ? rp.getEntryNodes()
-            : (dbg ? (dbg.entryNodes || []) : []);
-          const hasEntries = entryNodes.length > 1;
-
-          if (hasEntries && Math.random() < 0.22) {
-            const exitId = entryNodes[Math.floor(Math.random() * entryNodes.length)];
-            const exitPt = (typeof rp.getNodePercent === 'function') ? rp.getNodePercent(exitId) : null;
-            if (exitPt) {
-              toPt = exitPt;
-              this.lastExitNodeId = exitId;
-            }
-          }
-
-          if (!toPt && dbg && Array.isArray(dbg.nodes) && dbg.nodes.length) {
-            const maxAttempts = Math.min(10, dbg.nodes.length);
-            let chosen = null;
-            for (let i = 0; i < maxAttempts; i++) {
-              const candidate = dbg.nodes[Math.floor(Math.random() * dbg.nodes.length)];
-              if (!candidate) continue;
-              if (candidate.id === this.lastTargetNodeId && dbg.nodes.length > 1) continue;
-              const pt = (typeof rp.getNodePercent === 'function')
-                ? rp.getNodePercent(candidate.id)
-                : { x: (candidate.gx / (dbg.grid.gw - 1)) * 100, y: (candidate.gy / (dbg.grid.gh - 1)) * 100 };
-              if (!pt) continue;
-              const dist = Math.hypot(pt.x - fromPt.x, pt.y - fromPt.y);
-              if (dist < 6 && i < maxAttempts - 1) continue;
-              chosen = { id: candidate.id, pt };
-              break;
-            }
-            if (chosen) {
-              toPt = chosen.pt;
-              this.lastTargetNodeId = chosen.id;
-              this.lastExitNodeId = -1;
-            }
-          }
+        // If we don't have a current node, find the nearest one
+        if (!this._currentNodeId) {
+          this._currentNodeId = this._findNearestNode(this.copPose);
         }
 
-        // Fallback: use predefined patrol waypoints when RoadPathfinder not available
-        if (!toPt) {
-          const nextIndex = (this.currentWaypointIndex + 1) % this.patrolWaypoints.length;
-          toPt = this.patrolWaypoints[nextIndex];
-          this.lastExitNodeId = -1;
+        // Get connected neighbors from the link graph
+        const neighbors = this._getNeighbors(this._currentNodeId);
+        if (neighbors.length === 0) return;
+
+        // Pick a random neighbor, avoiding immediate backtracking
+        let nextId = neighbors[Math.floor(Math.random() * neighbors.length)];
+        if (neighbors.length > 1 && nextId === this._lastNodeId) {
+          nextId = neighbors.find(id => id !== this._lastNodeId) || nextId;
         }
 
-        // Try to get path from RoadPathfinder, or use simple direct path as fallback
-        let path = null;
-        if (rpReady && typeof rp.getPathPercent === 'function') {
-          path = rp.getPathPercent(fromPt, toPt);
-        }
-        
-        // Fallback: create a simple direct path between points when RoadPathfinder unavailable
-        if (!path || path.length < 2) {
-          // Use waypoint-based simple movement path
-          path = [fromPt, toPt];
-          if (!this._hasLoggedFallbackPath) {
-            this._hasLoggedFallbackPath = true;
-            console.log('🚔 Cop car using fallback waypoint path (RoadPathfinder not ready)');
-          }
-        }
-        
-        if (path && path.length >= 2) {
-          this.currentPath = path;
-          this.currentPathIndex = 0;
-          this.currentSegmentT = 0;
-          // Log first successful path build for debugging
-          if (!this._hasLoggedFirstPath && rpReady) {
-            this._hasLoggedFirstPath = true;
-            console.log('🚔 Cop car first road path built:', path.length, 'waypoints');
-          }
-        }
-      },
+        const targetNode = this._getNodeById(nextId);
+        if (!targetNode) return;
 
-      _shouldExitMap() {
-        return this.lastExitNodeId >= 0;
-      },
+        // Build direct path from current position to target node
+        const fromPt = { x: this.copPose.x, y: this.copPose.y };
+        const toPt = { x: targetNode.x, y: targetNode.y };
 
-      _scheduleExit() {
-        this.exitPending = true;
-        this.exitRespawnAt = performance.now() + 1200 + Math.random() * 1000;
-      },
-
-      _respawnFromExit() {
-        const rp = window.RoadPathfinder;
-        if (!rp || !rp.ready || !rp.getDebugData) {
-          this.exitPending = false;
-          this.lastExitNodeId = -1;
-          return;
-        }
-        const dbg = rp.getDebugData();
-        const entries = (typeof rp.getEntryNodes === 'function') ? rp.getEntryNodes() : (dbg.entryNodes || []);
-        if (!entries.length) {
-          this.exitPending = false;
-          this.lastExitNodeId = -1;
-          return;
-        }
-        let entryId = entries[Math.floor(Math.random() * entries.length)];
-        if (entries.length > 1 && entryId === this.lastExitNodeId) {
-          entryId = entries[(entries.indexOf(entryId) + 1) % entries.length];
-        }
-        const entryPt = (typeof rp.getNodePercent === 'function') ? rp.getNodePercent(entryId) : null;
-        if (entryPt) {
-          this.copPose.x = entryPt.x;
-          this.copPose.y = entryPt.y;
-          this.position = this.copPose;
-        }
-        this.currentPath = null;
+        this.currentPath = [fromPt, toPt];
         this.currentPathIndex = 0;
         this.currentSegmentT = 0;
-        this.exitPending = false;
-        this.lastExitNodeId = -1;
+
+        // Update graph traversal state
+        this._lastNodeId = this._currentNodeId;
+        this._currentNodeId = nextId;
+
+        if (!this._hasLoggedFirstPath) {
+          this._hasLoggedFirstPath = true;
+          console.log('🚔 Cop car using node-based patrol:', this._patrolNodes.length, 'nodes,', this._patrolLinks.length, 'links');
+        }
       },
 
       _updatePoseHeading(dt, desiredHeading) {
@@ -16108,11 +16014,15 @@ function ensureLandmarkProperties() {
         // Show notification
         alert(`🚨 BUSTED! You've been arrested by patrol!\n\n💰 Fine: $${fine.toLocaleString()}\n⏱️ Jail Time: ${jailTime} seconds`);
         
-        // Resume patrol after arrest
-        this.copPose.x = 15;
-        this.copPose.y = 15; // Reset position
+        // Resume patrol after arrest - reset to a random node
+        const resetNode = this._patrolNodes[Math.floor(Math.random() * this._patrolNodes.length)];
+        this.copPose.x = resetNode.x;
+        this.copPose.y = resetNode.y;
         this.position = this.copPose;
-        this.currentWaypointIndex = 0;
+        this._currentNodeId = resetNode.id;
+        this._lastNodeId = null;
+        this.currentPath = null;
+        this.currentPathIndex = 0;
         this.renderCopCar();
         this.moveToNextWaypoint();
         
