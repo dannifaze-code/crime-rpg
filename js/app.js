@@ -15548,6 +15548,28 @@ function ensureLandmarkProperties() {
       },
 
       init() {
+        // Load saved patrol layout from localStorage if available
+        try {
+          const savedNodes = localStorage.getItem('crime_rpg_patrol_nodes');
+          const savedLinks = localStorage.getItem('crime_rpg_patrol_links');
+          if (savedNodes) {
+            const parsed = JSON.parse(savedNodes);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              this._nodesEditor = parsed;
+              console.log('[CopCarSystem] Loaded saved patrol nodes from localStorage:', parsed.length);
+            }
+          }
+          if (savedLinks) {
+            const parsed = JSON.parse(savedLinks);
+            if (Array.isArray(parsed)) {
+              this._patrolLinks = parsed;
+              console.log('[CopCarSystem] Loaded saved patrol links from localStorage:', parsed.length);
+            }
+          }
+        } catch (e) {
+          console.warn('[CopCarSystem] Failed to load saved patrol data:', e);
+        }
+
         this._buildPercentNodes();
         console.log('🚔 Node-based Cop Car Patrol System initialized');
         console.log(`📍 Patrol nodes: ${this._patrolNodes.length}, Links: ${this._patrolLinks.length}`);
@@ -16393,6 +16415,12 @@ function ensureLandmarkProperties() {
         sys._patrolLinks = [];
         sys._currentNodeId = null;
         sys._targetNodeId = null;
+
+        // Clear saved layout from localStorage
+        try {
+          localStorage.removeItem('crime_rpg_patrol_nodes');
+          localStorage.removeItem('crime_rpg_patrol_links');
+        } catch (e) { /* ignore */ }
         this._selectedNode = null;
         this._nextNodeId = 1;
 
@@ -16409,34 +16437,28 @@ function ensureLandmarkProperties() {
         const sys = window.CopCarSystem;
         if (!sys) return;
 
-        // Build the output data
-        const nodesJson = JSON.stringify(sys._nodesEditor.map(n => ({
+        // Clean node data for storage
+        const cleanNodes = sys._nodesEditor.map(n => ({
           id: n.id,
           x: parseFloat(n.x.toFixed(3)),
           y: parseFloat(n.y.toFixed(3))
-        })), null, 2);
+        }));
+        const cleanLinks = sys._patrolLinks.slice();
 
-        const linksJson = JSON.stringify(sys._patrolLinks, null, 2);
-
-        const output = '// === PATROL NODES (paste into _nodesEditor) ===\n' +
-                       nodesJson + '\n\n' +
-                       '// === PATROL LINKS (paste into _patrolLinks) ===\n' +
-                       linksJson;
-
-        // Copy to clipboard
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(output).then(() => {
-            this._setStatus('Saved! Node & link data copied to clipboard.');
-          }).catch(() => {
-            this._saveToConsole(output);
-          });
-        } else {
-          this._saveToConsole(output);
+        // Persist to localStorage so edits survive page reloads
+        try {
+          localStorage.setItem('crime_rpg_patrol_nodes', JSON.stringify(cleanNodes));
+          localStorage.setItem('crime_rpg_patrol_links', JSON.stringify(cleanLinks));
+        } catch (e) {
+          console.warn('[CopNodeDebug] localStorage save failed:', e);
         }
 
-        // Also log to console
-        console.log('[CopNodeDebug] === SAVED NODE DATA ===');
-        console.log(output);
+        // Rebuild live patrol nodes from the saved editor data
+        sys._nodesEditor = cleanNodes;
+        sys._buildPercentNodes();
+
+        this._setStatus('Saved! Node layout persisted (' + cleanNodes.length + ' nodes, ' + cleanLinks.length + ' links).');
+        console.log('[CopNodeDebug] Patrol nodes saved to localStorage:', cleanNodes.length, 'nodes,', cleanLinks.length, 'links');
       },
 
       _saveToConsole(output) {
