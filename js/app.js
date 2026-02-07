@@ -15778,6 +15778,267 @@ function ensureLandmarkProperties() {
     }
 
     // ========================================
+    // COP CAR NODE DEBUG OVERLAY
+    // ========================================
+    // Draws all patrol nodes and path links on the turf map in real-time.
+    // Toggle with the "Show Nodes" button on the map or CopNodeDebug.toggle().
+
+    const CopNodeDebug = {
+      visible: false,
+      svgEl: null,
+      animFrameId: null,
+
+      toggle() {
+        this.visible = !this.visible;
+        if (this.visible) {
+          this._create();
+          this._startLoop();
+        } else {
+          this._destroy();
+        }
+        // Update button text
+        const btn = document.getElementById('cop-node-debug-btn');
+        if (btn) btn.textContent = this.visible ? 'Hide Nodes' : 'Show Nodes';
+      },
+
+      _create() {
+        if (this.svgEl) return;
+        const container = document.getElementById('map-entities');
+        if (!container) { console.warn('[CopNodeDebug] #map-entities not found'); return; }
+
+        const sys = window.CopCarSystem;
+        if (!sys || !sys._patrolNodes || sys._patrolNodes.length === 0) {
+          console.warn('[CopNodeDebug] CopCarSystem not ready');
+          return;
+        }
+
+        // Create SVG overlay — uses viewBox 0 0 100 100 so percent coords map directly
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('id', 'cop-node-debug-svg');
+        svg.setAttribute('viewBox', '0 0 100 100');
+        svg.setAttribute('preserveAspectRatio', 'none');
+        svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;z-index:50;pointer-events:none;';
+
+        // Draw path links (lines between connected nodes)
+        const linkGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        linkGroup.setAttribute('id', 'cop-debug-links');
+        sys._patrolLinks.forEach(link => {
+          const a = sys._getNodeById(link[0]);
+          const b = sys._getNodeById(link[1]);
+          if (!a || !b) return;
+          const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          line.setAttribute('x1', a.x);
+          line.setAttribute('y1', a.y);
+          line.setAttribute('x2', b.x);
+          line.setAttribute('y2', b.y);
+          line.setAttribute('stroke', 'rgba(0,200,255,0.5)');
+          line.setAttribute('stroke-width', '0.25');
+          line.setAttribute('stroke-dasharray', '0.5,0.3');
+          linkGroup.appendChild(line);
+        });
+        svg.appendChild(linkGroup);
+
+        // Draw nodes (circles with labels)
+        const nodeGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        nodeGroup.setAttribute('id', 'cop-debug-nodes');
+        sys._patrolNodes.forEach(node => {
+          // Node circle
+          const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+          circle.setAttribute('cx', node.x);
+          circle.setAttribute('cy', node.y);
+          circle.setAttribute('r', '0.6');
+          circle.setAttribute('fill', 'rgba(255,255,0,0.85)');
+          circle.setAttribute('stroke', 'rgba(0,0,0,0.7)');
+          circle.setAttribute('stroke-width', '0.15');
+          circle.dataset.nodeId = node.id;
+          nodeGroup.appendChild(circle);
+
+          // Node label (short number only)
+          const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          label.setAttribute('x', node.x);
+          label.setAttribute('y', node.y - 1.0);
+          label.setAttribute('text-anchor', 'middle');
+          label.setAttribute('font-size', '1.0');
+          label.setAttribute('fill', '#fff');
+          label.setAttribute('stroke', '#000');
+          label.setAttribute('stroke-width', '0.15');
+          label.setAttribute('paint-order', 'stroke');
+          label.textContent = node.id.replace('node_', '');
+          nodeGroup.appendChild(label);
+        });
+        svg.appendChild(nodeGroup);
+
+        // Active indicator group (current node, target node, movement line)
+        const activeGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        activeGroup.setAttribute('id', 'cop-debug-active');
+
+        // Current node ring
+        const currentRing = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        currentRing.setAttribute('id', 'cop-debug-current');
+        currentRing.setAttribute('r', '1.2');
+        currentRing.setAttribute('fill', 'none');
+        currentRing.setAttribute('stroke', '#00ff00');
+        currentRing.setAttribute('stroke-width', '0.25');
+        activeGroup.appendChild(currentRing);
+
+        // Target node ring
+        const targetRing = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        targetRing.setAttribute('id', 'cop-debug-target');
+        targetRing.setAttribute('r', '1.2');
+        targetRing.setAttribute('fill', 'none');
+        targetRing.setAttribute('stroke', '#ff3333');
+        targetRing.setAttribute('stroke-width', '0.25');
+        targetRing.setAttribute('stroke-dasharray', '0.4,0.3');
+        activeGroup.appendChild(targetRing);
+
+        // Movement vector line (cop position → target)
+        const moveLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        moveLine.setAttribute('id', 'cop-debug-moveline');
+        moveLine.setAttribute('stroke', '#ff3333');
+        moveLine.setAttribute('stroke-width', '0.2');
+        moveLine.setAttribute('stroke-dasharray', '0.3,0.2');
+        activeGroup.appendChild(moveLine);
+
+        // Cop car position dot
+        const copDot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        copDot.setAttribute('id', 'cop-debug-pos');
+        copDot.setAttribute('r', '0.8');
+        copDot.setAttribute('fill', 'rgba(255,50,50,0.9)');
+        copDot.setAttribute('stroke', '#fff');
+        copDot.setAttribute('stroke-width', '0.2');
+        activeGroup.appendChild(copDot);
+
+        svg.appendChild(activeGroup);
+
+        // Info text at top of overlay
+        const infoText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        infoText.setAttribute('id', 'cop-debug-info');
+        infoText.setAttribute('x', '1');
+        infoText.setAttribute('y', '2.5');
+        infoText.setAttribute('font-size', '1.4');
+        infoText.setAttribute('fill', '#0f0');
+        infoText.setAttribute('stroke', '#000');
+        infoText.setAttribute('stroke-width', '0.2');
+        infoText.setAttribute('paint-order', 'stroke');
+        svg.appendChild(infoText);
+
+        container.appendChild(svg);
+        this.svgEl = svg;
+      },
+
+      _destroy() {
+        if (this.animFrameId) {
+          cancelAnimationFrame(this.animFrameId);
+          this.animFrameId = null;
+        }
+        if (this.svgEl) {
+          this.svgEl.remove();
+          this.svgEl = null;
+        }
+      },
+
+      _startLoop() {
+        const update = () => {
+          if (!this.visible) return;
+          this._updateActive();
+          this.animFrameId = requestAnimationFrame(update);
+        };
+        this.animFrameId = requestAnimationFrame(update);
+      },
+
+      _updateActive() {
+        const sys = window.CopCarSystem;
+        if (!sys) return;
+
+        const currentNode = sys._getNodeById(sys._currentNodeId);
+        const targetNode = sys._getNodeById(sys._targetNodeId);
+
+        // Update current node ring (green)
+        const currentRing = document.getElementById('cop-debug-current');
+        if (currentRing && currentNode) {
+          currentRing.setAttribute('cx', currentNode.x);
+          currentRing.setAttribute('cy', currentNode.y);
+          currentRing.style.display = '';
+        } else if (currentRing) {
+          currentRing.style.display = 'none';
+        }
+
+        // Update target node ring (red dashed)
+        const targetRing = document.getElementById('cop-debug-target');
+        if (targetRing && targetNode) {
+          targetRing.setAttribute('cx', targetNode.x);
+          targetRing.setAttribute('cy', targetNode.y);
+          targetRing.style.display = '';
+        } else if (targetRing) {
+          targetRing.style.display = 'none';
+        }
+
+        // Update movement line (cop position → target)
+        const moveLine = document.getElementById('cop-debug-moveline');
+        if (moveLine && targetNode) {
+          moveLine.setAttribute('x1', sys.copPose.x);
+          moveLine.setAttribute('y1', sys.copPose.y);
+          moveLine.setAttribute('x2', targetNode.x);
+          moveLine.setAttribute('y2', targetNode.y);
+          moveLine.style.display = '';
+        } else if (moveLine) {
+          moveLine.style.display = 'none';
+        }
+
+        // Update cop position dot
+        const copDot = document.getElementById('cop-debug-pos');
+        if (copDot) {
+          copDot.setAttribute('cx', sys.copPose.x);
+          copDot.setAttribute('cy', sys.copPose.y);
+        }
+
+        // Update info text
+        const info = document.getElementById('cop-debug-info');
+        if (info) {
+          const curId = sys._currentNodeId ? sys._currentNodeId.replace('node_', '#') : '?';
+          const tgtId = sys._targetNodeId ? sys._targetNodeId.replace('node_', '#') : 'none';
+          info.textContent = `Cop @ (${sys.copPose.x.toFixed(1)}%, ${sys.copPose.y.toFixed(1)}%) | Node: ${curId} → ${tgtId} | Speed: ${sys.copPose.speed.toFixed(1)}`;
+        }
+
+        // Highlight current/target nodes in the static node circles
+        const nodeGroup = document.getElementById('cop-debug-nodes');
+        if (nodeGroup) {
+          const circles = nodeGroup.querySelectorAll('circle');
+          circles.forEach(c => {
+            const nid = c.dataset.nodeId;
+            if (nid === sys._currentNodeId) {
+              c.setAttribute('fill', 'rgba(0,255,0,0.9)');
+              c.setAttribute('r', '0.9');
+            } else if (nid === sys._targetNodeId) {
+              c.setAttribute('fill', 'rgba(255,50,50,0.9)');
+              c.setAttribute('r', '0.9');
+            } else {
+              c.setAttribute('fill', 'rgba(255,255,0,0.85)');
+              c.setAttribute('r', '0.6');
+            }
+          });
+        }
+      },
+
+      // Inject toggle button into map UI
+      injectButton() {
+        const mapEl = document.getElementById('city-map');
+        if (!mapEl) return;
+        // Avoid duplicates
+        if (document.getElementById('cop-node-debug-btn')) return;
+
+        const btn = document.createElement('button');
+        btn.id = 'cop-node-debug-btn';
+        btn.textContent = 'Show Nodes';
+        btn.style.cssText = 'position:absolute;top:6px;right:6px;z-index:100;padding:4px 10px;font-size:11px;background:rgba(0,0,0,0.7);color:#0f0;border:1px solid #0f0;border-radius:4px;cursor:pointer;font-family:monospace;';
+        btn.addEventListener('click', () => this.toggle());
+        mapEl.appendChild(btn);
+      }
+    };
+
+    window.CopNodeDebug = CopNodeDebug;
+
+    // ========================================
     // INMATE RECRUITMENT SYSTEM
     // ========================================
     
@@ -27912,6 +28173,10 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       console.log('[DEBUG] Initializing cop car patrol system...');
       // Initialize cop car patrol on map (after initStaticMap for road pathfinding)
       CopCarSystem.init();
+
+      // Inject cop car node debug overlay button and auto-show
+      CopNodeDebug.injectButton();
+      CopNodeDebug.toggle(); // Start visible so nodes are shown immediately
 
       console.log('[DEBUG] Skipping roads and buildings (using static map)...');
       // DISABLED: Roads and buildings generation not needed for static 2D map
