@@ -283,12 +283,11 @@
     _debug_editorToPercent: { editorToPercentX, editorToPercentY }
   };
 
+  // Node data and patrol logic are now embedded in app.js CopCarSystem.
+  // This module is kept as a reference but does NOT auto-init to avoid
+  // conflicting with the app.js version which has full feature support
+  // (heat, arrest, animation, etc.).
   if (typeof window !== 'undefined') {
-    window.CopCarSystem = CopCarSystem;
-    if (document.readyState === 'complete' || document.readyState === 'interactive') {
-      CopCarSystem.init();
-    } else {
-      window.addEventListener('DOMContentLoaded', () => CopCarSystem.init());
-    }
+    window._CopCarSystemModule = CopCarSystem; // available for debugging
   }
 })();
