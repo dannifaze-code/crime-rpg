@@ -15560,29 +15560,20 @@ function ensureLandmarkProperties() {
       console.log('[app.js] CopCarSystem already provided by module; skipping embedded CopCarSystem.');
     } else {
       const CopCarSystem = {
-      copPose: { x: 15, y: 15, heading: 0, speed: 0 }, // Authoritative pose
+      copPose: { x: 15, y: 15, heading: 0, speed: 0 },
       position: null,
-      targetPosition: null,
       patrolInterval: null,
       isPatrolling: false,
-      movementSpeed: 8000, // 8 seconds per segment (slower, realistic traffic)
-      updateInterval: 50, // Update position every 50ms for smooth animation
-      // Motion realism (percent-units per second; tuned for TurfMap.png scale)
-      heading: 0,            // radians in map-space (used by 3D cop car)
-      speed: 0,              // current speed (percent units/sec)
-      cruiseSpeed: 6.2,      // typical driving speed
-      accel: 10.0,           // speed up rate
-      decel: 14.0,           // braking rate
-      pauseUntil: 0,         // ms timestamp while stopped
-      stopMinMs: 350,        // stop time at intersections
+      heading: 0,
+      speed: 0,
+      cruiseSpeed: 6.2,
+      turnRate: 8.0,
+      pauseUntil: 0,
+      stopMinMs: 350,
       stopMaxMs: 900,
-      lastUpdateTs: 0,       // performance.now() timestamp for dt
-      currentSegmentT: 0,    // 0..1 within current segment
-      lookaheadDistance: 2.6,
-      turnRate: 3.6,
-      headingSmooth: 0.18,
-      
-      
+      lastUpdateTs: 0,
+      animationFrameId: null,
+
       // NODE-BASED PATROL SYSTEM
       // 50 hand-placed nodes along actual roads, 53 links between them
       // Nodes in editor coords (MAP_W=66.6, MAP_H=100.0), converted to percent at init
@@ -15663,9 +15654,7 @@ function ensureLandmarkProperties() {
       _patrolNodes: [],      // Built at init (percent space)
       _currentNodeId: null,  // Current node in graph traversal
       _lastNodeId: null,     // Previous node (avoid backtracking)
-      currentPath: null,
-      currentPathIndex: 0,
-      animationFrameId: null,
+      _targetNodeId: null,   // Target node being moved toward
       
       _buildPercentNodes() {
         this._patrolNodes = this._nodesEditor.map(n => ({
@@ -15695,29 +15684,22 @@ function ensureLandmarkProperties() {
       },
 
       init() {
-        // Build percent-space nodes from editor coordinates
         this._buildPercentNodes();
         console.log('🚔 Node-based Cop Car Patrol System initialized');
         console.log(`📍 Patrol nodes: ${this._patrolNodes.length}, Links: ${this._patrolLinks.length}`);
 
-        // Start at the first node
         const startNode = this._patrolNodes[0];
         this.copPose = { x: startNode.x, y: startNode.y, heading: 0, speed: 0 };
         this.position = this.copPose;
         this._currentNodeId = startNode.id;
         this._lastNodeId = null;
-        this.currentPath = null;
-        this.currentPathIndex = 0;
-        this.currentSegmentT = 0;
+        this._targetNodeId = null;
         this.speed = 0;
         this.heading = 0;
-        this.copPose.heading = this.heading;
-        this.copPose.speed = this.speed;
         this.pauseUntil = 0;
 
         this.startPatrol();
 
-        // Update lights based on heat every second
         setInterval(() => {
           this.updateLights();
         }, 1000);
@@ -15742,13 +15724,24 @@ function ensureLandmarkProperties() {
         this.isPatrolling = false;
       },
       
-      // Smooth animation between waypoints
+      _pickNextNode() {
+        if (!this._patrolNodes || this._patrolNodes.length < 2) return;
+        if (!this._currentNodeId) {
+          this._currentNodeId = this._findNearestNode(this.copPose);
+        }
+        const neighbors = this._getNeighbors(this._currentNodeId);
+        if (neighbors.length === 0) return;
+        let nextId = neighbors[Math.floor(Math.random() * neighbors.length)];
+        if (neighbors.length > 1 && nextId === this._lastNodeId) {
+          nextId = neighbors.find(id => id !== this._lastNodeId) || nextId;
+        }
+        this._targetNodeId = nextId;
+      },
+
       animateMovement() {
         if (!this.isPatrolling) return;
 
         const heat = GameState.player.heat;
-
-        // If heat is at maximum (100%), go to player's safehouse for arrest
         if (heat >= 100) {
           this.moveToSafehouse();
           return;
@@ -15756,225 +15749,72 @@ function ensureLandmarkProperties() {
 
         const now = performance.now();
         if (!this.lastUpdateTs) this.lastUpdateTs = now;
-        const dt = Math.min(0.05, Math.max(0.001, (now - this.lastUpdateTs) / 1000)); // clamp 1ms..50ms
+        const dt = Math.min(0.05, Math.max(0.001, (now - this.lastUpdateTs) / 1000));
         this.lastUpdateTs = now;
 
-        // Stop at intersections / sharp turns
+        // Pause at nodes (intersection stop)
         if (this.pauseUntil && now < this.pauseUntil) {
           this.speed = 0;
+          this.copPose.speed = 0;
           this.renderCopCar();
           this.animationFrameId = requestAnimationFrame(() => this.animateMovement());
           return;
         }
+        this.pauseUntil = 0;
 
-        // Ensure we have a path (node-based graph traversal)
-        if (!this.currentPath || this.currentPath.length < 2) {
-          this._buildNextRoadPath();
-          if (!this.currentPath || this.currentPath.length < 2) {
-            this.renderCopCar();
-            this.animationFrameId = requestAnimationFrame(() => this.animateMovement());
-            return;
-          }
+        // Pick next target node if needed
+        if (!this._targetNodeId) {
+          this._pickNextNode();
         }
 
-        const a = this.currentPath[this.currentPathIndex];
-        const b = this.currentPath[this.currentPathIndex + 1];
+        if (this._targetNodeId) {
+          const target = this._getNodeById(this._targetNodeId);
+          if (target) {
+            const dx = target.x - this.copPose.x;
+            const dy = target.y - this.copPose.y;
+            const dist = Math.hypot(dx, dy);
 
-        const segDx = b.x - a.x;
-        const segDy = b.y - a.y;
-        const segLen = Math.max(0.0001, Math.hypot(segDx, segDy));
-
-        // Heading in map space (x to the right, y down)
-        this.heading = Math.atan2(segDx, segDy);
-        this.copPose.heading = this.heading;
-
-        // Simplified speed control: just accelerate to cruiseSpeed and maintain it.
-        // Only slow down when we actually reach a waypoint (handled in the segment completion logic).
-        // This prevents the car from getting stuck due to complex braking calculations on short paths.
-        const targetSpeed = this.cruiseSpeed;
-        const rate = (targetSpeed > this.speed) ? this.accel : this.decel;
-        const dv = rate * dt;
-
-        if (Math.abs(targetSpeed - this.speed) <= dv) {
-          this.speed = targetSpeed;
-        } else {
-          this.speed += Math.sign(targetSpeed - this.speed) * dv;
-        }
-        this.copPose.speed = this.speed;
-
-        let travel = this.speed * dt;
-        let pendingHeading = this.heading;
-
-        // March along segments, possibly crossing multiple in one frame
-        while (travel > 0 && this.currentPath && this.currentPathIndex < this.currentPath.length - 1) {
-          const a2 = this.currentPath[this.currentPathIndex];
-          const b2 = this.currentPath[this.currentPathIndex + 1];
-
-          const dx2 = b2.x - a2.x;
-          const dy2 = b2.y - a2.y;
-          const len2 = Math.max(0.0001, Math.hypot(dx2, dy2));
-
-          const remaining2 = len2 * (1 - this.currentSegmentT);
-          const step = Math.min(travel, remaining2);
-
-          this.currentSegmentT += step / len2;
-          travel -= step;
-
-          this.copPose.x = a2.x + dx2 * this.currentSegmentT;
-          this.copPose.y = a2.y + dy2 * this.currentSegmentT;
-          this.position = this.copPose;
-
-          // Recompute heading for this segment
-          this.heading = Math.atan2(dx2, dy2);
-          this.copPose.heading = this.heading;
-          pendingHeading = this.heading;
-
-          // End segment
-          if (this.currentSegmentT >= 0.999999) {
-            this.currentSegmentT = 0;
-            this.currentPathIndex++;
-
-            const reachedEnd = this.currentPathIndex >= this.currentPath.length - 1;
-
-            // Stop when reaching end-of-path (node reached)
-            if (reachedEnd) {
-              this.currentPath = null;
-              this.currentPathIndex = 0;
-
-              this.pauseUntil = now + (this.stopMinMs + Math.random() * (this.stopMaxMs - this.stopMinMs));
+            if (dist < 0.3) {
+              // Snap to node position to prevent drift
+              this.copPose.x = target.x;
+              this.copPose.y = target.y;
               this.speed = 0;
-              break;
+              this.copPose.speed = 0;
+
+              this._lastNodeId = this._currentNodeId;
+              this._currentNodeId = this._targetNodeId;
+              this._targetNodeId = null;
+
+              // Brief pause at node
+              this.pauseUntil = now + (this.stopMinMs + Math.random() * (this.stopMaxMs - this.stopMinMs));
             } else {
-              // Stop at sharp turns (intersection feel)
-              const cur = this.currentPath[this.currentPathIndex - 1];
-              const mid = this.currentPath[this.currentPathIndex];
-              const nxt = this.currentPath[this.currentPathIndex + 1];
+              // Move toward target node
+              const moveDist = Math.min(this.cruiseSpeed * dt, dist);
+              this.copPose.x += (dx / dist) * moveDist;
+              this.copPose.y += (dy / dist) * moveDist;
+              this.speed = this.cruiseSpeed;
+              this.copPose.speed = this.cruiseSpeed;
 
-              const v1x = mid.x - cur.x;
-              const v1y = mid.y - cur.y;
-              const v2x = nxt.x - mid.x;
-              const v2y = nxt.y - mid.y;
-
-              const l1 = Math.max(0.0001, Math.hypot(v1x, v1y));
-              const l2 = Math.max(0.0001, Math.hypot(v2x, v2y));
-              const d = Math.max(-1, Math.min(1, (v1x / l1) * (v2x / l2) + (v1y / l1) * (v2y / l2)));
-              const ang = Math.acos(d);
-
-              if (ang > (Math.PI / 4.2)) {
-                this.pauseUntil = now + (this.stopMinMs + Math.random() * (this.stopMaxMs - this.stopMinMs));
-                this.speed = 0;
-                break;
-              }
+              // Smooth heading toward target
+              const targetHeading = Math.atan2(dx, dy);
+              let headingDiff = targetHeading - this.heading;
+              while (headingDiff > Math.PI) headingDiff -= Math.PI * 2;
+              while (headingDiff < -Math.PI) headingDiff += Math.PI * 2;
+              this.heading += headingDiff * this.turnRate * dt;
+              this.copPose.heading = this.heading;
             }
+          } else {
+            this._targetNodeId = null;
           }
         }
 
-        this._updatePoseHeading(dt, pendingHeading);
+        this.position = this.copPose;
         this.renderCopCar();
         this.animationFrameId = requestAnimationFrame(() => this.animateMovement());
       },
 
-      _buildNextRoadPath() {
-        // Node-based pathfinding: pick a connected neighbor and drive there
-        if (!this._patrolNodes || this._patrolNodes.length < 2) return;
-
-        // If we don't have a current node, find the nearest one
-        if (!this._currentNodeId) {
-          this._currentNodeId = this._findNearestNode(this.copPose);
-        }
-
-        // Get connected neighbors from the link graph
-        const neighbors = this._getNeighbors(this._currentNodeId);
-        if (neighbors.length === 0) return;
-
-        // Pick a random neighbor, avoiding immediate backtracking
-        let nextId = neighbors[Math.floor(Math.random() * neighbors.length)];
-        if (neighbors.length > 1 && nextId === this._lastNodeId) {
-          nextId = neighbors.find(id => id !== this._lastNodeId) || nextId;
-        }
-
-        const targetNode = this._getNodeById(nextId);
-        if (!targetNode) return;
-
-        // Build direct path from current position to target node
-        const fromPt = { x: this.copPose.x, y: this.copPose.y };
-        const toPt = { x: targetNode.x, y: targetNode.y };
-
-        this.currentPath = [fromPt, toPt];
-        this.currentPathIndex = 0;
-        this.currentSegmentT = 0;
-
-        // Update graph traversal state
-        this._lastNodeId = this._currentNodeId;
-        this._currentNodeId = nextId;
-
-        if (!this._hasLoggedFirstPath) {
-          this._hasLoggedFirstPath = true;
-          console.log('🚔 Cop car using node-based patrol:', this._patrolNodes.length, 'nodes,', this._patrolLinks.length, 'links');
-        }
-      },
-
-      _updatePoseHeading(dt, desiredHeading) {
-        this.position = this.copPose;
-        const lookTarget = this._computeLookaheadPoint();
-        if (lookTarget) {
-          const dx = lookTarget.x - this.position.x;
-          const dy = lookTarget.y - this.position.y;
-          if (Math.hypot(dx, dy) > 0.0001) {
-            desiredHeading = Math.atan2(dx, dy);
-          }
-        }
-        if (!isFinite(desiredHeading)) desiredHeading = this.heading;
-        const current = this.heading;
-        const diff = this._angleDiff(desiredHeading, current);
-        const maxStep = this.turnRate * dt;
-        let next = current;
-        if (Math.abs(diff) <= maxStep) {
-          next = desiredHeading;
-        } else {
-          next = current + Math.sign(diff) * maxStep;
-        }
-        this.heading = current + (next - current) * this.headingSmooth;
-        this.copPose.heading = this.heading;
-      },
-
-      _computeLookaheadPoint() {
-        if (!this.currentPath || this.currentPath.length < 2) return null;
-        let idx = this.currentPathIndex;
-        let t = this.currentSegmentT;
-        let remaining = this.lookaheadDistance;
-        while (idx < this.currentPath.length - 1 && remaining > 0) {
-          const a = this.currentPath[idx];
-          const b = this.currentPath[idx + 1];
-          const segDx = b.x - a.x;
-          const segDy = b.y - a.y;
-          const segLen = Math.max(0.0001, Math.hypot(segDx, segDy));
-          const segRemain = segLen * (1 - t);
-          if (remaining <= segRemain) {
-            const ratio = t + remaining / segLen;
-            return {
-              x: a.x + segDx * ratio,
-              y: a.y + segDy * ratio
-            };
-          }
-          remaining -= segRemain;
-          idx++;
-          t = 0;
-        }
-        return this.currentPath[this.currentPath.length - 1] || null;
-      },
-
-      _angleDiff(a, b) {
-        let d = a - b;
-        while (d > Math.PI) d -= Math.PI * 2;
-        while (d < -Math.PI) d += Math.PI * 2;
-        return d;
-      },
-
-      moveToNextWaypoint() {
-        // This method is now deprecated, animation is handled by animateMovement()
-        // Keeping it for compatibility but it won't be called
-      },
+      // Compatibility stub for cheat button
+      updateHeatLevel() { this.updateLights(); },
       
       moveToSafehouse() {
         console.log('🚨 Cop car moving to safehouse for arrest!');
@@ -16021,10 +15861,8 @@ function ensureLandmarkProperties() {
         this.position = this.copPose;
         this._currentNodeId = resetNode.id;
         this._lastNodeId = null;
-        this.currentPath = null;
-        this.currentPathIndex = 0;
+        this._targetNodeId = null;
         this.renderCopCar();
-        this.moveToNextWaypoint();
         
         // Render updates
         ProfileTab.render();
@@ -28124,9 +27962,8 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       initInmateSystem();
 
       // Build the road mask used by RoadPathfinder (and set the map background div).
-      // This MUST be called BEFORE CopCarSystem.init() so the road graph is ready
-      // for pathfinding. Note: image loading is async, so RoadPathfinder may not be
-      // ready immediately, but CopCarSystem will retry building paths until it is.
+      // RoadPathfinder is used by the player sprite for road-following movement.
+      // CopCarSystem uses its own 50-node patrol graph and does not depend on RoadPathfinder.
       console.log('[DEBUG] Initializing static map and RoadPathfinder...');
 
       // INLINE IMPLEMENTATION: Directly load map and build road pathfinder
