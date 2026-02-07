@@ -16022,6 +16022,15 @@ function ensureLandmarkProperties() {
         this._linkSource = null;
         this._selectedNode = null;
 
+        // Stop cop patrol so it doesn't interfere with node editing
+        const sys = window.CopCarSystem;
+        if (sys && sys.isPatrolling) {
+          this._wasPatrolling = true;
+          sys.stopPatrol();
+        } else {
+          this._wasPatrolling = false;
+        }
+
         // Disable map zoom/pan while editing nodes
         if (typeof TurfTab !== 'undefined') {
           TurfTab.resetZoom();
@@ -16062,6 +16071,13 @@ function ensureLandmarkProperties() {
         this._unbindEditEvents();
         this._rebuildNodes();
         this._rebuildLinks();
+
+        // Resume patrol if it was running before editing
+        const sys = window.CopCarSystem;
+        if (sys && this._wasPatrolling) {
+          sys.startPatrol();
+          this._wasPatrolling = false;
+        }
       },
 
       _createToolbar() {
@@ -16119,6 +16135,44 @@ function ensureLandmarkProperties() {
         saveBtn.style.cssText = btnStyle + 'background:#4d4d1a;color:#ff0;border-color:#ff0;';
         saveBtn.addEventListener('click', () => this._saveNodes());
         toolbar.appendChild(saveBtn);
+
+        // Start/Stop Patrol toggle
+        const sys = window.CopCarSystem;
+        const patrolBtn = document.createElement('button');
+        patrolBtn.id = 'cop-editor-patrol-btn';
+        const updatePatrolBtn = () => {
+          const running = sys && sys.isPatrolling;
+          patrolBtn.textContent = running ? 'Stop Patrol' : 'Start Patrol';
+          patrolBtn.style.cssText = btnStyle + (running
+            ? 'background:#4d2a1a;color:#f96;border-color:#f96;'
+            : 'background:#1a4d3a;color:#6f6;border-color:#6f6;');
+        };
+        updatePatrolBtn();
+        patrolBtn.addEventListener('click', () => {
+          if (!sys) return;
+          if (sys.isPatrolling) {
+            sys.stopPatrol();
+            this._setStatus('Patrol stopped. Nodes are safe to edit.');
+          } else {
+            if (sys._patrolNodes.length === 0) {
+              this._setStatus('No nodes to patrol. Add nodes first.');
+              return;
+            }
+            // Reset cop to first node if needed
+            if (!sys._currentNodeId) {
+              const startNode = sys._patrolNodes[0];
+              sys.copPose = { x: startNode.x, y: startNode.y, heading: 0, speed: 0 };
+              sys.position = sys.copPose;
+              sys._currentNodeId = startNode.id;
+              sys._lastNodeId = null;
+              sys._targetNodeId = null;
+            }
+            sys.startPatrol();
+            this._setStatus('Patrol started. Stop patrol to resume editing.');
+          }
+          updatePatrolBtn();
+        });
+        toolbar.appendChild(patrolBtn);
 
         // Done button
         const doneBtn = document.createElement('button');
@@ -16373,11 +16427,10 @@ function ensureLandmarkProperties() {
 
         const nodeId = this._selectedNode;
 
-        // Don't delete if cop is currently at or targeting this node
-        if (sys._currentNodeId === nodeId || sys._targetNodeId === nodeId) {
-          this._setStatus('Cannot delete: cop is using this node. Wait for it to move.');
-          return;
-        }
+        // Clear cop references if it was using this node
+        if (sys._currentNodeId === nodeId) sys._currentNodeId = null;
+        if (sys._targetNodeId === nodeId) sys._targetNodeId = null;
+        if (sys._lastNodeId === nodeId) sys._lastNodeId = null;
 
         // Remove from patrol nodes
         sys._patrolNodes = sys._patrolNodes.filter(n => n.id !== nodeId);
