@@ -16000,6 +16000,14 @@ function ensureLandmarkProperties() {
         this._linkSource = null;
         this._selectedNode = null;
 
+        // Disable map zoom/pan while editing nodes
+        if (typeof TurfTab !== 'undefined') {
+          TurfTab.resetZoom();
+          TurfTab.zoomLocked = true;
+          const zoomControls = document.querySelector('.zoom-controls');
+          if (zoomControls) zoomControls.style.display = 'none';
+        }
+
         if (!this.svgEl) return;
         // Enable pointer events on the SVG for drag operations
         this.svgEl.style.pointerEvents = 'all';
@@ -16016,6 +16024,13 @@ function ensureLandmarkProperties() {
         this._dragNode = null;
         this._linkSource = null;
         this._selectedNode = null;
+
+        // Re-enable map zoom/pan
+        if (typeof TurfTab !== 'undefined') {
+          TurfTab.zoomLocked = false;
+          const zoomControls = document.querySelector('.zoom-controls');
+          if (zoomControls) zoomControls.style.display = '';
+        }
 
         if (this.svgEl) {
           this.svgEl.style.pointerEvents = 'none';
@@ -16052,6 +16067,13 @@ function ensureLandmarkProperties() {
         delBtn.style.cssText = btnStyle + 'background:#4d1a1a;color:#f66;border-color:#f66;opacity:0.5;';
         delBtn.addEventListener('click', () => this._deleteSelectedNode());
         toolbar.appendChild(delBtn);
+
+        // Clear All Nodes button
+        const clearBtn = document.createElement('button');
+        clearBtn.textContent = 'Clear All';
+        clearBtn.style.cssText = btnStyle + 'background:#4d1a2a;color:#f6a;border-color:#f6a;';
+        clearBtn.addEventListener('click', () => this._clearAllNodes());
+        toolbar.appendChild(clearBtn);
 
         // Link Mode toggle
         const linkBtn = document.createElement('button');
@@ -16352,6 +16374,35 @@ function ensureLandmarkProperties() {
         this._rebuildLinks();
         this._bindEditEvents();
         this._setStatus('Deleted ' + nodeId.replace('node_', '#') + ' and its links.');
+      },
+
+      _clearAllNodes() {
+        const sys = window.CopCarSystem;
+        if (!sys) return;
+
+        const count = sys._patrolNodes.length;
+        if (count === 0) {
+          this._setStatus('No nodes to clear.');
+          return;
+        }
+
+        if (!confirm('Clear all ' + count + ' nodes and links? This cannot be undone.')) return;
+
+        sys._patrolNodes = [];
+        sys._nodesEditor = [];
+        sys._patrolLinks = [];
+        sys._currentNodeId = null;
+        sys._targetNodeId = null;
+        this._selectedNode = null;
+        this._nextNodeId = 1;
+
+        const delBtn = document.getElementById('cop-editor-del-btn');
+        if (delBtn) delBtn.style.opacity = '0.5';
+
+        this._rebuildNodes();
+        this._rebuildLinks();
+        this._bindEditEvents();
+        this._setStatus('Cleared all ' + count + ' nodes and links. Add new nodes to start fresh.');
       },
 
       _saveNodes() {
@@ -21685,6 +21736,7 @@ function ensureLandmarkProperties() {
       pinchAnchor: null,
       isPinching: false,
       lastPinchDistance: 0,
+      zoomLocked: false,
       
       initWeatherControls() {
         // Cycle is always ON now (2h real-time). UI controls were removed.
@@ -21791,6 +21843,7 @@ function ensureLandmarkProperties() {
         // Mouse wheel zoom (desktop/trackpad)
         viewport.addEventListener('wheel', (e) => {
           e.preventDefault();
+          if (this.zoomLocked) return;
           const direction = e.deltaY > 0 ? -1 : 1; // scroll down -> zoom out
           const newZoom = Math.max(this.minZoom, Math.min(this.maxZoom, this.currentZoom + direction * this.zoomStep));
           this.setZoom(newZoom, e.clientX, e.clientY);
@@ -21915,6 +21968,7 @@ function ensureLandmarkProperties() {
       
 
       zoomIn(e = null) {
+        if (this.zoomLocked) return;
         const newZoom = Math.min(this.currentZoom + this.zoomStep, this.maxZoom);
         const viewport = document.getElementById('map-viewport');
         this._zoomViewport = viewport; // cache for cancelPanZoomCapture()
@@ -21929,6 +21983,7 @@ function ensureLandmarkProperties() {
       },
       
       zoomOut(e = null) {
+        if (this.zoomLocked) return;
         const newZoom = Math.max(this.currentZoom - this.zoomStep, this.minZoom);
         const viewport = document.getElementById('map-viewport');
         this._zoomViewport = viewport; // cache for cancelPanZoomCapture()
@@ -22167,6 +22222,7 @@ function ensureLandmarkProperties() {
 
         if (e.touches.length === 2) {
           e.preventDefault();
+          if (this.zoomLocked) return;
           this.isPinching = true;
           this.isPanning = false;
 
@@ -22203,6 +22259,7 @@ function ensureLandmarkProperties() {
         // Pinch zoom
         if (this.isPinching && e.touches.length === 2) {
           e.preventDefault();
+          if (this.zoomLocked) return;
           const currentDistance = this.getPinchDistance(e.touches);
           const delta = currentDistance - this.lastPinchDistance;
 
