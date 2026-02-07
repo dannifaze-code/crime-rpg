@@ -15641,6 +15641,7 @@ function ensureLandmarkProperties() {
         {"id":"node_50","x":-2.773,"y":-2.979}
       ],
       _patrolLinks: [
+        // Original horizontal/perimeter links
         ["node_1","node_2"],["node_2","node_3"],["node_3","node_4"],
         ["node_4","node_5"],["node_5","node_6"],["node_6","node_7"],
         ["node_7","node_8"],["node_8","node_9"],["node_9","node_10"],
@@ -15658,7 +15659,21 @@ function ensureLandmarkProperties() {
         ["node_43","node_44"],["node_44","node_45"],["node_45","node_46"],
         ["node_46","node_23"],["node_46","node_47"],["node_47","node_48"],
         ["node_48","node_49"],["node_49","node_50"],["node_50","node_43"],
-        ["node_28","node_47"],["node_29","node_48"]
+        ["node_28","node_47"],["node_29","node_48"],
+        // Vertical cross-links: top row (y~4%) ↔ middle row (y~15%)
+        ["node_2","node_28"],["node_3","node_29"],["node_4","node_30"],
+        ["node_5","node_31"],["node_6","node_32"],["node_7","node_33"],
+        ["node_8","node_34"],
+        // Right column: outer (nodes 10-14) ↔ inner (nodes 35-39)
+        ["node_10","node_35"],["node_11","node_36"],["node_12","node_37"],
+        ["node_13","node_38"],["node_14","node_39"],
+        // Middle row ↔ inner-mid row (y~15% ↔ y~47%)
+        ["node_30","node_49"],["node_31","node_50"],
+        // Inner-mid ↔ inner-bottom (y~47% ↔ y~56%)
+        ["node_48","node_45"],["node_49","node_44"],
+        // Inner-bottom ↔ main bottom row (y~56% ↔ y~60%)
+        ["node_40","node_16"],["node_41","node_17"],["node_42","node_18"],
+        ["node_43","node_19"],["node_44","node_20"],["node_45","node_21"]
       ],
       _patrolNodes: [],      // Built at init (percent space)
       _currentNodeId: null,  // Current node in graph traversal
@@ -15700,8 +15715,8 @@ function ensureLandmarkProperties() {
         console.log('🚔 Node-based Cop Car Patrol System initialized');
         console.log(`📍 Patrol nodes: ${this._patrolNodes.length}, Links: ${this._patrolLinks.length}`);
 
-        // Start at the first node
-        const startNode = this._patrolNodes[0];
+        // Start at a central junction node (node_43) for varied patrolling
+        const startNode = this._patrolNodes.find(n => n.id === 'node_43') || this._patrolNodes[0];
         this.copPose = { x: startNode.x, y: startNode.y, heading: 0, speed: 0 };
         this.position = this.copPose;
         this._currentNodeId = startNode.id;
