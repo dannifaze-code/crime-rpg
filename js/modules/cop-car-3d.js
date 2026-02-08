@@ -1350,13 +1350,26 @@ const CopCar3D = {
     this._updateSmoke(dt, speedForEffects);
     this._updateDebugLaneRect();
 
-    // Billboard the Drug Lab building so it always faces the camera
-    if (this.drugLabRoot && this.camera) {
-      const dlPos = this.drugLabRoot.position;
-      this.drugLabRoot.rotation.y = Math.atan2(
-        this.camera.position.x - dlPos.x,
-        this.camera.position.z - dlPos.z
-      );
+    // Sync Drug Lab 3D position from DrugLabSystem bounds (supports real-time move)
+    if (this.drugLabRoot) {
+      const dls = (typeof window !== 'undefined') ? window.DrugLabSystem : null;
+      if (dls && dls.cellBoundsPct) {
+        const b = dls.cellBoundsPct;
+        const cx = (b.left + b.right) / 2;
+        const cy = (b.top + b.bottom) / 2;
+        const asp = this._mapAspect || 1;
+        this.drugLabRoot.position.x = (cx - 50) * asp;
+        this.drugLabRoot.position.z = cy - 50;
+      }
+
+      // Billboard the Drug Lab building so it always faces the camera
+      if (this.camera) {
+        const dlPos = this.drugLabRoot.position;
+        this.drugLabRoot.rotation.y = Math.atan2(
+          this.camera.position.x - dlPos.x,
+          this.camera.position.z - dlPos.z
+        );
+      }
     }
   },
 
