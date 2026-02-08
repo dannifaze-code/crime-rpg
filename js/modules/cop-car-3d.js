@@ -576,10 +576,14 @@ const CopCar3D = {
         if (this.model && this.model.parent) {
           this.model.parent.remove(this.model);
         }
-      } catch (e) {}
+      } catch (e) {
+        console.warn('[CopCar3D] Scene cleanup error:', e);
+      }
     }
     if (this.renderer) {
-      try { this.renderer.dispose(); } catch (e) {}
+      try { this.renderer.dispose(); } catch (e) {
+        console.warn('[CopCar3D] Renderer dispose error:', e);
+      }
       this.renderer = null;
     }
 
@@ -1600,9 +1604,9 @@ const CopCar3D = {
       cancelAnimationFrame(this.animationFrameId);
       this.animationFrameId = null;
     }
-    // Hide the overlay layer via CSS (no layout thrash)
+    // Hide the overlay layer via CSS (no layout recalculation)
     if (this.layer) {
-      this.layer.style.display = 'none';
+      this.layer.style.visibility = 'hidden';
     }
   },
 
@@ -1624,7 +1628,7 @@ const CopCar3D = {
     this._ensureLayer();
     // Show the overlay layer
     if (this.layer) {
-      this.layer.style.display = '';
+      this.layer.style.visibility = '';
       if (this.canvas && !this.layer.contains(this.canvas)) {
         this.layer.appendChild(this.canvas);
       }
