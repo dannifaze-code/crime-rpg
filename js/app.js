@@ -16789,8 +16789,310 @@ function ensureLandmarkProperties() {
           }
         });
         mapEl.appendChild(editBtn);
+
+        // Move Buildings button (admin only - dannifaze@gmail.com)
+        if (BuildingMoveSystem.isAdmin()) {
+          const moveBldgBtn = document.createElement('button');
+          moveBldgBtn.id = 'move-buildings-btn';
+          moveBldgBtn.textContent = 'Move Buildings';
+          moveBldgBtn.style.cssText = 'position:absolute;top:6px;right:194px;z-index:100;padding:4px 10px;font-size:11px;background:rgba(0,0,0,0.7);color:#ff0;border:1px solid #ff0;border-radius:4px;cursor:pointer;font-family:monospace;';
+          moveBldgBtn.addEventListener('click', () => {
+            if (BuildingMoveSystem.active) {
+              BuildingMoveSystem.disable();
+              moveBldgBtn.textContent = 'Move Buildings';
+              moveBldgBtn.style.color = '#ff0';
+              moveBldgBtn.style.borderColor = '#ff0';
+            } else {
+              BuildingMoveSystem.enable();
+              moveBldgBtn.textContent = 'Moving...';
+              moveBldgBtn.style.color = '#f60';
+              moveBldgBtn.style.borderColor = '#f60';
+            }
+          });
+          mapEl.appendChild(moveBldgBtn);
+        }
       }
     };
+
+    // ========================================
+    // BUILDING MOVE SYSTEM (Admin Only)
+    // ========================================
+    const BuildingMoveSystem = {
+      active: false,
+      _dragEl: null,
+      _dragBuildingId: null,
+      _startX: 0,
+      _startY: 0,
+      _elStartLeft: 0,
+      _elStartTop: 0,
+      _saveBtn: null,
+      _wasDragging: false,
+
+      isAdmin() {
+        const ADMIN_EMAIL = 'dannifaze@gmail.com';
+        try {
+          const accountKey = `account_${GameState.accountId}`;
+          const accountData = localStorage.getItem(accountKey);
+          if (accountData) {
+            const account = JSON.parse(accountData);
+            return account.email && account.email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+          }
+        } catch (e) {}
+        return false;
+      },
+
+      enable() {
+        this.active = true;
+        console.log('🏗️ Building Move Mode ENABLED');
+
+        // Add save button
+        const mapEl = document.getElementById('city-map');
+        if (mapEl && !document.getElementById('save-buildings-btn')) {
+          this._saveBtn = document.createElement('button');
+          this._saveBtn.id = 'save-buildings-btn';
+          this._saveBtn.textContent = '💾 Save Positions';
+          this._saveBtn.style.cssText = 'position:absolute;top:6px;right:310px;z-index:100;padding:4px 10px;font-size:11px;background:rgba(0,0,0,0.7);color:#0f0;border:1px solid #0f0;border-radius:4px;cursor:pointer;font-family:monospace;';
+          this._saveBtn.addEventListener('click', () => this.savePositions());
+          mapEl.appendChild(this._saveBtn);
+        }
+
+        // Make all property buildings draggable
+        const buildings = document.querySelectorAll('.property-building');
+        buildings.forEach(el => {
+          el.style.outline = '2px dashed #ff0';
+          el.style.cursor = 'grab';
+          el.dataset.moveable = 'true';
+        });
+
+        // Bind drag events on the container
+        this._bindDragEvents();
+      },
+
+      disable() {
+        this.active = false;
+        console.log('🏗️ Building Move Mode DISABLED');
+
+        // Remove save button
+        if (this._saveBtn) {
+          this._saveBtn.remove();
+          this._saveBtn = null;
+        }
+
+        // Remove draggable styling
+        const buildings = document.querySelectorAll('.property-building');
+        buildings.forEach(el => {
+          el.style.outline = '';
+          el.style.cursor = 'pointer';
+          delete el.dataset.moveable;
+        });
+
+        // Unbind drag events
+        this._unbindDragEvents();
+      },
+
+      _onMouseDown(e) {
+        if (!BuildingMoveSystem.active) return;
+        const el = e.target.closest('.property-building[data-moveable]');
+        if (!el) return;
+        e.preventDefault();
+        e.stopPropagation();
+        BuildingMoveSystem._startDrag(el, e.clientX, e.clientY);
+      },
+
+      _onMouseMove(e) {
+        if (!BuildingMoveSystem._dragEl) return;
+        e.preventDefault();
+        BuildingMoveSystem._moveDrag(e.clientX, e.clientY);
+      },
+
+      _onMouseUp(e) {
+        if (!BuildingMoveSystem._dragEl) return;
+        BuildingMoveSystem._endDrag();
+      },
+
+      _onTouchStart(e) {
+        if (!BuildingMoveSystem.active) return;
+        const el = e.target.closest('.property-building[data-moveable]');
+        if (!el) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const touch = e.touches[0];
+        BuildingMoveSystem._startDrag(el, touch.clientX, touch.clientY);
+      },
+
+      _onTouchMove(e) {
+        if (!BuildingMoveSystem._dragEl) return;
+        e.preventDefault();
+        const touch = e.touches[0];
+        BuildingMoveSystem._moveDrag(touch.clientX, touch.clientY);
+      },
+
+      _onTouchEnd(e) {
+        if (!BuildingMoveSystem._dragEl) return;
+        BuildingMoveSystem._endDrag();
+      },
+
+      _startDrag(el, clientX, clientY) {
+        this._dragEl = el;
+        this._dragBuildingId = el.dataset.id;
+        this._startX = clientX;
+        this._startY = clientY;
+        this._elStartLeft = parseFloat(el.style.left);
+        this._elStartTop = parseFloat(el.style.top);
+        el.style.cursor = 'grabbing';
+        el.style.zIndex = '999';
+        el.style.opacity = '0.8';
+      },
+
+      _moveDrag(clientX, clientY) {
+        if (!this._dragEl) return;
+        const container = document.getElementById('map-icons');
+        if (!container) return;
+
+        const rect = container.getBoundingClientRect();
+        const dx = clientX - this._startX;
+        const dy = clientY - this._startY;
+
+        // Convert pixel delta to percentage delta
+        const dxPct = (dx / rect.width) * 100;
+        const dyPct = (dy / rect.height) * 100;
+
+        let newLeft = this._elStartLeft + dxPct;
+        let newTop = this._elStartTop + dyPct;
+
+        // Clamp to container bounds
+        newLeft = Math.max(0, Math.min(100, newLeft));
+        newTop = Math.max(0, Math.min(100, newTop));
+
+        this._dragEl.style.left = newLeft + '%';
+        this._dragEl.style.top = newTop + '%';
+      },
+
+      _endDrag() {
+        if (!this._dragEl) return;
+
+        const newLeft = parseFloat(this._dragEl.style.left);
+        const newTop = parseFloat(this._dragEl.style.top);
+
+        // Update GameState with new position
+        const building = GameState.propertyBuildings.find(b => b.id === this._dragBuildingId);
+        if (building) {
+          building.x = Math.round(newLeft * 10) / 10;
+          building.y = Math.round(newTop * 10) / 10;
+          console.log(`🏗️ Moved ${building.name} to (${building.x}%, ${building.y}%)`);
+        }
+
+        // Also update fixedPropertyPositions
+        const fixedProp = GameState.fixedPropertyPositions.find(b => b.id === this._dragBuildingId);
+        if (fixedProp) {
+          fixedProp.x = building ? building.x : Math.round(newLeft * 10) / 10;
+          fixedProp.y = building ? building.y : Math.round(newTop * 10) / 10;
+        }
+
+        this._dragEl.style.cursor = 'grab';
+        this._dragEl.style.zIndex = '100';
+        this._dragEl.style.opacity = '1';
+        this._dragEl = null;
+        this._dragBuildingId = null;
+      },
+
+      _bindDragEvents() {
+        const mapEl = document.getElementById('city-map');
+        if (!mapEl) return;
+        mapEl.addEventListener('mousedown', this._onMouseDown, true);
+        document.addEventListener('mousemove', this._onMouseMove, true);
+        document.addEventListener('mouseup', this._onMouseUp, true);
+        mapEl.addEventListener('touchstart', this._onTouchStart, { capture: true, passive: false });
+        document.addEventListener('touchmove', this._onTouchMove, { passive: false });
+        document.addEventListener('touchend', this._onTouchEnd, true);
+        // Prevent clicks from opening modals while in move mode
+        mapEl.addEventListener('click', this._onClickCapture, true);
+      },
+
+      _unbindDragEvents() {
+        const mapEl = document.getElementById('city-map');
+        if (!mapEl) return;
+        mapEl.removeEventListener('mousedown', this._onMouseDown, true);
+        document.removeEventListener('mousemove', this._onMouseMove, true);
+        document.removeEventListener('mouseup', this._onMouseUp, true);
+        mapEl.removeEventListener('touchstart', this._onTouchStart, true);
+        document.removeEventListener('touchmove', this._onTouchMove);
+        document.removeEventListener('touchend', this._onTouchEnd, true);
+        mapEl.removeEventListener('click', this._onClickCapture, true);
+      },
+
+      _onClickCapture(e) {
+        if (!BuildingMoveSystem.active) return;
+        const el = e.target.closest('.property-building');
+        if (el) {
+          e.stopPropagation();
+          e.preventDefault();
+        }
+      },
+
+      savePositions() {
+        // Save only position data (id, x, y) to Firebase globally
+        const positionData = GameState.propertyBuildings.map(b => ({
+          id: b.id,
+          x: b.x,
+          y: b.y
+        }));
+
+        // Save to Firebase so all players see the new positions
+        if (typeof database !== 'undefined' && database) {
+          const payload = { positions: positionData, updatedAt: Date.now() };
+          database.ref('gameConfig/buildingPositions').set(payload)
+            .then(() => {
+              console.log('🏗️ ✅ Building positions saved globally to Firebase');
+              alert('Building positions saved globally! All players will see the new layout.');
+            })
+            .catch((err) => {
+              console.error('🏗️ Firebase save failed:', err);
+              alert('Save failed: ' + err.message);
+            });
+        } else {
+          alert('Firebase not available - positions not saved globally.');
+        }
+
+        // Also save locally
+        try { Storage.save(); } catch (e) {}
+      },
+
+      // Load saved building positions from Firebase (called during init)
+      loadPositions() {
+        if (typeof database !== 'undefined' && database) {
+          database.ref('gameConfig/buildingPositions').once('value').then((snapshot) => {
+            const data = snapshot.val();
+            if (data && data.positions && Array.isArray(data.positions)) {
+              console.log('🏗️ Loading saved building positions from Firebase...');
+              let updated = 0;
+              data.positions.forEach(pos => {
+                // Update propertyBuildings positions (preserves ownership data)
+                const building = GameState.propertyBuildings.find(b => b.id === pos.id);
+                if (building) {
+                  building.x = pos.x;
+                  building.y = pos.y;
+                  updated++;
+                }
+                // Also update fixedPropertyPositions
+                const fixedProp = GameState.fixedPropertyPositions.find(b => b.id === pos.id);
+                if (fixedProp) {
+                  fixedProp.x = pos.x;
+                  fixedProp.y = pos.y;
+                }
+              });
+              console.log(`🏗️ ✅ Updated positions for ${updated} buildings from Firebase`);
+              // Re-render buildings with new positions
+              renderPropertyBuildings();
+            }
+          }).catch(err => {
+            console.warn('🏗️ Failed to load building positions from Firebase:', err);
+          });
+        }
+      }
+    };
+
+    window.BuildingMoveSystem = BuildingMoveSystem;
 
     window.CopNodeDebug = CopNodeDebug;
 
@@ -28765,6 +29067,11 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       console.log('[DEBUG] Initializing property buildings...');
       // Initialize property buildings (player-owned real estate)
       initPropertyBuildings();
+
+      // Load globally saved building positions from Firebase (admin can move buildings)
+      if (typeof BuildingMoveSystem !== 'undefined') {
+        BuildingMoveSystem.loadPositions();
+      }
       
       // ===== NUCLEAR OPTION: FORCE POSITION UPDATE AFTER INIT =====
       console.log('💥💥💥 NUCLEAR RESET: Forcing property position updates AFTER init...');
