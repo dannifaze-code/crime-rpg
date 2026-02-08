@@ -16831,10 +16831,8 @@ function ensureLandmarkProperties() {
       isAdmin() {
         const ADMIN_EMAIL = 'dannifaze@gmail.com';
         try {
-          const accountKey = `account_${GameState.accountId}`;
-          const accountData = localStorage.getItem(accountKey);
-          if (accountData) {
-            const account = JSON.parse(accountData);
+          const account = AccountManager.getAccount(GameState.accountId);
+          if (account) {
             return account.email && account.email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
           }
         } catch (e) {}
@@ -29480,13 +29478,11 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
     function checkAndShowAdminFeatures() {
       const ADMIN_EMAIL = 'dannifaze@gmail.com';
       
-      // Get current account from Firestore
-      const accountKey = `account_${GameState.accountId}`;
-      const accountData = localStorage.getItem(accountKey);
+      // Get current account from AccountManager
+      const account = AccountManager.getAccount(GameState.accountId);
       
-      if (accountData) {
+      if (account) {
         try {
-          const account = JSON.parse(accountData);
           const isAdmin = account.email && account.email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
           
           if (isAdmin) {
