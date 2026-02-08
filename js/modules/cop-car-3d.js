@@ -149,8 +149,8 @@ const CopCar3D = {
       { a: { x: 55.5, y: 40 }, b: { x: 58.5, y: 40 } },
       { a: { x: 72, y: 63.5 }, b: { x: 72, y: 66.5 } }
     ],
-    carWidthPercentUnits: 3.0,
-    carLengthPercentUnits: 5.0,
+    carWidthPercentUnits: 2.0,
+    carLengthPercentUnits: 3.5,
     carWidthSlimFactor: 1.0,
     carLengthStretchFactor: 1.0,
 
@@ -159,9 +159,9 @@ const CopCar3D = {
     yawLerpStrength: 10,
     rollLerpStrength: 8,
 
-    // GLB models use -Z forward (glTF convention).
-    // Math.PI rotates 180° so the front faces the direction of travel.
-    modelYawOffset: Math.PI,
+    // GLB model's forward is along the X-axis.
+    // -PI/2 rotates so the front faces the direction of travel.
+    modelYawOffset: -Math.PI / 2,
 
     // When CopCarSystem.speed is basically 0, snap position to prevent micro-glide
     stopSnapSpeed: 0.03,

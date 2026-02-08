@@ -15690,16 +15690,6 @@ function ensureLandmarkProperties() {
         const dt = Math.min(0.05, Math.max(0.001, (now - this.lastUpdateTs) / 1000));
         this.lastUpdateTs = now;
 
-        // Pause at nodes (intersection stop)
-        if (this.pauseUntil && now < this.pauseUntil) {
-          this.speed = 0;
-          this.copPose.speed = 0;
-          this.renderCopCar();
-          this.animationFrameId = requestAnimationFrame(() => this.animateMovement());
-          return;
-        }
-        this.pauseUntil = 0;
-
         // Pick next target node if needed
         if (!this._targetNodeId) {
           this._pickNextNode();
@@ -15713,18 +15703,11 @@ function ensureLandmarkProperties() {
             const dist = Math.hypot(dx, dy);
 
             if (dist < 0.3) {
-              // Snap to node position to prevent drift
-              this.copPose.x = target.x;
-              this.copPose.y = target.y;
-              this.speed = 0;
-              this.copPose.speed = 0;
-
+              // Arrived at node — immediately pick next for seamless movement
               this._lastNodeId = this._currentNodeId;
               this._currentNodeId = this._targetNodeId;
               this._targetNodeId = null;
-
-              // Brief pause at node
-              this.pauseUntil = now + (this.stopMinMs + Math.random() * (this.stopMaxMs - this.stopMinMs));
+              this._pickNextNode();
             } else {
               // Smooth heading toward target
               const targetHeading = Math.atan2(dx, dy);
