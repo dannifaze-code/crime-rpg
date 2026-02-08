@@ -16119,6 +16119,13 @@ function ensureLandmarkProperties() {
           this.svgEl.style.pointerEvents = 'none';
         }
 
+        // Restore buildings if hidden during editing
+        if (this._buildingsHidden) {
+          this._buildingsHidden = false;
+          const buildings = document.querySelectorAll('.property-building');
+          buildings.forEach(el => { el.style.display = ''; });
+        }
+
         this._removeToolbar();
         this._unbindEditEvents();
         this._rebuildNodes();
@@ -16180,6 +16187,28 @@ function ensureLandmarkProperties() {
           this._bindEditEvents();
         });
         toolbar.appendChild(linkBtn);
+
+        // Toggle Buildings visibility button
+        const bldgBtn = document.createElement('button');
+        bldgBtn.id = 'cop-editor-bldg-btn';
+        this._buildingsHidden = this._buildingsHidden || false;
+        const updateBldgBtn = () => {
+          bldgBtn.textContent = this._buildingsHidden ? 'Show Bldgs' : 'Hide Bldgs';
+          bldgBtn.style.cssText = btnStyle + (this._buildingsHidden
+            ? 'background:#4d3a1a;color:#fc6;border-color:#fc6;'
+            : 'background:#1a3a4d;color:#6cf;border-color:#6cf;');
+        };
+        updateBldgBtn();
+        bldgBtn.addEventListener('click', () => {
+          this._buildingsHidden = !this._buildingsHidden;
+          const buildings = document.querySelectorAll('.property-building');
+          buildings.forEach(el => {
+            el.style.display = this._buildingsHidden ? 'none' : '';
+          });
+          updateBldgBtn();
+          this._setStatus(this._buildingsHidden ? 'Buildings hidden. Click Show Bldgs to restore.' : 'Buildings visible.');
+        });
+        toolbar.appendChild(bldgBtn);
 
         // Save button
         const saveBtn = document.createElement('button');
