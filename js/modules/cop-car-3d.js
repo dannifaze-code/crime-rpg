@@ -123,6 +123,9 @@ const CopCar3D = {
   _scaleRetryCount: 0,
   _maxScaleRetries: 10,
 
+  // Visibility toggle (for instant tab-switch without full dispose/reinit)
+  _hidden: false,
+
   config: {
     camera: {
       fov: 45,
@@ -444,6 +447,11 @@ const CopCar3D = {
     if (!model) return result;
     const debugEnabled = this._isDebugEnabled();
     if (this.copRoot) {
+      // Prevent adding duplicate: if model is already a child, skip
+      if (this.copRoot.children.includes(model)) {
+        result.success = true;
+        return result;
+      }
       try {
         if (model.parent && model.parent !== this.copRoot) {
           model.parent.remove(model);
@@ -558,6 +566,26 @@ const CopCar3D = {
     try {
       if (this.canvas && this.canvas.parentNode) this.canvas.parentNode.removeChild(this.canvas);
     } catch (e) {}
+
+    // Clean up any previous scene objects to prevent duplicate cop cars
+    if (this.scene) {
+      try {
+        if (this.copRoot && this.scene.children.includes(this.copRoot)) {
+          this.scene.remove(this.copRoot);
+        }
+        if (this.model && this.model.parent) {
+          this.model.parent.remove(this.model);
+        }
+      } catch (e) {
+        console.warn('[CopCar3D] Scene cleanup error:', e);
+      }
+    }
+    if (this.renderer) {
+      try { this.renderer.dispose(); } catch (e) {
+        console.warn('[CopCar3D] Renderer dispose error:', e);
+      }
+      this.renderer = null;
+    }
 
     this.scene = new THREE.Scene();
     this.copRoot = new THREE.Group();
@@ -743,6 +771,12 @@ const CopCar3D = {
   },
 
   async _loadModel() {
+    // Prevent loading a duplicate model if one is already loaded
+    if (this.modelLoaded && this.model && this.copRoot && this.copRoot.children.includes(this.model)) {
+      console.log('[CopCar3D] Model already loaded, skipping duplicate load');
+      return;
+    }
+
     console.log('[CopCar3D] Loading:', this.modelPath);
 
     return new Promise((resolve, reject) => {
@@ -1557,6 +1591,57 @@ const CopCar3D = {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.config.maxPixelRatio));
     this.renderer.setSize(width, height, false);
     this._laneWidthPercent = this._calculateLaneWidthPercent();
+  },
+
+  /**
+   * Lightweight hide: pause rendering and hide the overlay layer.
+   * The scene, renderer, and loaded model are kept alive so re-showing is instant.
+   */
+  hide() {
+    this._hidden = true;
+    // Pause render loop
+    if (this.animationFrameId) {
+      cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
+    }
+    // Hide the overlay layer via CSS (no layout recalculation)
+    if (this.layer) {
+      this.layer.style.visibility = 'hidden';
+    }
+  },
+
+  /**
+   * Lightweight show: resume rendering and show the overlay layer.
+   * If the scene was never initialized, falls through to full init().
+   */
+  show() {
+    this._hidden = false;
+    if (!this.isInitialized || !this.renderer || !this.scene) {
+      // Not yet initialized — do a full init
+      return this.init();
+    }
+    // Re-attach DOM references in case they changed
+    this.container = document.getElementById('map-viewport') || document.getElementById('city-map');
+    this.mapWorldEl = document.getElementById('map-world');
+    this.copCarElement = document.getElementById('cop-car');
+    this._prepareMarkerElement();
+    this._ensureLayer();
+    // Show the overlay layer
+    if (this.layer) {
+      this.layer.style.visibility = '';
+      if (this.canvas && !this.layer.contains(this.canvas)) {
+        this.layer.appendChild(this.canvas);
+      }
+    }
+    // Resize to current container dimensions
+    const dims = this._getWorldBaseSize();
+    if (dims.w > 0 && dims.h > 0) {
+      this._handleResize(dims.w, dims.h);
+    }
+    this._syncLayerTransform();
+    // Restart render loop
+    if (!this.animationFrameId) this._startLoop();
+    return Promise.resolve(true);
   },
 
   dispose() {
