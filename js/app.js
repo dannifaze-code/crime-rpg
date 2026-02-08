@@ -12415,16 +12415,8 @@ function updateTurfDefense(dt) {
       type: 'policeStation',
       name: 'Police Station',
       isBuilding: true,
-    },
-    {
-      id: 'drugLab',
-      x: (GameState.fixedLandmarkPositions.drugLab && GameState.fixedLandmarkPositions.drugLab.x) || 31,
-      y: (GameState.fixedLandmarkPositions.drugLab && GameState.fixedLandmarkPositions.drugLab.y) || 42,
-      icon: '🧪',
-      type: 'drugLab',
-      name: 'Drug Lab',
-      isBuilding: true,
     }
+    // NOTE: drugLab emoji removed — the 3D building + DrugLabSystem hitbox handles click interaction
     // NOTE: gunShop, casino, gangHQ, etc. are now in propertyBuildings, not mapIcons
   ];
         ProceduralMapRenderer.rendered = false;
@@ -15090,10 +15082,10 @@ function updateTurfDefense(dt) {
 
       // Create landmark icons using fixed positions (ONLY non-purchasable landmarks)
       // All purchasable properties are in fixedPropertyPositions to avoid duplicates
+      // Drug Lab emoji removed — the 3D building + DrugLabSystem hitbox handles click interaction
       GameState.mapIcons = [
         { type: 'safeHouse', x: positions.safeHouse.x, y: positions.safeHouse.y, icon: '🏠', label: '🏠 Safe House', state: 'active', isBuilding: true },
-        { type: 'policeStation', x: positions.policeStation.x, y: positions.policeStation.y, icon: '👮', label: '👮 Police Station', state: 'active', isBuilding: true },
-        { type: 'drugLab', x: positions.drugLab.x, y: positions.drugLab.y, icon: '🧪', label: '🧪 Drug Lab', state: 'active', isBuilding: true }
+        { type: 'policeStation', x: positions.policeStation.x, y: positions.policeStation.y, icon: '👮', label: '👮 Police Station', state: 'active', isBuilding: true }
       ];
       
       // Set character at safe house
@@ -20271,7 +20263,7 @@ function ensureLandmarkProperties() {
     // ========================================
     function initializeMapIcons() {
       // Only initialize if mapIcons is empty and fixedLandmarkPositions exists
-      // Note: Non-purchasable landmark buildings only (safeHouse, policeStation, drugLab)
+      // Note: Non-purchasable landmark buildings only (safeHouse, policeStation)
       // All purchasable buildings are in propertyBuildings via fixedPropertyPositions
       if (!GameState.mapIcons || GameState.mapIcons.length === 0) {
         const defaultPositions = { safeHouse: { x: 12, y: 45 }, policeStation: { x: 50, y: 30 }, drugLab: { x: 31, y: 42 } };
@@ -20282,17 +20274,17 @@ function ensureLandmarkProperties() {
           drugLab: (raw.drugLab && typeof raw.drugLab.x === 'number') ? raw.drugLab : defaultPositions.drugLab
         };
         
+        // Drug Lab emoji removed — the 3D building + DrugLabSystem hitbox handles click interaction
         GameState.mapIcons = [
           { type: 'safeHouse', x: positions.safeHouse.x, y: positions.safeHouse.y, icon: '🏠', label: '🏠 Safe House', state: 'active', isBuilding: true },
-          { type: 'policeStation', x: positions.policeStation.x, y: positions.policeStation.y, icon: '👮', label: '👮 Police Station', state: 'active', isBuilding: true },
-          { type: 'drugLab', x: positions.drugLab.x, y: positions.drugLab.y, icon: '🧪', label: '🧪 Drug Lab', state: 'active', isBuilding: true }
+          { type: 'policeStation', x: positions.policeStation.x, y: positions.policeStation.y, icon: '👮', label: '👮 Police Station', state: 'active', isBuilding: true }
         ];
         
         // Update character and safe house positions to match safe house icon
         GameState.character.position = { x: positions.safeHouse.x, y: positions.safeHouse.y };
         GameState.safeHouse.position = { x: positions.safeHouse.x, y: positions.safeHouse.y };
         
-        console.log(`[initializeMapIcons] Created ${GameState.mapIcons.length} landmark building icons (safeHouse, policeStation, drugLab)`);
+        console.log(`[initializeMapIcons] Created ${GameState.mapIcons.length} landmark building icons (safeHouse, policeStation)`);
       }
     }
 
