@@ -6347,6 +6347,11 @@ function scheduleTurfDefenseSpriteScaleMatch() {
     function startTurfDefense() {
       console.log('🛡️ [TurfDefense] Starting Turf Defense mode...');
 
+      // Pre-render 3D enemy sprites for canvas drawing
+      if (window.Enemy3DRenderer && typeof Enemy3DRenderer.preloadEnemySprites === 'function') {
+        Enemy3DRenderer.preloadEnemySprites();
+      }
+
       // Get map dimensions
       const mapWidth = (GameState.map && GameState.map.width) || 30;
       const mapHeight = (GameState.map && GameState.map.height) || 30;
@@ -8823,28 +8828,51 @@ function updateTurfDefense(dt) {
         // Use visualHP for smooth animation
         const hpPercent = enemy.visualHP / enemy.maxHP;
 
-        // Enemy body (circle)
-        ctx.beginPath();
         const r = 15 * ((GameState.turfDefense && GameState.turfDefense._enemyScaleFactor) ? GameState.turfDefense._enemyScaleFactor : 1);
-        ctx.arc(enemy.x, enemy.y, r, 0, Math.PI * 2);
 
-        // Color based on state
-        if (enemy.state === 'attackingPlayer') {
-          ctx.fillStyle = '#FF5722'; // Red when attacking player
-        } else if (enemy.state === 'attackingBuilding') {
-          ctx.fillStyle = '#FF9800'; // Orange when attacking building
-        } else if (enemy.aggroed) {
-          ctx.fillStyle = '#F44336'; // Red when aggroed but moving
-        } else {
-          ctx.fillStyle = '#9C27B0'; // Purple when not aggroed
+        // Try to draw cached 3D enemy sprite
+        let drew3D = false;
+        if (window.Enemy3DRenderer && Enemy3DRenderer._spriteCacheReady) {
+          // Assign a random enemy type on first render if not set
+          if (!enemy._spriteId) {
+            const ids = (typeof ENEMY_SPRITE_IDS !== 'undefined') ? ENEMY_SPRITE_IDS : [];
+            enemy._spriteId = ids.length > 0 ? ids[Math.floor(Math.random() * ids.length)] : null;
+          }
+          const sprite = enemy._spriteId ? Enemy3DRenderer.getCachedSprite(enemy._spriteId) : Enemy3DRenderer.getRandomCachedSprite();
+          if (sprite && sprite.complete) {
+            const drawSize = r * 3;
+            ctx.save();
+            // Tint based on state
+            if (enemy.state === 'attackingPlayer' || enemy.aggroed) {
+              ctx.globalAlpha = 0.85;
+            }
+            ctx.drawImage(sprite, enemy.x - drawSize / 2, enemy.y - drawSize / 2, drawSize, drawSize);
+            ctx.restore();
+            drew3D = true;
+          }
         }
 
-        ctx.fill();
+        // Fallback to circle if 3D sprite not available
+        if (!drew3D) {
+          ctx.beginPath();
+          ctx.arc(enemy.x, enemy.y, r, 0, Math.PI * 2);
 
-        // Enemy outline
-        ctx.strokeStyle = enemy.aggroed ? '#fff' : '#666';
-        ctx.lineWidth = 2;
-        ctx.stroke();
+          // Color based on state
+          if (enemy.state === 'attackingPlayer') {
+            ctx.fillStyle = '#FF5722';
+          } else if (enemy.state === 'attackingBuilding') {
+            ctx.fillStyle = '#FF9800';
+          } else if (enemy.aggroed) {
+            ctx.fillStyle = '#F44336';
+          } else {
+            ctx.fillStyle = '#9C27B0';
+          }
+
+          ctx.fill();
+          ctx.strokeStyle = enemy.aggroed ? '#fff' : '#666';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
 
         // Animated HP bar
         const barWidth = 34;

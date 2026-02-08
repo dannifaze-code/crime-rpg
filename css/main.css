@@ -5239,6 +5239,20 @@
   transform: scaleX(1);
 }
 
+/* 3D Enemy GLB model container */
+.enemy-3d-container {
+  width: clamp(100px, 22vw, 180px);
+  height: clamp(120px, 28vh, 200px);
+  position: relative;
+}
+
+.enemy-3d-container .enemy-3d-canvas {
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+  filter: drop-shadow(0 6px 12px rgba(0,0,0,0.5));
+}
+
 /* ====== MOBILE RESPONSIVE BATTLE SPRITES ====== */
 /* Mobile-first: smaller screens get proportional sizing */
 /* Player sprite is larger (~1.8x-2.5x base), enemy matches proportionally */
@@ -5256,6 +5270,11 @@
     /* Slightly smaller on mobile for depth, but still visible */
     max-width: clamp(90px, 25vw, 150px);
     max-height: clamp(110px, 30vh, 180px);
+  }
+
+  .enemy-3d-container {
+    width: clamp(90px, 25vw, 150px);
+    height: clamp(110px, 30vh, 180px);
   }
   
   .battle-enemy-sprite-container {
@@ -5281,6 +5300,11 @@
     /* Smaller on narrow phones for depth */
     max-width: clamp(80px, 22vw, 120px);
     max-height: clamp(100px, 26vh, 150px);
+  }
+
+  .enemy-3d-container {
+    width: clamp(80px, 22vw, 120px);
+    height: clamp(100px, 26vh, 150px);
   }
   
   .battle-enemy-sprite-container {
