@@ -9,6 +9,12 @@
  *   Enemy3DRenderer.dispose()                              — cleans up the current scene
  */
 
+// Shared rendering constants
+var ENEMY_3D_CAM_POS = { x: 0, y: 1.2, z: 3.5 };
+var ENEMY_3D_CAM_TARGET = { x: 0, y: 0.8, z: 0 };
+var ENEMY_3D_TARGET_HEIGHT = 2.0;
+var ENEMY_3D_CAM_FOV = 40;
+
 const Enemy3DRenderer = {
   // Three.js objects for the battle scene inline renderer
   scene: null,
@@ -93,9 +99,9 @@ const Enemy3DRenderer = {
     this.scene = new THREE.Scene();
 
     // Camera — perspective, looking at the model
-    this.camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 100);
-    this.camera.position.set(0, 1.2, 3.5);
-    this.camera.lookAt(0, 0.8, 0);
+    this.camera = new THREE.PerspectiveCamera(ENEMY_3D_CAM_FOV, w / h, 0.1, 100);
+    this.camera.position.set(ENEMY_3D_CAM_POS.x, ENEMY_3D_CAM_POS.y, ENEMY_3D_CAM_POS.z);
+    this.camera.lookAt(ENEMY_3D_CAM_TARGET.x, ENEMY_3D_CAM_TARGET.y, ENEMY_3D_CAM_TARGET.z);
 
     // Lighting — dramatic crime-game feel
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
@@ -146,10 +152,9 @@ const Enemy3DRenderer = {
         const center = new THREE.Vector3();
         box.getCenter(center);
 
-        // Normalize to ~2 units tall
+        // Normalize to fit in view
         const maxDim = Math.max(size.x, size.y, size.z);
-        const targetHeight = 2.0;
-        const scale = maxDim > 0.0001 ? targetHeight / maxDim : 1;
+        const scale = maxDim > 0.0001 ? ENEMY_3D_TARGET_HEIGHT / maxDim : 1;
         root.scale.setScalar(scale);
 
         // Re-center so model is grounded and centered
@@ -295,14 +300,16 @@ const Enemy3DRenderer = {
     width = width || 64;
     height = height || 64;
 
+    // Store logical dimensions for restoration
+    var prevW = parseInt(this.canvas.style.width) || 180;
+    var prevH = parseInt(this.canvas.style.height) || 200;
+
     // Temporarily resize for snapshot
-    var prevW = this.canvas.width;
-    var prevH = this.canvas.height;
     this.renderer.setSize(width, height);
     this.renderer.render(this.scene, this.camera);
     var dataUrl = this.canvas.toDataURL('image/png');
 
-    // Restore
+    // Restore original logical dimensions
     this.renderer.setSize(prevW, prevH);
     return dataUrl;
   },
@@ -389,9 +396,9 @@ const Enemy3DRenderer = {
     }
 
     var offScene = new THREE.Scene();
-    var offCamera = new THREE.PerspectiveCamera(40, width / height, 0.1, 100);
-    offCamera.position.set(0, 1.2, 3.5);
-    offCamera.lookAt(0, 0.8, 0);
+    var offCamera = new THREE.PerspectiveCamera(ENEMY_3D_CAM_FOV, width / height, 0.1, 100);
+    offCamera.position.set(ENEMY_3D_CAM_POS.x, ENEMY_3D_CAM_POS.y, ENEMY_3D_CAM_POS.z);
+    offCamera.lookAt(ENEMY_3D_CAM_TARGET.x, ENEMY_3D_CAM_TARGET.y, ENEMY_3D_CAM_TARGET.z);
 
     // Lighting
     offScene.add(new THREE.AmbientLight(0xffffff, 0.6));
@@ -411,7 +418,7 @@ const Enemy3DRenderer = {
       box.getCenter(center);
 
       var maxDim = Math.max(size.x, size.y, size.z);
-      var scale = maxDim > 0.0001 ? 2.0 / maxDim : 1;
+      var scale = maxDim > 0.0001 ? ENEMY_3D_TARGET_HEIGHT / maxDim : 1;
       root.scale.setScalar(scale);
 
       box.setFromObject(root);
