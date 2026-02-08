@@ -1172,20 +1172,16 @@ Then tighten the rules later.`);
       async onUserSignedIn(user) {
         console.log('[GoogleAuth] Handling sign-in for:', user.email);
 
-        // CRITICAL FIX: Remove account overlay immediately to prevent black screen
-        // This must happen BEFORE any async operations to ensure the overlay is gone
+        // Show loading screen immediately
+        this.showLoadingScreen('connecting');
+
+        // Remove account overlay
         const overlay = document.getElementById('account-overlay');
-        if (overlay) {
-          console.log('[GoogleAuth] ✅ Removing account overlay immediately on sign-in');
-          overlay.remove();
-        }
-        
-        // CRITICAL FIX: Show app div immediately
+        if (overlay) overlay.remove();
+
+        // Show app div (behind loading screen)
         const app = document.getElementById('app');
-        if (app) {
-          app.style.display = 'flex';
-          console.log('[GoogleAuth] ✅ App div displayed immediately on sign-in');
-        }
+        if (app) app.style.display = 'flex';
 
         // Safety: make sure no gameplay modal is open during auth handoff.
         // (Some devices can replay a tap/click during the sign-in transition, which may
@@ -1232,29 +1228,11 @@ Then tighten the rules later.`);
         ensureGameStateSchema();
 
         // BULLETPROOF DATA PROTECTION: Create backup before ANY data operations
-        // This ensures we can recover if something goes wrong
         if (typeof AccountDataProtection !== 'undefined') {
           AccountDataProtection.createEmergencyBackup(user.uid, 'pre-signin-safety');
         }
 
-        // FORCED RECOVERY: Special handling for specific account that needs recovery
-        // Firebase UID: 7YqmKiUM9KdtxCIQsET14KWlK2K2 (dannifaze@gmail.com main account)
-        const FORCE_RECOVERY_UID = '7YqmKiUM9KdtxCIQsET14KWlK2K2';
-        if (user.uid === FORCE_RECOVERY_UID) {
-          console.log('[GoogleAuth] 🔧 FORCED RECOVERY MODE for account:', user.uid);
-          this.showRecoveryAttemptUI(user.email);
-          
-          // Use deepRecoverAccount to search all possible data sources (auto-confirm enabled)
-          const recovered = await window.deepRecoverAccount(user.uid, user.email, true);
-          if (recovered) {
-            console.log('[GoogleAuth] ✅ FORCED RECOVERY SUCCESSFUL for:', user.email);
-            // Continue to normal flow after recovery
-          } else {
-            console.warn('[GoogleAuth] ⚠️ Forced recovery found no data - proceeding with normal sign-in');
-          }
-          
-          // Proceed with normal sign-in flow after recovery attempt
-        }
+        this.showLoadingScreen('authenticating');
 
         // Check if this is first time login (no cloud data yet)
         const snapshot = await database.ref('users/' + user.uid).once('value');
@@ -1263,44 +1241,38 @@ Then tighten the rules later.`);
         // BULLETPROOF: Use multi-layer verification before treating as new user
         const isDefinitelyNewUser = await AccountDataProtection.shouldTreatAsNewUser(user.uid, cloudData);
         
+        this.showLoadingScreen('loading-data');
+
         if (isDefinitelyNewUser) {
-          // NEW USER - Create cloud profile (verified through multiple checks)
-          console.log('[GoogleAuth] ✅ VERIFIED NEW USER - creating cloud profile');
+          console.log('[GoogleAuth] VERIFIED NEW USER - creating cloud profile');
           await this.createCloudProfile(user);
         } else if (!cloudData || !cloudData.gameState) {
-          // POTENTIAL DATA LOSS SCENARIO - Try recovery before creating new profile
-          console.warn('[GoogleAuth] ⚠️ No cloud data but user has backup history - ATTEMPTING RECOVERY');
-          
-          // Show recovery attempt UI
-          this.showRecoveryAttemptUI(user.email);
-          
-          // Try cloud backup first
+          // Missing data — attempt recovery silently
+          this.showLoadingScreen('recovering');
+          console.log('[GoogleAuth] No cloud data, attempting silent recovery...');
+
           const cloudBackupData = await AccountDataProtection.recoverFromCloudBackup(user.uid);
           if (cloudBackupData) {
-            console.log('[GoogleAuth] ✅ RECOVERED from cloud backup!');
+            console.log('[GoogleAuth] Recovered from cloud backup');
             Object.assign(GameState, cloudBackupData);
             ensureGameStateSchema();
-            // Re-save to main cloud location
             await this.saveToCloud();
             await this.loadCloudData(user);
           } else {
-            // Try local backup
             const localBackupData = AccountDataProtection.restoreFromBackup(user.uid);
             if (localBackupData) {
-              console.log('[GoogleAuth] ✅ RECOVERED from local backup!');
+              console.log('[GoogleAuth] Recovered from local backup');
               Object.assign(GameState, localBackupData);
               ensureGameStateSchema();
-              // Save to cloud
               await this.saveToCloud();
               await this.loadCloudData(user);
             } else {
-              // No recovery possible - truly new user
               console.log('[GoogleAuth] No backups found - treating as new user');
               await this.createCloudProfile(user);
             }
           }
         } else {
-          // RETURNING USER - Load cloud data
+          // RETURNING USER
           console.log('[GoogleAuth] Returning user - loading cloud data');
           await this.loadCloudData(user);
         }
@@ -1366,71 +1338,66 @@ Then tighten the rules later.`);
         try {
           console.log('[GoogleAuth] Creating cloud profile for:', user.email);
           
-          // Rebuild app structure
+          this.showLoadingScreen('loading-data');
+
           const app = document.getElementById('app');
           if (app) {
-            app.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100vh; color: #e0e0e0; font-size: 18px;">🎮 Setting up your account...</div>';
-            
-            setTimeout(async () => {
-              // Rebuild app HTML structure
-              if (typeof AccountUI !== 'undefined' && typeof AccountUI.rebuildAppStructure === 'function') {
-                AccountUI.rebuildAppStructure();
-              }
-              
-              // Reset to fresh game state
-              if (typeof resetToDefaultState === 'function') {
-                resetToDefaultState();
-              }
-              
-              // Set user info
-              GameState.accountId = user.uid;
-              GameState.player.id = user.uid;
-              GameState.player.name = user.displayName || user.email.split('@')[0];
-              
-              // Save to cloud
-              await database.ref('users/' + user.uid).set({
-                email: user.email,
-                displayName: user.displayName || user.email.split('@')[0],
-                createdAt: Date.now(),
-                lastLogin: Date.now(),
-                gameState: GameState
-              });
-              
-              console.log('[GoogleAuth] ✅ Cloud profile created');
-              
-              // Initialize game
-              if (typeof initializeGame === 'function') {
-                initializeGame();
-                
-                // Re-initialize zoom controls after DOM rebuild (fixes zoom not working after login)
-                setTimeout(() => {
-                  if (typeof TurfTab !== 'undefined' && typeof TurfTab.initZoomControls === 'function') {
-                    TurfTab.initZoomControls();
-                    console.log('[GoogleAuth] ✅ Zoom controls re-initialized');
-                  }
-                  // Re-initialize Turf Defense button after login
-                  if (typeof TurfTab !== 'undefined' && typeof TurfTab.initTurfDefenseButton === 'function') {
-                    TurfTab.initTurfDefenseButton();
-                    console.log('[GoogleAuth] ✅ Turf Defense button re-initialized');
-                  }
-                }, 300);
-                
-                // Force sprite load after 500ms
-                setTimeout(() => {
-                  if (typeof window.autoLoadEmbeddedSpriteZip === 'function') {
-                    window.autoLoadEmbeddedSpriteZip();
-                  }
-                  // Also ensure sprite is created
-                  if (typeof TurfTab !== 'undefined' && typeof TurfTab.ensureRoamSprite === 'function') {
-                    TurfTab.ensureRoamSprite();
-                    console.log('[GoogleAuth] ✅ Sprite ensured after load');
-                  }
-                }, 500);
-              }
-            }, 100);
+            if (typeof AccountUI !== 'undefined' && typeof AccountUI.rebuildAppStructure === 'function') {
+              AccountUI.rebuildAppStructure();
+            }
+
+            // Reset to fresh game state
+            if (typeof resetToDefaultState === 'function') {
+              resetToDefaultState();
+            }
+
+            GameState.accountId = user.uid;
+            GameState.player.id = user.uid;
+            GameState.player.name = user.displayName || user.email.split('@')[0];
+
+            // Save to cloud
+            await database.ref('users/' + user.uid).set({
+              email: user.email,
+              displayName: user.displayName || user.email.split('@')[0],
+              createdAt: Date.now(),
+              lastLogin: Date.now(),
+              gameState: GameState
+            });
+
+            console.log('[GoogleAuth] Cloud profile created');
+
+            this.showLoadingScreen('preparing');
+
+            if (typeof initializeGame === 'function') {
+              initializeGame();
+
+              this.showLoadingScreen('sprites');
+
+              setTimeout(() => {
+                if (typeof TurfTab !== 'undefined' && typeof TurfTab.initZoomControls === 'function') {
+                  TurfTab.initZoomControls();
+                }
+                if (typeof TurfTab !== 'undefined' && typeof TurfTab.initTurfDefenseButton === 'function') {
+                  TurfTab.initTurfDefenseButton();
+                }
+              }, 300);
+
+              setTimeout(() => {
+                if (typeof window.autoLoadEmbeddedSpriteZip === 'function') {
+                  window.autoLoadEmbeddedSpriteZip();
+                }
+                if (typeof TurfTab !== 'undefined' && typeof TurfTab.ensureRoamSprite === 'function') {
+                  TurfTab.ensureRoamSprite();
+                }
+              }, 500);
+            }
+
+            this.showLoadingScreen('ready');
+            setTimeout(() => this.hideLoadingScreen(), 400);
           }
         } catch (error) {
           console.error('[GoogleAuth] Failed to create cloud profile:', error);
+          this.hideLoadingScreen();
         }
       },
       
@@ -1438,17 +1405,17 @@ Then tighten the rules later.`);
       async loadCloudData(user) {
         try {
           console.log('[GoogleAuth] Loading cloud data for:', user.email);
-          
+          this.showLoadingScreen('loading-data');
+
           // Rebuild app structure
           const app = document.getElementById('app');
           if (app) {
-            app.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100vh; color: #e0e0e0; font-size: 18px;">🎮 Loading your progress...</div>';
-            
-            setTimeout(async () => {
-              // Rebuild app HTML structure
-              if (typeof AccountUI !== 'undefined' && typeof AccountUI.rebuildAppStructure === 'function') {
-                AccountUI.rebuildAppStructure();
-              }
+            // Rebuild app HTML structure immediately (loading screen covers it)
+            if (typeof AccountUI !== 'undefined' && typeof AccountUI.rebuildAppStructure === 'function') {
+              AccountUI.rebuildAppStructure();
+            }
+
+            await (async () => {
               
               const snapshot = await database.ref('users/' + user.uid).once('value');
               const userData = snapshot.val();
@@ -1490,40 +1457,44 @@ Then tighten the rules later.`);
               
               // Update last login
               await database.ref('users/' + user.uid + '/lastLogin').set(Date.now());
-              
+
+              this.showLoadingScreen('preparing');
+
               // Initialize game
               if (typeof initializeGame === 'function') {
                 initializeGame();
-                
-                // Re-initialize zoom controls after DOM rebuild (fixes zoom not working after login)
+
+                this.showLoadingScreen('sprites');
+
+                // Re-initialize zoom controls after DOM rebuild
                 setTimeout(() => {
                   if (typeof TurfTab !== 'undefined' && typeof TurfTab.initZoomControls === 'function') {
                     TurfTab.initZoomControls();
-                    console.log('[GoogleAuth] ✅ Zoom controls re-initialized');
                   }
-                  // Re-initialize Turf Defense button after login
                   if (typeof TurfTab !== 'undefined' && typeof TurfTab.initTurfDefenseButton === 'function') {
                     TurfTab.initTurfDefenseButton();
-                    console.log('[GoogleAuth] ✅ Turf Defense button re-initialized');
                   }
                 }, 300);
-                
-                // Force sprite load after 500ms
+
+                // Force sprite load
                 setTimeout(() => {
                   if (typeof window.autoLoadEmbeddedSpriteZip === 'function') {
                     window.autoLoadEmbeddedSpriteZip();
                   }
-                  // Also ensure sprite is created
                   if (typeof TurfTab !== 'undefined' && typeof TurfTab.ensureRoamSprite === 'function') {
                     TurfTab.ensureRoamSprite();
-                    console.log('[GoogleAuth] ✅ Sprite ensured after load');
                   }
                 }, 500);
               }
-            }, 100);
+
+              // Show ready and dismiss loading screen
+              this.showLoadingScreen('ready');
+              setTimeout(() => this.hideLoadingScreen(), 400);
+            })();
           }
         } catch (error) {
           console.error('[GoogleAuth] Failed to load cloud data:', error);
+          this.hideLoadingScreen();
         }
       },
       
@@ -1629,66 +1600,57 @@ Then tighten the rules later.`);
       },
       
       // Show recovery attempt UI overlay
-      showRecoveryAttemptUI(email) {
-        const existingOverlay = document.getElementById('recovery-attempt-overlay');
-        if (existingOverlay) existingOverlay.remove();
-        
-        const overlay = document.createElement('div');
-        overlay.id = 'recovery-attempt-overlay';
-        overlay.style.cssText = `
-          position: fixed;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-          background: rgba(0, 0, 0, 0.9);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 10000;
-          font-family: system-ui, -apple-system, sans-serif;
-        `;
-        
-        overlay.innerHTML = `
-          <div style="
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            border: 2px solid #e94560;
-            border-radius: 12px;
-            padding: 30px;
-            max-width: 400px;
-            text-align: center;
-            color: #fff;
-            box-shadow: 0 0 30px rgba(233, 69, 96, 0.3);
-          ">
-            <div style="font-size: 48px; margin-bottom: 15px;">🔍</div>
-            <h2 style="margin: 0 0 15px 0; color: #e94560;">Account Recovery</h2>
-            <p style="margin: 0 0 20px 0; opacity: 0.9; line-height: 1.5;">
-              Searching for your account data...
-              <br><br>
-              <strong>${email || 'Unknown'}</strong>
-            </p>
-            <div id="recovery-status" style="
-              background: rgba(255,255,255,0.1);
-              border-radius: 8px;
-              padding: 15px;
-              margin-top: 15px;
-              font-size: 14px;
-              text-align: left;
-            ">
-              <div>⏳ Checking cloud storage...</div>
-              <div>⏳ Checking backup storage...</div>
-              <div>⏳ Checking local backups...</div>
+      // Loading screen shown during sign-in and data loading
+      _loadingEl: null,
+      showLoadingScreen(step) {
+        if (!this._loadingEl) {
+          const overlay = document.createElement('div');
+          overlay.id = 'game-loading-screen';
+          overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:linear-gradient(135deg,#0a0a1a 0%,#1a1a2e 50%,#0f3460 100%);display:flex;align-items:center;justify-content:center;z-index:10000;font-family:system-ui,-apple-system,sans-serif;';
+          overlay.innerHTML = `
+            <div style="text-align:center;color:#fff;max-width:320px;padding:20px;">
+              <div style="font-size:56px;margin-bottom:12px;filter:drop-shadow(0 0 12px rgba(233,69,96,0.5));">🎮</div>
+              <div style="font-size:22px;font-weight:700;margin-bottom:6px;letter-spacing:1px;">HEATLINE</div>
+              <div style="font-size:12px;opacity:0.5;margin-bottom:24px;letter-spacing:3px;">UNDERWORLD</div>
+              <div id="loading-progress-bar" style="width:100%;height:3px;background:rgba(255,255,255,0.1);border-radius:2px;overflow:hidden;margin-bottom:16px;">
+                <div id="loading-progress-fill" style="height:100%;width:0%;background:linear-gradient(90deg,#e94560,#0f3460);border-radius:2px;transition:width 0.4s ease;"></div>
+              </div>
+              <div id="loading-status" style="font-size:13px;opacity:0.7;"></div>
             </div>
-          </div>
-        `;
-        
-        document.body.appendChild(overlay);
-        
-        // Auto-remove after 5 seconds
-        setTimeout(() => {
-          const el = document.getElementById('recovery-attempt-overlay');
-          if (el) el.remove();
-        }, 5000);
+          `;
+          document.body.appendChild(overlay);
+          this._loadingEl = overlay;
+        }
+        // Update step text and progress
+        const statusEl = document.getElementById('loading-status');
+        const fillEl = document.getElementById('loading-progress-fill');
+        const steps = {
+          'connecting':   { text: 'Connecting to server...', pct: 15 },
+          'authenticating': { text: 'Authenticating...', pct: 30 },
+          'loading-data': { text: 'Loading save data...', pct: 50 },
+          'recovering':   { text: 'Checking account data...', pct: 55 },
+          'preparing':    { text: 'Preparing game world...', pct: 75 },
+          'sprites':      { text: 'Loading assets...', pct: 90 },
+          'ready':        { text: 'Ready!', pct: 100 }
+        };
+        const s = steps[step] || { text: step, pct: 50 };
+        if (statusEl) statusEl.textContent = s.text;
+        if (fillEl) fillEl.style.width = s.pct + '%';
+      },
+      hideLoadingScreen() {
+        const el = this._loadingEl || document.getElementById('game-loading-screen');
+        if (el) {
+          el.style.transition = 'opacity 0.3s ease';
+          el.style.opacity = '0';
+          setTimeout(() => el.remove(), 300);
+        }
+        this._loadingEl = null;
+      },
+
+      // Legacy recovery UI — now a no-op (recovery happens silently in loading screen)
+      showRecoveryAttemptUI(email) {
+        // Replaced by loading screen — do nothing
+        console.log('[GoogleAuth] Recovery running silently for:', email);
       },
       
       // Sign out
