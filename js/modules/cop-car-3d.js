@@ -825,9 +825,6 @@ const CopCar3D = {
 
           this._addModelToScene(this.model);
           this.modelLoaded = true;
-          
-          // Mark initial scale as applied
-          this._initialScaleApplied = true;
 
           // Also load the Drug Lab building once the Three.js scene is ready.
           this._ensureDrugLab();
@@ -943,17 +940,20 @@ const CopCar3D = {
         // Fallback: use a reasonable default based on typical map proportions
         lanePercent = 2.5; // Default lane width in percent
         usedFallback = true;
-        
+
         // Schedule a retry to get proper scaling once map is ready
         if (this._scaleRetryCount < this._maxScaleRetries) {
           this._scaleRetryCount++;
           setTimeout(() => {
-            if (this.modelVisual && !this._initialScaleApplied) {
+            if (this.modelVisual) {
               console.log('[CopCar3D] Retrying scale calculation...');
               this._applyModelScaling(this.modelVisual, this._isDebugEnabled());
             }
           }, 500);
         }
+      } else {
+        // Real lane width obtained — mark scaling as final
+        this._initialScaleApplied = true;
       }
       
       const laneWidthFactor = this.config?.laneWidthFactor ?? 0.8;
