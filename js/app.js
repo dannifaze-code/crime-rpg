@@ -1234,12 +1234,18 @@ Then tighten the rules later.`);
 
         this.showLoadingScreen('authenticating');
 
+        try {
         // Check if this is first time login (no cloud data yet)
         const snapshot = await database.ref('users/' + user.uid).once('value');
         const cloudData = snapshot.val();
         
         // BULLETPROOF: Use multi-layer verification before treating as new user
-        const isDefinitelyNewUser = await AccountDataProtection.shouldTreatAsNewUser(user.uid, cloudData);
+        let isDefinitelyNewUser = false;
+        try {
+          isDefinitelyNewUser = await AccountDataProtection.shouldTreatAsNewUser(user.uid, cloudData);
+        } catch (verifyErr) {
+          console.warn('[GoogleAuth] New-user verification failed (permission_denied?), treating as existing:', verifyErr);
+        }
         
         this.showLoadingScreen('loading-data');
 
@@ -1251,7 +1257,10 @@ Then tighten the rules later.`);
           this.showLoadingScreen('recovering');
           console.log('[GoogleAuth] No cloud data, attempting silent recovery...');
 
-          const cloudBackupData = await AccountDataProtection.recoverFromCloudBackup(user.uid);
+          const cloudBackupData = await AccountDataProtection.recoverFromCloudBackup(user.uid).catch(e => {
+            console.warn('[GoogleAuth] Cloud backup recovery failed:', e);
+            return null;
+          });
           if (cloudBackupData) {
             console.log('[GoogleAuth] Recovered from cloud backup');
             Object.assign(GameState, cloudBackupData);
@@ -1276,8 +1285,35 @@ Then tighten the rules later.`);
           console.log('[GoogleAuth] Returning user - loading cloud data');
           await this.loadCloudData(user);
         }
+        } catch (signInError) {
+          console.error('[GoogleAuth] Sign-in data loading failed:', signInError);
+          // CRITICAL: Don't leave user stuck - attempt to initialize game with whatever state we have
+          console.log('[GoogleAuth] Attempting fallback game initialization...');
+          try {
+            // Try local backup recovery as last resort
+            if (typeof AccountDataProtection !== 'undefined') {
+              const localBackup = AccountDataProtection.restoreFromBackup(user.uid);
+              if (localBackup) {
+                console.log('[GoogleAuth] Recovered from local backup after error');
+                Object.assign(GameState, localBackup);
+              }
+            }
+            ensureGameStateSchema();
+            GameState.accountId = user.uid;
+            GameState.player.id = user.uid;
+            if (!GameState.player.name || GameState.player.name === 'Unknown' || GameState.player.name === 'Player') {
+              GameState.player.name = user.displayName || user.email.split('@')[0];
+            }
+            if (typeof initializeGame === 'function') {
+              initializeGame();
+            }
+          } catch (fallbackErr) {
+            console.error('[GoogleAuth] Fallback initialization also failed:', fallbackErr);
+          }
+          this.hideLoadingScreen();
+        }
         
-        // BULLETPROOF: Create backup after successful sign-in
+        // BULLETPROOF: Create backup after successful sign-in (non-blocking)
         if (typeof AccountDataProtection !== 'undefined' && AccountDataProtection.isValidGameState(GameState)) {
           AccountDataProtection.createEmergencyBackup(user.uid, 'post-signin-success');
           AccountDataProtection.createCloudBackup(user.uid, 'post-signin-success').catch(e => 
@@ -1286,7 +1322,11 @@ Then tighten the rules later.`);
         }
         
         // Start session monitoring (single device enforcement)
-        await this.startSessionMonitoring(user);
+        try {
+          await this.startSessionMonitoring(user);
+        } catch (sessionErr) {
+          console.warn('[GoogleAuth] Session monitoring failed to start:', sessionErr);
+        }
       },
       
       // Handle user sign-out
@@ -1494,6 +1534,28 @@ Then tighten the rules later.`);
           }
         } catch (error) {
           console.error('[GoogleAuth] Failed to load cloud data:', error);
+          // CRITICAL: Don't leave user stuck - try to initialize game with whatever state we have
+          try {
+            // Try local backup recovery as last resort
+            if (typeof AccountDataProtection !== 'undefined') {
+              const localBackup = AccountDataProtection.restoreFromBackup(user.uid);
+              if (localBackup) {
+                console.log('[GoogleAuth] Recovered from local backup after cloud load failure');
+                Object.assign(GameState, localBackup);
+              }
+            }
+            ensureGameStateSchema();
+            GameState.accountId = user.uid;
+            GameState.player.id = user.uid;
+            if (!GameState.player.name || GameState.player.name === 'Unknown' || GameState.player.name === 'Player') {
+              GameState.player.name = user.displayName || user.email.split('@')[0];
+            }
+            if (typeof initializeGame === 'function') {
+              initializeGame();
+            }
+          } catch (fallbackErr) {
+            console.error('[GoogleAuth] Fallback initialization also failed:', fallbackErr);
+          }
           this.hideLoadingScreen();
         }
       },
@@ -1659,6 +1721,7 @@ Then tighten the rules later.`);
           console.log('[GoogleAuth] Signing out...');
           
           // BULLETPROOF: Create backups before ANY sign-out operation
+          // All backup/save operations are wrapped to prevent permission_denied from blocking sign-out
           if (this.currentUser) {
             const userId = this.currentUser.uid;
             
@@ -1667,10 +1730,12 @@ Then tighten the rules later.`);
               AccountDataProtection.createEmergencyBackup(userId, 'pre-signout-safety');
             }
             
-            // Save to cloud
-            await this.saveToCloud();
+            // Save to cloud (non-blocking on failure)
+            await this.saveToCloud().catch(e => 
+              console.warn('[GoogleAuth] Pre-signout cloud save failed:', e)
+            );
             
-            // Create cloud backup as well
+            // Create cloud backup as well (non-blocking on failure)
             if (typeof AccountDataProtection !== 'undefined') {
               await AccountDataProtection.createCloudBackup(userId, 'pre-signout-safety').catch(e => 
                 console.warn('[GoogleAuth] Pre-signout cloud backup failed:', e)
@@ -1679,7 +1744,9 @@ Then tighten the rules later.`);
           }
           
           // Stop session monitoring
-          await this.stopSessionMonitoring();
+          await this.stopSessionMonitoring().catch(e => 
+            console.warn('[GoogleAuth] Failed to stop session monitoring:', e)
+          );
           
           await auth.signOut();
           console.log('[GoogleAuth] ✅ Signed out successfully');
