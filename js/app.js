@@ -16821,6 +16821,8 @@ function ensureLandmarkProperties() {
       active: false,
       _dragEl: null,
       _dragBuildingId: null,
+      _dragLandmarkType: null,
+      _isDrugLabHitbox: false,
       _startX: 0,
       _startY: 0,
       _elStartLeft: 0,
@@ -16862,6 +16864,22 @@ function ensureLandmarkProperties() {
           el.dataset.moveable = 'true';
         });
 
+        // Make landmark buildings (Safe House, Police Station) draggable
+        const landmarks = document.querySelectorAll('.map-icon');
+        landmarks.forEach(el => {
+          el.style.outline = '2px dashed #ff0';
+          el.style.cursor = 'grab';
+          el.dataset.moveable = 'true';
+        });
+
+        // Make Drug Lab hitbox draggable
+        const drugLabHitbox = document.getElementById('druglab-hitbox');
+        if (drugLabHitbox) {
+          drugLabHitbox.style.outline = '2px dashed #ff0';
+          drugLabHitbox.style.cursor = 'grab';
+          drugLabHitbox.dataset.moveable = 'true';
+        }
+
         // Bind drag events on the container
         this._bindDragEvents();
       },
@@ -16884,13 +16902,29 @@ function ensureLandmarkProperties() {
           delete el.dataset.moveable;
         });
 
+        // Remove draggable styling from landmarks
+        const landmarks = document.querySelectorAll('.map-icon');
+        landmarks.forEach(el => {
+          el.style.outline = '';
+          el.style.cursor = 'pointer';
+          delete el.dataset.moveable;
+        });
+
+        // Remove draggable styling from Drug Lab hitbox
+        const drugLabHitbox = document.getElementById('druglab-hitbox');
+        if (drugLabHitbox) {
+          drugLabHitbox.style.outline = '';
+          drugLabHitbox.style.cursor = 'pointer';
+          delete drugLabHitbox.dataset.moveable;
+        }
+
         // Unbind drag events
         this._unbindDragEvents();
       },
 
       _onMouseDown(e) {
         if (!BuildingMoveSystem.active) return;
-        const el = e.target.closest('.property-building[data-moveable]');
+        const el = e.target.closest('.property-building[data-moveable], .map-icon[data-moveable], #druglab-hitbox[data-moveable]');
         if (!el) return;
         e.preventDefault();
         e.stopPropagation();
@@ -16910,7 +16944,7 @@ function ensureLandmarkProperties() {
 
       _onTouchStart(e) {
         if (!BuildingMoveSystem.active) return;
-        const el = e.target.closest('.property-building[data-moveable]');
+        const el = e.target.closest('.property-building[data-moveable], .map-icon[data-moveable], #druglab-hitbox[data-moveable]');
         if (!el) return;
         e.preventDefault();
         e.stopPropagation();
@@ -16932,7 +16966,9 @@ function ensureLandmarkProperties() {
 
       _startDrag(el, clientX, clientY) {
         this._dragEl = el;
-        this._dragBuildingId = el.dataset.id;
+        this._dragBuildingId = el.dataset.id || null;
+        this._dragLandmarkType = el.dataset.type || null;
+        this._isDrugLabHitbox = (el.id === 'druglab-hitbox');
         this._startX = clientX;
         this._startY = clientY;
         this._elStartLeft = parseFloat(el.style.left);
@@ -16944,7 +16980,8 @@ function ensureLandmarkProperties() {
 
       _moveDrag(clientX, clientY) {
         if (!this._dragEl) return;
-        const container = document.getElementById('map-icons');
+        const containerId = this._isDrugLabHitbox ? 'map-world' : 'map-icons';
+        const container = document.getElementById(containerId);
         if (!container) return;
 
         const rect = container.getBoundingClientRect();
@@ -16971,20 +17008,57 @@ function ensureLandmarkProperties() {
 
         const newLeft = parseFloat(this._dragEl.style.left);
         const newTop = parseFloat(this._dragEl.style.top);
+        const roundedX = Math.round(newLeft * 10) / 10;
+        const roundedY = Math.round(newTop * 10) / 10;
 
-        // Update GameState with new position
-        const building = GameState.propertyBuildings.find(b => b.id === this._dragBuildingId);
-        if (building) {
-          building.x = Math.round(newLeft * 10) / 10;
-          building.y = Math.round(newTop * 10) / 10;
-          console.log(`🏗️ Moved ${building.name} to (${building.x}%, ${building.y}%)`);
-        }
+        if (this._isDrugLabHitbox) {
+          // Update Drug Lab position in GameState
+          if (GameState.fixedLandmarkPositions && GameState.fixedLandmarkPositions.drugLab) {
+            GameState.fixedLandmarkPositions.drugLab.x = roundedX;
+            GameState.fixedLandmarkPositions.drugLab.y = roundedY;
+          }
+          // Update DrugLabSystem cell bounds to match new position
+          if (typeof DrugLabSystem !== 'undefined') {
+            const cellW = DrugLabSystem.cellBoundsPct.right - DrugLabSystem.cellBoundsPct.left;
+            const cellH = DrugLabSystem.cellBoundsPct.bottom - DrugLabSystem.cellBoundsPct.top;
+            DrugLabSystem.cellBoundsPct.left = roundedX;
+            DrugLabSystem.cellBoundsPct.right = roundedX + cellW;
+            DrugLabSystem.cellBoundsPct.top = roundedY;
+            DrugLabSystem.cellBoundsPct.bottom = roundedY + cellH;
+          }
+          console.log(`🏗️ Moved Drug Lab to (${roundedX}%, ${roundedY}%)`);
+        } else if (this._dragLandmarkType && !this._dragBuildingId) {
+          // Update landmark position in mapIcons
+          const mapIcon = GameState.mapIcons.find(i => i.type === this._dragLandmarkType);
+          if (mapIcon) {
+            mapIcon.x = roundedX;
+            mapIcon.y = roundedY;
+            console.log(`🏗️ Moved ${mapIcon.label || mapIcon.type} to (${roundedX}%, ${roundedY}%)`);
+          }
+          // Update fixedLandmarkPositions
+          if (GameState.fixedLandmarkPositions && GameState.fixedLandmarkPositions[this._dragLandmarkType]) {
+            GameState.fixedLandmarkPositions[this._dragLandmarkType].x = roundedX;
+            GameState.fixedLandmarkPositions[this._dragLandmarkType].y = roundedY;
+          }
+          // Update safeHouse position if moving the safe house
+          if (this._dragLandmarkType === 'safeHouse' && GameState.safeHouse) {
+            GameState.safeHouse.position = { x: roundedX, y: roundedY };
+          }
+        } else {
+          // Update GameState with new position (property buildings)
+          const building = GameState.propertyBuildings.find(b => b.id === this._dragBuildingId);
+          if (building) {
+            building.x = roundedX;
+            building.y = roundedY;
+            console.log(`🏗️ Moved ${building.name} to (${building.x}%, ${building.y}%)`);
+          }
 
-        // Also update fixedPropertyPositions
-        const fixedProp = GameState.fixedPropertyPositions.find(b => b.id === this._dragBuildingId);
-        if (fixedProp) {
-          fixedProp.x = building ? building.x : Math.round(newLeft * 10) / 10;
-          fixedProp.y = building ? building.y : Math.round(newTop * 10) / 10;
+          // Also update fixedPropertyPositions
+          const fixedProp = GameState.fixedPropertyPositions.find(b => b.id === this._dragBuildingId);
+          if (fixedProp) {
+            fixedProp.x = building ? building.x : roundedX;
+            fixedProp.y = building ? building.y : roundedY;
+          }
         }
 
         this._dragEl.style.cursor = 'grab';
@@ -16992,6 +17066,8 @@ function ensureLandmarkProperties() {
         this._dragEl.style.opacity = '1';
         this._dragEl = null;
         this._dragBuildingId = null;
+        this._dragLandmarkType = null;
+        this._isDrugLabHitbox = false;
       },
 
       _bindDragEvents() {
@@ -17021,7 +17097,7 @@ function ensureLandmarkProperties() {
 
       _onClickCapture(e) {
         if (!BuildingMoveSystem.active) return;
-        const el = e.target.closest('.property-building');
+        const el = e.target.closest('.property-building, .map-icon, #druglab-hitbox');
         if (el) {
           e.stopPropagation();
           e.preventDefault();
@@ -17036,12 +17112,28 @@ function ensureLandmarkProperties() {
           y: b.y
         }));
 
+        // Collect landmark positions (safeHouse, policeStation, drugLab)
+        const landmarkData = {};
+        if (GameState.fixedLandmarkPositions) {
+          Object.keys(GameState.fixedLandmarkPositions).forEach(key => {
+            const lm = GameState.fixedLandmarkPositions[key];
+            if (lm && typeof lm.x === 'number' && typeof lm.y === 'number') {
+              landmarkData[key] = { x: lm.x, y: lm.y };
+            }
+          });
+        }
+
         // Save to Firebase so all players see the new positions
         if (typeof database !== 'undefined' && database) {
           const payload = { positions: positionData, updatedAt: Date.now() };
-          database.ref('gameConfig/buildingPositions').set(payload)
+          const landmarkPayload = { positions: landmarkData, updatedAt: Date.now() };
+
+          Promise.all([
+            database.ref('gameConfig/buildingPositions').set(payload),
+            database.ref('gameConfig/landmarkPositions').set(landmarkPayload)
+          ])
             .then(() => {
-              console.log('🏗️ ✅ Building positions saved globally to Firebase');
+              console.log('🏗️ ✅ Building & landmark positions saved globally to Firebase');
               alert('Building positions saved globally! All players will see the new layout.');
             })
             .catch((err) => {
@@ -17085,6 +17177,60 @@ function ensureLandmarkProperties() {
             }
           }).catch(err => {
             console.warn('🏗️ Failed to load building positions from Firebase:', err);
+          });
+
+          // Load landmark positions (safeHouse, policeStation, drugLab)
+          database.ref('gameConfig/landmarkPositions').once('value').then((snapshot) => {
+            const data = snapshot.val();
+            if (data && data.positions && typeof data.positions === 'object') {
+              console.log('🏗️ Loading saved landmark positions from Firebase...');
+              let updated = 0;
+              Object.keys(data.positions).forEach(key => {
+                const pos = data.positions[key];
+                if (pos && typeof pos.x === 'number' && typeof pos.y === 'number') {
+                  // Update fixedLandmarkPositions
+                  if (GameState.fixedLandmarkPositions && GameState.fixedLandmarkPositions[key]) {
+                    GameState.fixedLandmarkPositions[key].x = pos.x;
+                    GameState.fixedLandmarkPositions[key].y = pos.y;
+                  }
+                  // Update mapIcons
+                  if (Array.isArray(GameState.mapIcons)) {
+                    const mapIcon = GameState.mapIcons.find(i => i.type === key);
+                    if (mapIcon) {
+                      mapIcon.x = pos.x;
+                      mapIcon.y = pos.y;
+                    }
+                  }
+                  // Update safeHouse position
+                  if (key === 'safeHouse' && GameState.safeHouse) {
+                    GameState.safeHouse.position = { x: pos.x, y: pos.y };
+                  }
+                  // Update DrugLabSystem cell bounds
+                  if (key === 'drugLab' && typeof DrugLabSystem !== 'undefined') {
+                    const cellW = DrugLabSystem.cellBoundsPct.right - DrugLabSystem.cellBoundsPct.left;
+                    const cellH = DrugLabSystem.cellBoundsPct.bottom - DrugLabSystem.cellBoundsPct.top;
+                    DrugLabSystem.cellBoundsPct.left = pos.x;
+                    DrugLabSystem.cellBoundsPct.right = pos.x + cellW;
+                    DrugLabSystem.cellBoundsPct.top = pos.y;
+                    DrugLabSystem.cellBoundsPct.bottom = pos.y + cellH;
+                    // Update Drug Lab hitbox element if it exists
+                    const hb = document.getElementById('druglab-hitbox');
+                    if (hb) {
+                      hb.style.left = pos.x + '%';
+                      hb.style.top = pos.y + '%';
+                    }
+                  }
+                  updated++;
+                }
+              });
+              console.log(`🏗️ ✅ Updated positions for ${updated} landmarks from Firebase`);
+              // Re-render landmark icons with new positions
+              if (typeof TurfTab !== 'undefined' && TurfTab.renderIcons) {
+                TurfTab.renderIcons();
+              }
+            }
+          }).catch(err => {
+            console.warn('🏗️ Failed to load landmark positions from Firebase:', err);
           });
         }
       }
