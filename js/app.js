@@ -20665,15 +20665,19 @@ function ensureLandmarkProperties() {
           WeatherOverlay.dispose();
         }
 
-        // Dispose 3D cop car overlay if switching away from turf tab
+        // Hide 3D cop car overlay if switching away from turf tab (keep scene alive for instant re-show)
         if (GameState.ui.activeTab === 'turf' && tabId !== 'turf') {
           try {
-            if (typeof CopCar3D !== 'undefined' && CopCar3D && typeof CopCar3D.dispose === 'function') {
-              console.log('[TabSystem] Switching away from turf tab - disposing CopCar3D');
-              CopCar3D.dispose();
+            if (typeof CopCar3D !== 'undefined' && CopCar3D) {
+              if (typeof CopCar3D.hide === 'function') {
+                console.log('[TabSystem] Switching away from turf tab - hiding CopCar3D');
+                CopCar3D.hide();
+              } else if (typeof CopCar3D.dispose === 'function') {
+                CopCar3D.dispose();
+              }
             }
           } catch (e) {
-            console.warn('[TabSystem] CopCar3D dispose error:', e);
+            console.warn('[TabSystem] CopCar3D hide error:', e);
           }
         }
 
@@ -20745,14 +20749,18 @@ function ensureLandmarkProperties() {
 
 
 
-              // Ensure 3D cop car overlay initializes after #city-map is visible
+              // Ensure 3D cop car overlay is visible after #city-map is visible
               try {
-                if (typeof CopCar3D !== 'undefined' && CopCar3D && typeof CopCar3D.init === 'function') {
-                  console.log('[TabSystem] Ensuring CopCar3D overlay...');
-                  CopCar3D.init();
+                if (typeof CopCar3D !== 'undefined' && CopCar3D) {
+                  if (typeof CopCar3D.show === 'function') {
+                    console.log('[TabSystem] Showing CopCar3D overlay...');
+                    CopCar3D.show();
+                  } else if (typeof CopCar3D.init === 'function') {
+                    CopCar3D.init();
+                  }
                 }
               } catch (e) {
-                console.warn('[TabSystem] CopCar3D init error:', e);
+                console.warn('[TabSystem] CopCar3D show error:', e);
               }
 
               // Render the tab content
@@ -22056,8 +22064,11 @@ function ensureLandmarkProperties() {
         viewport.addEventListener('touchend', (e) => this.handleTouchEnd(e), { passive: false });
         viewport.addEventListener('touchcancel', (e) => this.handleTouchEnd(e), { passive: false });
 
-        // Apply initial transform (centers if <= 1x)
-        this.setZoom(this.currentZoom);
+        // Apply initial transform - force zoom to 1 on first load to prevent starting zoomed in
+        this.currentZoom = 1;
+        this.panX = 0;
+        this.panY = 0;
+        this.setZoom(1);
         console.log('🔍 Turf map pan/zoom initialized');
       
         // Keep bounds correct on resize/orientation change
