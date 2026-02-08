@@ -5457,6 +5457,13 @@ const CartoonSpriteGenerator = {
             drugLab: { x: 31, y: 42 }
           }));
         }
+        // Ensure each landmark sub-property exists with valid x/y (prevents crash on corrupted cloud data)
+        const landmarkDefaults = { safeHouse: { x: 12, y: 45 }, policeStation: { x: 50, y: 30 }, drugLab: { x: 31, y: 42 } };
+        Object.keys(landmarkDefaults).forEach(key => {
+          if (!GameState.fixedLandmarkPositions[key] || typeof GameState.fixedLandmarkPositions[key].x !== 'number' || typeof GameState.fixedLandmarkPositions[key].y !== 'number') {
+            GameState.fixedLandmarkPositions[key] = landmarkDefaults[key];
+          }
+        });
 
         // Character
         if (!GameState.character.position || typeof GameState.character.position !== 'object') {
@@ -12393,8 +12400,8 @@ function updateTurfDefense(dt) {
         GameState.mapIcons = [
     {
       id: 'safeHouse',
-      x: GameState.fixedLandmarkPositions.safeHouse.x,
-      y: GameState.fixedLandmarkPositions.safeHouse.y,
+      x: (GameState.fixedLandmarkPositions.safeHouse && GameState.fixedLandmarkPositions.safeHouse.x) || 12,
+      y: (GameState.fixedLandmarkPositions.safeHouse && GameState.fixedLandmarkPositions.safeHouse.y) || 45,
       icon: '🏠',
       type: 'safeHouse',
       name: 'Safe House',
@@ -12402,8 +12409,8 @@ function updateTurfDefense(dt) {
     },
     {
       id: 'policeStation',
-      x: GameState.fixedLandmarkPositions.policeStation.x,
-      y: GameState.fixedLandmarkPositions.policeStation.y,
+      x: (GameState.fixedLandmarkPositions.policeStation && GameState.fixedLandmarkPositions.policeStation.x) || 50,
+      y: (GameState.fixedLandmarkPositions.policeStation && GameState.fixedLandmarkPositions.policeStation.y) || 30,
       icon: '🚓',
       type: 'policeStation',
       name: 'Police Station',
@@ -12411,8 +12418,8 @@ function updateTurfDefense(dt) {
     },
     {
       id: 'drugLab',
-      x: GameState.fixedLandmarkPositions.drugLab.x,
-      y: GameState.fixedLandmarkPositions.drugLab.y,
+      x: (GameState.fixedLandmarkPositions.drugLab && GameState.fixedLandmarkPositions.drugLab.x) || 31,
+      y: (GameState.fixedLandmarkPositions.drugLab && GameState.fixedLandmarkPositions.drugLab.y) || 42,
       icon: '🧪',
       type: 'drugLab',
       name: 'Drug Lab',
@@ -15073,7 +15080,13 @@ function updateTurfDefense(dt) {
         return;
       }
       
-      const positions = GameState.fixedLandmarkPositions;
+      const rawPositions = GameState.fixedLandmarkPositions || {};
+      const defaultPositions = { safeHouse: { x: 12, y: 45 }, policeStation: { x: 50, y: 30 }, drugLab: { x: 31, y: 42 } };
+      const positions = {
+        safeHouse: (rawPositions.safeHouse && typeof rawPositions.safeHouse.x === 'number') ? rawPositions.safeHouse : defaultPositions.safeHouse,
+        policeStation: (rawPositions.policeStation && typeof rawPositions.policeStation.x === 'number') ? rawPositions.policeStation : defaultPositions.policeStation,
+        drugLab: (rawPositions.drugLab && typeof rawPositions.drugLab.x === 'number') ? rawPositions.drugLab : defaultPositions.drugLab
+      };
 
       // Create landmark icons using fixed positions (ONLY non-purchasable landmarks)
       // All purchasable properties are in fixedPropertyPositions to avoid duplicates
@@ -20261,10 +20274,12 @@ function ensureLandmarkProperties() {
       // Note: Non-purchasable landmark buildings only (safeHouse, policeStation, drugLab)
       // All purchasable buildings are in propertyBuildings via fixedPropertyPositions
       if (!GameState.mapIcons || GameState.mapIcons.length === 0) {
-        const positions = GameState.fixedLandmarkPositions || DEFAULT_STATE.fixedLandmarkPositions || {
-          safeHouse: { x: 12, y: 45 },
-          policeStation: { x: 50, y: 30 },
-          drugLab: { x: 31, y: 42 }
+        const defaultPositions = { safeHouse: { x: 12, y: 45 }, policeStation: { x: 50, y: 30 }, drugLab: { x: 31, y: 42 } };
+        const raw = GameState.fixedLandmarkPositions || DEFAULT_STATE.fixedLandmarkPositions || {};
+        const positions = {
+          safeHouse: (raw.safeHouse && typeof raw.safeHouse.x === 'number') ? raw.safeHouse : defaultPositions.safeHouse,
+          policeStation: (raw.policeStation && typeof raw.policeStation.x === 'number') ? raw.policeStation : defaultPositions.policeStation,
+          drugLab: (raw.drugLab && typeof raw.drugLab.x === 'number') ? raw.drugLab : defaultPositions.drugLab
         };
         
         GameState.mapIcons = [
