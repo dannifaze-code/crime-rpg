@@ -16847,24 +16847,35 @@ function ensureLandmarkProperties() {
         }
       },
 
-      // Inject toggle button + edit button into map UI
+      // Inject toggle button + edit button into map UI (below the map)
       injectButton() {
         const mapEl = document.getElementById('city-map');
         if (!mapEl) return;
         if (document.getElementById('cop-node-debug-btn')) return;
 
+        // Create a controls container below the map instead of overlapping it
+        let container = document.getElementById('map-editor-controls');
+        if (!container) {
+          container = document.createElement('div');
+          container.id = 'map-editor-controls';
+          container.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;padding:8px 16px;align-items:flex-start;';
+          mapEl.insertAdjacentElement('afterend', container);
+        }
+
+        const btnBase = 'padding:4px 10px;font-size:11px;background:rgba(0,0,0,0.7);border-radius:4px;cursor:pointer;font-family:monospace;';
+
         const btn = document.createElement('button');
         btn.id = 'cop-node-debug-btn';
         btn.textContent = 'Show Nodes';
-        btn.style.cssText = 'position:absolute;top:6px;right:6px;z-index:100;padding:4px 10px;font-size:11px;background:rgba(0,0,0,0.7);color:#0f0;border:1px solid #0f0;border-radius:4px;cursor:pointer;font-family:monospace;';
+        btn.style.cssText = btnBase + 'color:#0f0;border:1px solid #0f0;';
         btn.addEventListener('click', () => this.toggle());
-        mapEl.appendChild(btn);
+        container.appendChild(btn);
 
         // Edit Nodes button
         const editBtn = document.createElement('button');
         editBtn.id = 'cop-node-edit-btn';
         editBtn.textContent = 'Edit Nodes';
-        editBtn.style.cssText = 'position:absolute;top:6px;right:94px;z-index:100;padding:4px 10px;font-size:11px;background:rgba(0,0,0,0.7);color:#ff0;border:1px solid #ff0;border-radius:4px;cursor:pointer;font-family:monospace;';
+        editBtn.style.cssText = btnBase + 'color:#ff0;border:1px solid #ff0;';
         editBtn.addEventListener('click', () => {
           if (!this.visible) {
             this.toggle(); // Show nodes first
@@ -16881,14 +16892,14 @@ function ensureLandmarkProperties() {
             editBtn.style.borderColor = '#f60';
           }
         });
-        mapEl.appendChild(editBtn);
+        container.appendChild(editBtn);
 
         // Move Buildings button (admin only - dannifaze@gmail.com)
         if (BuildingMoveSystem.isAdmin()) {
           const moveBldgBtn = document.createElement('button');
           moveBldgBtn.id = 'move-buildings-btn';
           moveBldgBtn.textContent = 'Move Buildings';
-          moveBldgBtn.style.cssText = 'position:absolute;top:6px;right:194px;z-index:100;padding:4px 10px;font-size:11px;background:rgba(0,0,0,0.7);color:#ff0;border:1px solid #ff0;border-radius:4px;cursor:pointer;font-family:monospace;';
+          moveBldgBtn.style.cssText = btnBase + 'color:#ff0;border:1px solid #ff0;';
           moveBldgBtn.addEventListener('click', () => {
             if (BuildingMoveSystem.active) {
               BuildingMoveSystem.disable();
@@ -16902,13 +16913,13 @@ function ensureLandmarkProperties() {
               moveBldgBtn.style.borderColor = '#f60';
             }
           });
-          mapEl.appendChild(moveBldgBtn);
+          container.appendChild(moveBldgBtn);
 
-          // Scale Buildings button (admin only - right under Move Buildings)
+          // Scale Buildings button (admin only)
           const scaleBldgBtn = document.createElement('button');
           scaleBldgBtn.id = 'scale-buildings-btn';
           scaleBldgBtn.textContent = 'Scale Buildings';
-          scaleBldgBtn.style.cssText = 'position:absolute;top:32px;right:194px;z-index:100;padding:4px 10px;font-size:11px;background:rgba(0,0,0,0.7);color:#ff0;border:1px solid #ff0;border-radius:4px;cursor:pointer;font-family:monospace;';
+          scaleBldgBtn.style.cssText = btnBase + 'color:#ff0;border:1px solid #ff0;';
           scaleBldgBtn.addEventListener('click', () => {
             if (BuildingScaleSystem.active) {
               BuildingScaleSystem.disable();
@@ -16922,7 +16933,7 @@ function ensureLandmarkProperties() {
               scaleBldgBtn.style.borderColor = '#f60';
             }
           });
-          mapEl.appendChild(scaleBldgBtn);
+          container.appendChild(scaleBldgBtn);
         }
       }
     };
@@ -16958,15 +16969,15 @@ function ensureLandmarkProperties() {
         this.active = true;
         console.log('🏗️ Building Move Mode ENABLED');
 
-        // Add save button
-        const mapEl = document.getElementById('city-map');
-        if (mapEl && !document.getElementById('save-buildings-btn')) {
+        // Add save button to editor controls container
+        const controlsContainer = document.getElementById('map-editor-controls');
+        if (controlsContainer && !document.getElementById('save-buildings-btn')) {
           this._saveBtn = document.createElement('button');
           this._saveBtn.id = 'save-buildings-btn';
           this._saveBtn.textContent = '💾 Save Positions';
-          this._saveBtn.style.cssText = 'position:absolute;top:6px;right:310px;z-index:100;padding:4px 10px;font-size:11px;background:rgba(0,0,0,0.7);color:#0f0;border:1px solid #0f0;border-radius:4px;cursor:pointer;font-family:monospace;';
+          this._saveBtn.style.cssText = 'padding:4px 10px;font-size:11px;background:rgba(0,0,0,0.7);color:#0f0;border:1px solid #0f0;border-radius:4px;cursor:pointer;font-family:monospace;';
           this._saveBtn.addEventListener('click', () => this.savePositions());
-          mapEl.appendChild(this._saveBtn);
+          controlsContainer.appendChild(this._saveBtn);
         }
 
         // Make all property buildings draggable
@@ -17461,12 +17472,12 @@ function ensureLandmarkProperties() {
       _showScaleBar(currentScale) {
         this._removeScaleBar();
 
-        const mapEl = document.getElementById('city-map');
-        if (!mapEl) return;
+        const controlsContainer = document.getElementById('map-editor-controls');
+        if (!controlsContainer) return;
 
         const bar = document.createElement('div');
         bar.id = 'building-scale-bar';
-        bar.style.cssText = 'position:absolute;top:58px;right:194px;z-index:200;display:flex;align-items:center;gap:6px;background:rgba(0,0,0,0.85);padding:5px 10px;border:1px solid #0ff;border-radius:4px;font-family:monospace;';
+        bar.style.cssText = 'display:flex;align-items:center;gap:6px;background:rgba(0,0,0,0.85);padding:5px 10px;border:1px solid #0ff;border-radius:4px;font-family:monospace;';
 
         const label = document.createElement('span');
         label.style.cssText = 'color:#0ff;font-size:11px;white-space:nowrap;';
@@ -17502,7 +17513,7 @@ function ensureLandmarkProperties() {
         bar.appendChild(slider);
         bar.appendChild(valueLabel);
         bar.appendChild(saveBtn);
-        mapEl.appendChild(bar);
+        controlsContainer.appendChild(bar);
         this._scaleBar = bar;
       },
 
