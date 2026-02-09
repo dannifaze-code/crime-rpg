@@ -28242,18 +28242,28 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
             statusLabel = canAfford ? 'Available' : `Need $${(upgrade.cost - playerCash).toLocaleString()} more`;
           }
           
+          // Level 1 is free/starter — show as owned badge, no purchase action
+          let overlayContent = '';
+          if (isOwned) {
+            overlayContent = `<div class="upgrade-card-badge owned-badge">✅ Owned</div>`;
+          } else if (upgrade.level === 1) {
+            overlayContent = `<div class="upgrade-card-badge owned-badge">🏠 Starter — Free</div>`;
+          } else if (isNext && canAfford) {
+            overlayContent = `
+              <button class="upgrade-buy-btn" onclick="SafeHouseTab.purchaseUpgrade(${upgrade.level})">
+                Upgrade — $${upgrade.cost.toLocaleString()}
+              </button>`;
+          } else if (isNext && !canAfford) {
+            overlayContent = `<div class="upgrade-card-badge locked-badge">💰 $${upgrade.cost.toLocaleString()}</div>`;
+          } else {
+            overlayContent = `<div class="upgrade-card-badge locked-badge">🔒 Level ${upgrade.level}</div>`;
+          }
+
           return `
             <div class="safehouse-upgrade-card ${statusClass}" data-level="${upgrade.level}">
               <img src="${upgrade.card}" alt="Level ${upgrade.level} Upgrade" class="upgrade-card-img" draggable="false">
               <div class="upgrade-card-overlay">
-                ${isOwned ? `<div class="upgrade-card-badge owned-badge">✅ Owned</div>` : ''}
-                ${isNext && canAfford ? `
-                  <button class="upgrade-buy-btn" onclick="SafeHouseTab.purchaseUpgrade(${upgrade.level})">
-                    Upgrade — $${upgrade.cost.toLocaleString()}
-                  </button>
-                ` : ''}
-                ${isNext && !canAfford ? `<div class="upgrade-card-badge locked-badge">💰 $${upgrade.cost.toLocaleString()}</div>` : ''}
-                ${!isOwned && !isNext ? `<div class="upgrade-card-badge locked-badge">🔒 Level ${upgrade.level}</div>` : ''}
+                ${overlayContent}
               </div>
             </div>
           `;
