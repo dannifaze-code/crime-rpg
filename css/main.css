@@ -1716,13 +1716,15 @@
     }
 
     /* 3D overlay canvas (added by CopCar3D) */
+    /* Layer lives inside #map-world (z-index: 1) so buildings in
+       #map-entities (z-index: 2) always render on top of the cop car. */
     #cop-car-3d-canvas {
       position: absolute;
       inset: 0;
       width: 100%;
       height: 100%;
       pointer-events: none;
-      z-index: 6;
+      z-index: 1;
     }
 
 /* Police lights animations */
