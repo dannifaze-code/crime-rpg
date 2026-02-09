@@ -5775,8 +5775,8 @@ window.ciaDebug = () => {
     function getFootprintForType(type) {
       const footprints = {
         // Landmarks (camelCase and lowercase variants)
-        'safeHouse': { width: 3, height: 3 },
-        'safehouse': { width: 3, height: 3 },
+        'safeHouse': { width: 6, height: 4 },
+        'safehouse': { width: 6, height: 4 },
         'policeStation': { width: 4, height: 4 },
         'policestation': { width: 4, height: 4 },
         'drugLab': { width: 3, height: 3 },
