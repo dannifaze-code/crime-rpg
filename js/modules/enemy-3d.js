@@ -223,8 +223,8 @@ const Enemy3DRenderer = {
     box.setFromObject(root);
     root.position.y -= box.min.y; // Sit on ground plane (y=0)
 
-    // Face toward the camera (player)
-    root.rotation.y = Math.PI;
+    // Face toward the camera (player) — models face +Z by default, camera is at +Z
+    root.rotation.y = 0;
 
     // Enhance materials for better rendering
     const maxAniso = self.renderer?.capabilities?.getMaxAnisotropy?.() || 1;
