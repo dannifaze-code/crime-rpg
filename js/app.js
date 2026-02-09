@@ -26803,7 +26803,29 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
           
           const iconEl = document.createElement('div');
           iconEl.className = `map-icon ${iconData.state}`;
-          iconEl.textContent = iconData.icon;
+          
+          // Use PNG sprite for safeHouse based on upgrade level
+          if (iconData.type === 'safeHouse') {
+            const upgradeLevel = (GameState.safeHouse && GameState.safeHouse.upgradeLevel) || 0;
+            const safehouseSprites = {
+              0: 'sprites/turf-map/safehousebase.png',
+              1: 'sprites/turf-map/safehousebase.png',
+              2: 'sprites/turf-map/safehouselvl2.png',
+              3: 'sprites/turf-map/safehouselvl3.png',
+              4: 'sprites/turf-map/safehouselvl4.png',
+              5: 'sprites/turf-map/safehouselvl5.png'
+            };
+            const spriteSrc = safehouseSprites[upgradeLevel] || safehouseSprites[0];
+            const img = document.createElement('img');
+            img.src = spriteSrc;
+            img.alt = 'Safe House';
+            img.className = 'safehouse-map-sprite';
+            img.draggable = false;
+            iconEl.appendChild(img);
+          } else {
+            iconEl.textContent = iconData.icon;
+          }
+          
           iconEl.style.left = `${iconData.x}%`;
           iconEl.style.top = `${iconData.y}%`;
           iconEl.dataset.type = iconData.type;
@@ -27710,6 +27732,11 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
         if (subtab === 'hideout') {
           this.renderHideoutTab();
         }
+        
+        // Render upgrades tab content dynamically
+        if (subtab === 'upgrades') {
+          this.renderUpgradesTab();
+        }
       },
       
       selectTrait(trait, value) {
@@ -28178,6 +28205,113 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
             • All inmates leave after 1 hour
           </div>
         `;
+      },
+      
+      // Safehouse upgrade definitions
+      SAFEHOUSE_UPGRADES: [
+        { level: 1, name: 'Basic Setup', cost: 5000, sprite: 'sprites/turf-map/safehousebase.png', card: 'sprites/ui-new/safehouseupgradecard/lvl1upgradecard.png' },
+        { level: 2, name: 'Reinforced Walls', cost: 15000, sprite: 'sprites/turf-map/safehouselvl2.png', card: 'sprites/ui-new/safehouseupgradecard/lvl2upgradecard.png' },
+        { level: 3, name: 'Security System', cost: 35000, sprite: 'sprites/turf-map/safehouselvl3.png', card: 'sprites/ui-new/safehouseupgradecard/lvl3upgradecard.png' },
+        { level: 4, name: 'Fortified Compound', cost: 75000, sprite: 'sprites/turf-map/safehouselvl4.png', card: 'sprites/ui-new/safehouseupgradecard/lvl4upgradecard.png' },
+        { level: 5, name: 'Criminal Empire HQ', cost: 150000, sprite: 'sprites/turf-map/safehouselvl5.png', card: 'sprites/ui-new/safehouseupgradecard/lvl5upgradecard.png' }
+      ],
+      
+      renderUpgradesTab() {
+        const container = document.getElementById('safehouse-upgrades-content');
+        if (!container) {
+          console.error('Upgrades container not found!');
+          return;
+        }
+        
+        const currentLevel = (GameState.safeHouse && GameState.safeHouse.upgradeLevel) || 0;
+        const playerCash = GameState.player.cash || 0;
+        
+        // Build upgrade cards HTML
+        const upgradeCards = this.SAFEHOUSE_UPGRADES.map(upgrade => {
+          const isOwned = currentLevel >= upgrade.level;
+          const isNext = upgrade.level === currentLevel + 1;
+          const canAfford = playerCash >= upgrade.cost;
+          
+          let statusClass = 'upgrade-locked';
+          let statusLabel = '🔒 Locked';
+          if (isOwned) {
+            statusClass = 'upgrade-owned';
+            statusLabel = '✅ Owned';
+          } else if (isNext) {
+            statusClass = canAfford ? 'upgrade-available' : 'upgrade-cant-afford';
+            statusLabel = canAfford ? 'Available' : `Need $${(upgrade.cost - playerCash).toLocaleString()} more`;
+          }
+          
+          return `
+            <div class="safehouse-upgrade-card ${statusClass}" data-level="${upgrade.level}">
+              <img src="${upgrade.card}" alt="Level ${upgrade.level} Upgrade" class="upgrade-card-img" draggable="false">
+              <div class="upgrade-card-overlay">
+                ${isOwned ? `<div class="upgrade-card-badge owned-badge">✅ Owned</div>` : ''}
+                ${isNext && canAfford ? `
+                  <button class="upgrade-buy-btn" onclick="SafeHouseTab.purchaseUpgrade(${upgrade.level})">
+                    Upgrade — $${upgrade.cost.toLocaleString()}
+                  </button>
+                ` : ''}
+                ${isNext && !canAfford ? `<div class="upgrade-card-badge locked-badge">💰 $${upgrade.cost.toLocaleString()}</div>` : ''}
+                ${!isOwned && !isNext ? `<div class="upgrade-card-badge locked-badge">🔒 Level ${upgrade.level}</div>` : ''}
+              </div>
+            </div>
+          `;
+        }).join('');
+        
+        // Current safehouse preview
+        const currentSprite = currentLevel >= 2
+          ? `sprites/turf-map/safehouselvl${currentLevel}.png`
+          : 'sprites/turf-map/safehousebase.png';
+        
+        container.innerHTML = `
+          <div class="safehouse-upgrades-header">
+            <img src="${currentSprite}" alt="Current Safe House" class="safehouse-current-preview" draggable="false">
+            <div class="safehouse-upgrades-info">
+              <div style="font-size: 16px; font-weight: 600; margin-bottom: 4px;">Safe House Level ${currentLevel}/5</div>
+              <div style="font-size: 13px; color: #888;">Upgrade your safe house to change its look on the turf map</div>
+            </div>
+          </div>
+          <div class="safehouse-upgrade-cards-grid">
+            ${upgradeCards}
+          </div>
+        `;
+      },
+      
+      purchaseUpgrade(level) {
+        const upgrade = this.SAFEHOUSE_UPGRADES.find(u => u.level === level);
+        if (!upgrade) return;
+        
+        const currentLevel = (GameState.safeHouse && GameState.safeHouse.upgradeLevel) || 0;
+        if (level !== currentLevel + 1) {
+          console.warn('Can only upgrade to the next level');
+          return;
+        }
+        
+        if (GameState.player.cash < upgrade.cost) {
+          console.warn('Not enough cash for upgrade');
+          return;
+        }
+        
+        // Deduct cash and apply upgrade
+        GameState.player.cash -= upgrade.cost;
+        GameState.safeHouse.upgradeLevel = level;
+        
+        // Save state
+        try { Storage.save(); } catch(e) {}
+        
+        // Update the cash display
+        try { ProfileTab.render(); } catch(e) {}
+        
+        // Re-render upgrades tab to reflect changes
+        this.renderUpgradesTab();
+        
+        // Re-render map icons to show the new safehouse sprite
+        if (typeof TurfTab !== 'undefined' && TurfTab.renderIcons) {
+          TurfTab.renderIcons();
+        }
+        
+        console.log(`🏠 Safe House upgraded to Level ${level}! Cost: $${upgrade.cost.toLocaleString()}`);
       },
       
       renderGarageTab() {
