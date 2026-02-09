@@ -5108,7 +5108,7 @@ const CartoonSpriteGenerator = {
 
         // ROW 2 - Upper-middle (y: 25)
         { id: 'dealer1', type: 'dealership', x: 8, y: 25, name: 'Premium Auto Sales', price: 50000, income: 1200 },
-        { id: 'apt1', type: 'apartment', x: 28, y: 25, name: 'Riverside Apartments', price: 20000, income: 500 },
+        { id: 'apt1', type: 'apartment', x: 28, y: 25, name: '347 Apartment', price: 20000, income: 500, sprite: 'sprites/turf-map/347apartmentbase.png' },
         { id: 'apt3', type: 'apartment', x: 65, y: 25, name: 'Eastside Apartments', price: 20000, income: 500 },
 
         // ROW 3 - Middle (y: 38)
@@ -15399,16 +15399,20 @@ function ensureLandmarkProperties() {
         el.dataset.id = building.id;
         el.dataset.type = building.type;
         el.dataset.label = `${building.name} - $${(building.price / 1000).toFixed(0)}k`;
-        el.innerHTML = buildingType.icon;
+        if (building.sprite) {
+          el.innerHTML = `<img src="${building.sprite}" alt="${building.name}" style="width: 48px; height: 48px; object-fit: contain; display: block;">`;
+        } else {
+          el.innerHTML = buildingType.icon;
+        }
         el.style.left = building.x + '%';
         el.style.top = building.y + '%';
         // Ensure visibility with inline styles
         el.style.position = 'absolute';
-        el.style.fontSize = '28px';  // Increased from 20px to match safe house size
+        el.style.fontSize = building.sprite ? '0' : '28px';  // Hide font-size when using sprite
         el.style.zIndex = '100';
         el.style.cursor = 'pointer';
         el.style.transform = 'translate(-50%, -50%)';
-        el.style.textShadow = '0 0 4px rgba(0,0,0,0.9)';
+        el.style.textShadow = building.sprite ? 'none' : '0 0 4px rgba(0,0,0,0.9)';
         el.style.pointerEvents = 'auto';
         
         // Add click handler
@@ -15445,7 +15449,7 @@ function ensureLandmarkProperties() {
       const modalHTML = `
         <div class="event-modal" id="property-modal">
           <div class="event-modal-content">
-            <div class="event-modal-icon">${buildingType.icon}</div>
+            <div class="event-modal-icon">${building.sprite ? `<img src="${building.sprite}" alt="${building.name}" style="width: 64px; height: 64px; object-fit: contain;">` : buildingType.icon}</div>
             <div class="event-modal-title">${building.name}</div>
             <div class="event-modal-description" style="text-align: center; margin-bottom: 16px;">
               <div style="font-size: 14px; color: #888; margin-bottom: 8px;">${buildingType.name}</div>
