@@ -1309,12 +1309,16 @@ const CopCar3D = {
     }
 
     if (headingFromSystem !== null) {
-      // CopCarSystem.heading is atan2(dx, dy) where +dy = screen down = +Z in 3D.
-      // The GLB model's forward is -Z (glTF convention), so modelYawOffset = PI
-      // rotates 180° to face +Z when heading=0 (moving down).
-      // The heading is added (not negated) because atan2(dx,dy) naturally maps to rotation.y
-      // with the PI offset for the -Z→+Z flip.
-      desiredYaw = headingFromSystem + this.config.modelYawOffset;
+      // CopCarSystem.heading is atan2(dx, dy) where dx,dy are in percent-space.
+      // But the 3D scene maps X by aspect ratio: worldX = (pctX - 50) * aspect.
+      // A straight-line move in percent-space traces a different visual angle
+      // on screen when aspect != 1, causing "crabbing" (car points off-axis).
+      // Fix: decompose the percent-space heading, scale dx by aspect, recompute.
+      const asp = this._mapAspect || 1;
+      const sinH = Math.sin(headingFromSystem);
+      const cosH = Math.cos(headingFromSystem);
+      const worldHeading = Math.atan2(sinH * asp, cosH);
+      desiredYaw = worldHeading + this.config.modelYawOffset;
     } else if (mv > 0.0002) {
       desiredYaw = Math.atan2(moveVec.x, moveVec.z) + this.config.modelYawOffset;
     } else {
