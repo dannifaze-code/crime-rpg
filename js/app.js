@@ -2849,43 +2849,12 @@ Then tighten the rules later.`);
             <div id="turf-tab" class="tab-content">
               <div class="page-header">Turf</div>
               
-              <div class="status-controls">
-                <button class="status-btn laying_low selected" data-status="laying_low">
-                  <span>💤</span>
-                  <span>Lay Low</span>
-                </button>
-                <button class="status-btn active-status" data-status="active">
-                  <span>🔥</span>
-                  <span>Active</span>
-                </button>
-              </div>
-
               <div class="heat-indicator">
                 <div class="heat-icon">🔥</div>
                 <div class="heat-bar-container">
                   <div class="heat-bar-fill" id="heat-bar-fill" style="width: 0%"></div>
                 </div>
                 <div class="heat-value" id="heat-value">0%</div>
-              </div>
-
-              <div class="roam-controls">
-                <button class="roam-btn" id="roam-toggle-btn">
-                  <span id="roam-icon">🚶</span>
-                  <span id="roam-label">Start Free Roam</span>
-                </button>
-              </div>
-              
-              <div class="zoom-controls">
-                <button class="zoom-btn" id="zoom-out-btn" title="Zoom Out">
-                  <span>−</span>
-                </button>
-                <span class="zoom-level" id="zoom-level-display">100%</span>
-                <button class="zoom-btn" id="zoom-in-btn" title="Zoom In">
-                  <span>+</span>
-                </button>
-                <button class="zoom-btn" id="zoom-reset-btn" title="Reset Zoom">
-                  <span>⟲</span>
-                </button>
               </div>
 
               <div class="test-controls" style="margin: 8px 16px;">
@@ -3432,31 +3401,12 @@ Then tighten the rules later.`);
               <div id="turf-tab" class="tab-content">
                 <div class="page-header">Turf</div>
                 
-                <div class="status-controls">
-                  <button class="status-btn laying_low selected" data-status="laying_low">
-                    <span>💤</span>
-                    <span>Lay Low</span>
-                  </button>
-                  <button class="status-btn active-status" data-status="active">
-                    <span>🔥</span>
-                    <span>Active</span>
-                  </button>
-                </div>
-
                 <div class="heat-indicator">
                   <div class="heat-icon">🔥</div>
                   <div class="heat-bar-container">
                     <div class="heat-bar-fill" id="heat-bar-fill" style="width: 0%"></div>
                   </div>
                   <div class="heat-value" id="heat-value">0%</div>
-                </div>
-
-                <div class="roam-controls">
-                  <button class="roam-btn" id="roam-toggle-btn">
-                    <span id="roam-icon">🚶</span>
-                    <span id="roam-label">Start Free Roam</span>
-                  </button>
-                  <!-- Regenerate button removed - using static map -->
                 </div>
                 
                 <div id="city-map">
