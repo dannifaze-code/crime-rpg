@@ -1486,10 +1486,125 @@
     }
 
     /* Safe house icon never dims */
+    /* Safe house uses a PNG sprite instead of emoji text, so font-size: 0 hides any residual text */
     .map-icon[data-type="safeHouse"] {
       opacity: 1;
       filter: none;
       animation: none;
+      font-size: 0;
+    }
+
+    /* Safe House PNG sprite on turf map */
+    .safehouse-map-sprite {
+      width: 60px;
+      height: auto;
+      image-rendering: -webkit-optimize-contrast;
+      image-rendering: crisp-edges;
+      pointer-events: none;
+    }
+
+    /* Safehouse Upgrades Tab */
+    .safehouse-upgrades-header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 16px;
+      background: rgba(255, 255, 255, 0.04);
+      border-radius: 10px;
+      margin-bottom: 16px;
+    }
+
+    .safehouse-current-preview {
+      width: 72px;
+      height: auto;
+      border-radius: 8px;
+      border: 2px solid #3a3a3a;
+      background: #1a1a1a;
+    }
+
+    .safehouse-upgrade-cards-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      padding-bottom: 24px;
+    }
+
+    .safehouse-upgrade-card {
+      position: relative;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 2px solid #3a3a3a;
+      transition: transform 0.2s ease, border-color 0.2s ease;
+    }
+
+    .safehouse-upgrade-card.upgrade-owned {
+      border-color: #2d7a2d;
+    }
+
+    .safehouse-upgrade-card.upgrade-available {
+      border-color: #ffd700;
+    }
+
+    .safehouse-upgrade-card.upgrade-cant-afford {
+      border-color: #555;
+      opacity: 0.7;
+    }
+
+    .safehouse-upgrade-card.upgrade-locked {
+      border-color: #333;
+      opacity: 0.5;
+    }
+
+    .upgrade-card-img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .upgrade-card-overlay {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 10px;
+      background: linear-gradient(transparent, rgba(0, 0, 0, 0.85));
+      display: flex;
+      justify-content: center;
+      align-items: flex-end;
+    }
+
+    .upgrade-card-badge {
+      font-size: 13px;
+      font-weight: 600;
+      padding: 6px 14px;
+      border-radius: 6px;
+      text-align: center;
+    }
+
+    .upgrade-card-badge.owned-badge {
+      background: rgba(45, 122, 45, 0.8);
+      color: #7fff7f;
+    }
+
+    .upgrade-card-badge.locked-badge {
+      background: rgba(0, 0, 0, 0.6);
+      color: #aaa;
+    }
+
+    .upgrade-buy-btn {
+      background: linear-gradient(135deg, #ffd700, #f0a500);
+      color: #1a1a1a;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 14px;
+      cursor: pointer;
+      transition: transform 0.15s ease;
+    }
+
+    .upgrade-buy-btn:active {
+      transform: scale(0.95);
     }
 
     /* Property Building Icons - Player-owned real estate */
