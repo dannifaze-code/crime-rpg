@@ -6001,6 +6001,48 @@ body {
   z-index: 10;
 }
 
+/* Fullscreen toggle button */
+.fullscreen-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: auto;
+  margin: 0 auto 12px;
+  padding: 6px 18px;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 8px;
+  color: #b0b0b0;
+  font-family: 'Cinzel', serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05);
+}
+
+.fullscreen-toggle-btn svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.fullscreen-toggle-btn:hover {
+  background: linear-gradient(135deg, #1f1f3a 0%, #1b2a4a 50%, #145090 100%);
+  border-color: rgba(255,255,255,0.22);
+  color: #e0e0e0;
+  transform: scale(1.04);
+  box-shadow: 0 4px 14px rgba(15,52,96,0.5), inset 0 1px 0 rgba(255,255,255,0.08);
+}
+
+.fullscreen-toggle-btn:active {
+  transform: scale(0.97);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+}
+
 /* Header buttons container */
 .profile-header-buttons {
   display: flex;

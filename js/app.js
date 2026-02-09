@@ -21714,6 +21714,9 @@ function ensureLandmarkProperties() {
         // Render logout button
         this.renderLogoutButton();
         
+        // Initialize fullscreen button
+        this.initFullscreenButton();
+        
         // Render heat log if exists (kept as scroll target)
         this.renderHeatLog();
         
@@ -22389,6 +22392,43 @@ function ensureLandmarkProperties() {
         
         // Start listening for messages
         ChatSystem.startListeningForMessages();
+      },
+      
+      initFullscreenButton() {
+        const btn = document.getElementById('fullscreen-btn');
+        if (!btn) return;
+        
+        const expandIcon = document.getElementById('fullscreen-icon-expand');
+        const compressIcon = document.getElementById('fullscreen-icon-compress');
+        const label = btn.querySelector('.fullscreen-btn-label');
+        
+        function updateIcons() {
+          const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
+          if (expandIcon) expandIcon.style.display = isFs ? 'none' : 'block';
+          if (compressIcon) compressIcon.style.display = isFs ? 'block' : 'none';
+          if (label) label.textContent = isFs ? 'Exit Fullscreen' : 'Fullscreen';
+        }
+        
+        btn.addEventListener('click', function() {
+          const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
+          if (!isFs) {
+            var el = document.documentElement;
+            if (el.requestFullscreen) el.requestFullscreen();
+            else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+            else if (el.mozRequestFullScreen) el.mozRequestFullScreen();
+            else if (el.msRequestFullscreen) el.msRequestFullscreen();
+          } else {
+            if (document.exitFullscreen) document.exitFullscreen();
+            else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+            else if (document.mozCancelFullScreen) document.mozCancelFullScreen();
+            else if (document.msExitFullscreen) document.msExitFullscreen();
+          }
+        });
+        
+        document.addEventListener('fullscreenchange', updateIcons);
+        document.addEventListener('webkitfullscreenchange', updateIcons);
+        document.addEventListener('mozfullscreenchange', updateIcons);
+        document.addEventListener('MSFullscreenChange', updateIcons);
       },
       
       renderHeatLog() {
