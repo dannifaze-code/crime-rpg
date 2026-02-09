@@ -6006,27 +6006,26 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  width: auto;
+  width: 40px;
+  height: 40px;
   margin: 0 auto 12px;
-  padding: 6px 18px;
+  padding: 0;
   background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
   border: 1px solid rgba(255,255,255,0.12);
   border-radius: 8px;
   color: #b0b0b0;
-  font-family: 'Cinzel', serif;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 1px;
-  text-transform: uppercase;
   cursor: pointer;
   transition: all 0.25s ease;
   box-shadow: 0 2px 8px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05);
 }
 
+.fullscreen-toggle-btn .fullscreen-btn-label {
+  display: none;
+}
+
 .fullscreen-toggle-btn svg {
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
   flex-shrink: 0;
 }
 

@@ -2792,6 +2792,14 @@ Then tighten the rules later.`);
             <!-- Profile Tab -->
             <div id="profile-tab" class="tab-content active">
               <div class="page-header">Profile</div>
+              <button id="fullscreen-btn" class="fullscreen-toggle-btn" title="Toggle Fullscreen">
+                <svg id="fullscreen-icon-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+                </svg>
+                <svg id="fullscreen-icon-compress" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;">
+                  <path d="M4 14h6v6m10-10h-6V4M4 10h6V4m10 10h-6v6"/>
+                </svg>
+              </button>
               <div class="stat-grid">
                 <div class="stat-card">
                   <div class="stat-label">Player</div>
@@ -3367,6 +3375,14 @@ Then tighten the rules later.`);
               <!-- Profile Tab -->
               <div id="profile-tab" class="tab-content active">
                 <div class="page-header">Profile</div>
+                <button id="fullscreen-btn" class="fullscreen-toggle-btn" title="Toggle Fullscreen">
+                  <svg id="fullscreen-icon-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+                  </svg>
+                  <svg id="fullscreen-icon-compress" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;">
+                    <path d="M4 14h6v6m10-10h-6V4M4 10h6V4m10 10h-6v6"/>
+                  </svg>
+                </button>
                 <div class="stat-grid">
                   <div class="stat-card">
                     <div class="stat-label">Player</div>
