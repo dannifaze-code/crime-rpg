@@ -1486,6 +1486,7 @@
     }
 
     /* Safe house icon never dims */
+    /* Safe house uses a PNG sprite instead of emoji text, so font-size: 0 hides any residual text */
     .map-icon[data-type="safeHouse"] {
       opacity: 1;
       filter: none;
