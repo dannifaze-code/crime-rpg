@@ -29644,6 +29644,12 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       console.log('🎮 [GameLoop] Game loop initialized for Turf Defense');
 
       if (typeof DrugLabSystem !== 'undefined') { DrugLabSystem.init(); }
+
+      // Preload 3D enemy models for instant battle scene rendering
+      if (window.Enemy3DRenderer && typeof Enemy3DRenderer.preloadBattleModels === 'function') {
+        Enemy3DRenderer.preloadBattleModels();
+      }
+
       console.log('=== [DEBUG] initializeGame() COMPLETE ===');
       console.log('==========================================');
     }

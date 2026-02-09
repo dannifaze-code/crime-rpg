@@ -5,8 +5,9 @@
  * Uses Three.js + GLTFLoader (already loaded globally for CopCar3D).
  *
  * Usage:
- *   Enemy3DRenderer.renderInBattle(containerId, glbPath)  — shows a spinning 3D enemy in the battle scene
+ *   Enemy3DRenderer.renderInBattle(containerId, glbPath)  — shows a 3D enemy facing the player in the battle scene
  *   Enemy3DRenderer.dispose()                              — cleans up the current scene
+ *   Enemy3DRenderer.preloadBattleModels()                  — preloads all enemy GLBs for instant battle rendering
  */
 
 // Shared rendering constants
@@ -25,10 +26,42 @@ const Enemy3DRenderer = {
   animationFrameId: null,
   mixer: null,       // THREE.AnimationMixer for GLB animations
   clock: null,
+  _idleTime: 0,      // elapsed time for idle animation
 
   // Current state
   currentModelPath: null,
   isInitialized: false,
+
+  // GLB model cache for instant battle loading
+  _modelCache: {},        // { glbPath: gltf }
+  _modelCacheLoading: false,
+
+  /**
+   * Preload all enemy GLB models into memory for instant battle rendering.
+   * Call once at game startup so battles load instantly.
+   */
+  preloadBattleModels: function() {
+    if (this._modelCacheLoading) return;
+    if (typeof THREE === 'undefined' || !THREE.GLTFLoader) return;
+    if (typeof ENEMY_SPRITES === 'undefined' || typeof ENEMY_SPRITE_IDS === 'undefined') return;
+
+    this._modelCacheLoading = true;
+    var self = this;
+    var loader = new THREE.GLTFLoader();
+    var ids = ENEMY_SPRITE_IDS.slice();
+
+    ids.forEach(function(enemyId) {
+      var glbPath = ENEMY_SPRITES[enemyId];
+      if (!glbPath || self._modelCache[glbPath]) return;
+
+      loader.load(glbPath, function(gltf) {
+        self._modelCache[glbPath] = gltf;
+        console.log('[Enemy3D] Preloaded model:', glbPath);
+      }, undefined, function(err) {
+        console.warn('[Enemy3D] Preload failed:', glbPath, err);
+      });
+    });
+  },
 
   /**
    * Render a 3D enemy model inside a given container element (battle scene).
@@ -133,75 +166,27 @@ const Enemy3DRenderer = {
   },
 
   /**
-   * Load a GLB model into the scene.
+   * Load a GLB model into the scene. Uses preloaded cache if available.
    */
   _loadModel(glbPath) {
-    const loader = new THREE.GLTFLoader();
     const self = this;
+
+    // Use cached model if available for instant loading
+    var cachedGltf = this._modelCache[glbPath];
+    if (cachedGltf) {
+      this._setupModel(cachedGltf, glbPath);
+      return;
+    }
+
+    // Fallback: load from network
+    const loader = new THREE.GLTFLoader();
 
     loader.load(
       glbPath,
       function (gltf) {
-        const root = gltf.scene;
-        root.name = 'EnemyModel';
-
-        // Auto-scale model to fit nicely in view
-        const box = new THREE.Box3().setFromObject(root);
-        const size = new THREE.Vector3();
-        box.getSize(size);
-        const center = new THREE.Vector3();
-        box.getCenter(center);
-
-        // Normalize to fit in view
-        const maxDim = Math.max(size.x, size.y, size.z);
-        const scale = maxDim > 0.0001 ? ENEMY_3D_TARGET_HEIGHT / maxDim : 1;
-        root.scale.setScalar(scale);
-
-        // Re-center so model is grounded and centered
-        box.setFromObject(root);
-        box.getCenter(center);
-        root.position.sub(center);
-        // Recompute after centering
-        box.setFromObject(root);
-        root.position.y -= box.min.y; // Sit on ground plane (y=0)
-
-        // Enhance materials for better rendering
-        const maxAniso = self.renderer?.capabilities?.getMaxAnisotropy?.() || 1;
-        root.traverse(function (child) {
-          if (!child.isMesh) return;
-          var mats = Array.isArray(child.material) ? child.material : [child.material];
-          mats.forEach(function (mat) {
-            if (!mat) return;
-            if (mat.map) {
-              mat.map.encoding = THREE.sRGBEncoding;
-              mat.map.anisotropy = maxAniso;
-              mat.map.needsUpdate = true;
-            }
-            if (mat.emissiveMap) {
-              mat.emissiveMap.encoding = THREE.sRGBEncoding;
-              mat.emissiveMap.anisotropy = maxAniso;
-              mat.emissiveMap.needsUpdate = true;
-            }
-            mat.needsUpdate = true;
-          });
-        });
-
-        // Play animations if the GLB has them
-        if (gltf.animations && gltf.animations.length > 0) {
-          self.mixer = new THREE.AnimationMixer(root);
-          // Play all animations (idle)
-          gltf.animations.forEach(function (clip) {
-            self.mixer.clipAction(clip).play();
-          });
-        }
-
-        if (self.model && self.scene) {
-          self.scene.remove(self.model);
-        }
-        self.model = root;
-        self.scene.add(root);
-
-        console.log('[Enemy3D] Model loaded:', glbPath, '| meshes:', root.children.length);
+        // Cache for future use
+        self._modelCache[glbPath] = gltf;
+        self._setupModel(gltf, glbPath);
       },
       undefined,
       function (err) {
@@ -211,7 +196,77 @@ const Enemy3DRenderer = {
   },
 
   /**
-   * Animation loop — renders the 3D enemy with a slow idle rotation.
+   * Setup a loaded GLTF model in the scene (shared by cached and network-loaded paths).
+   */
+  _setupModel(gltf, glbPath) {
+    const self = this;
+    const root = gltf.scene.clone(true);
+    root.name = 'EnemyModel';
+
+    // Auto-scale model to fit nicely in view
+    const box = new THREE.Box3().setFromObject(root);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+
+    // Normalize to fit in view
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const scale = maxDim > 0.0001 ? ENEMY_3D_TARGET_HEIGHT / maxDim : 1;
+    root.scale.setScalar(scale);
+
+    // Re-center so model is grounded and centered
+    box.setFromObject(root);
+    box.getCenter(center);
+    root.position.sub(center);
+    // Recompute after centering
+    box.setFromObject(root);
+    root.position.y -= box.min.y; // Sit on ground plane (y=0)
+
+    // Face toward the camera (player)
+    root.rotation.y = Math.PI;
+
+    // Enhance materials for better rendering
+    const maxAniso = self.renderer?.capabilities?.getMaxAnisotropy?.() || 1;
+    root.traverse(function (child) {
+      if (!child.isMesh) return;
+      var mats = Array.isArray(child.material) ? child.material : [child.material];
+      mats.forEach(function (mat) {
+        if (!mat) return;
+        if (mat.map) {
+          mat.map.encoding = THREE.sRGBEncoding;
+          mat.map.anisotropy = maxAniso;
+          mat.map.needsUpdate = true;
+        }
+        if (mat.emissiveMap) {
+          mat.emissiveMap.encoding = THREE.sRGBEncoding;
+          mat.emissiveMap.anisotropy = maxAniso;
+          mat.emissiveMap.needsUpdate = true;
+        }
+        mat.needsUpdate = true;
+      });
+    });
+
+    // Play animations if the GLB has them
+    if (gltf.animations && gltf.animations.length > 0) {
+      self.mixer = new THREE.AnimationMixer(root);
+      gltf.animations.forEach(function (clip) {
+        self.mixer.clipAction(clip).play();
+      });
+    }
+
+    if (self.model && self.scene) {
+      self.scene.remove(self.model);
+    }
+    self.model = root;
+    self._idleTime = 0;
+    self.scene.add(root);
+
+    console.log('[Enemy3D] Model loaded:', glbPath, '| meshes:', root.children.length);
+  },
+
+  /**
+   * Animation loop — renders the 3D enemy with a subtle idle animation (no rotation).
    */
   _startLoop() {
     var self = this;
@@ -222,14 +277,39 @@ const Enemy3DRenderer = {
       if (!self.renderer || !self.scene || !self.camera) return;
 
       // Update animation mixer
-      if (self.mixer && self.clock) {
-        var delta = self.clock.getDelta();
+      var delta = 0;
+      if (self.clock) {
+        delta = self.clock.getDelta();
+      }
+      if (self.mixer && delta > 0) {
         self.mixer.update(delta);
       }
 
-      // Slow idle rotation for dramatic effect
+      // Subtle idle animation — gentle breathing sway (no rotation)
       if (self.model) {
-        self.model.rotation.y += 0.005;
+        self._idleTime += delta || 0.016;
+        // Gentle vertical bob (breathing)
+        var baseY = self.model.userData._baseY;
+        if (baseY === undefined) {
+          baseY = self.model.position.y;
+          self.model.userData._baseY = baseY;
+        }
+        self.model.position.y = baseY + Math.sin(self._idleTime * 1.8) * 0.015;
+        // Subtle side-to-side sway
+        var baseX = self.model.userData._baseX;
+        if (baseX === undefined) {
+          baseX = self.model.position.x;
+          self.model.userData._baseX = baseX;
+        }
+        self.model.position.x = baseX + Math.sin(self._idleTime * 1.1) * 0.008;
+        // Subtle scale pulse (breathing effect)
+        var baseScale = self.model.userData._baseScale;
+        if (baseScale === undefined) {
+          baseScale = self.model.scale.x;
+          self.model.userData._baseScale = baseScale;
+        }
+        var breathScale = baseScale + Math.sin(self._idleTime * 2.0) * 0.005;
+        self.model.scale.setScalar(breathScale);
       }
 
       self.renderer.render(self.scene, self.camera);
@@ -288,6 +368,7 @@ const Enemy3DRenderer = {
     this.clock = null;
     this.currentModelPath = null;
     this.isInitialized = false;
+    this._idleTime = 0;
   },
 
   /**
