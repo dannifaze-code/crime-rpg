@@ -29821,7 +29821,16 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       
       if (Array.isArray(GameState.propertyBuildings) && GameState.propertyBuildings.length > 0) {
         console.log(`💥 Found ${GameState.propertyBuildings.length} properties - updating positions NOW...`);
-        
+
+        // Update 347 Apartment (formerly Riverside Apartments)
+        const apt1 = GameState.propertyBuildings.find(p => p.id === 'apt1');
+        if (apt1) {
+          console.log(`   Before: ${apt1.name} sprite=${apt1.sprite || 'none'}`);
+          apt1.name = '347 Apartment';
+          apt1.sprite = 'sprites/turf-map/347apartmentbase.png';
+          console.log(`   ✅ After: ${apt1.name} sprite=${apt1.sprite}`);
+        }
+
         // Update Gun Shop
         const gunshop = GameState.propertyBuildings.find(p => p.id === 'gunshop');
         if (gunshop) {
