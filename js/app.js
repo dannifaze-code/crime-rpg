@@ -15271,7 +15271,7 @@ function ensureLandmarkProperties() {
       console.log('=== Initializing Property Buildings ===');
       
       // === FORCE REFRESH FLAG: Change this version to force reload all properties ===
-      const PROPERTY_LAYOUT_VERSION = 7; // Increment this to force refresh - BUMPED TO 7 for gun shop position
+      const PROPERTY_LAYOUT_VERSION = 8; // Increment this to force refresh - BUMPED TO 8 for 347 Apartment rename + sprite
       
       // Always ensure we have the canonical fixedPropertyPositions from DEFAULT_STATE
       // This guarantees all 21 buildings are available
