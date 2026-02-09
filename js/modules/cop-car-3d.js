@@ -407,17 +407,26 @@ const CopCar3D = {
       layer.style.left = '0';
       layer.style.top = '0';
       layer.style.pointerEvents = 'none';
-      layer.style.zIndex = '6';
+      layer.style.zIndex = '1';
       layer.style.transformOrigin = '0 0';
-      this.container.appendChild(layer);
+      // Place inside #map-world so it shares the same stacking context as
+      // #map-entities (z-index 2). This ensures all buildings, landmarks,
+      // and the player character render ON TOP of the cop car.
+      const mapWorld = this.mapWorldEl || document.getElementById('map-world');
+      if (mapWorld) {
+        mapWorld.appendChild(layer);
+      } else {
+        this.container.appendChild(layer);
+      }
     }
 
     this.layer = layer;
 
     // Ensure parent is positioned so our absolute layer sizes correctly
+    const layerParent = this.layer.parentElement || this.container;
     try {
-      const pos = getComputedStyle(this.container).position;
-      if (!pos || pos === 'static') this.container.style.position = 'relative';
+      const pos = getComputedStyle(layerParent).position;
+      if (!pos || pos === 'static') layerParent.style.position = 'relative';
     } catch (e) {}
 
     this._syncLayerTransform();
@@ -488,10 +497,18 @@ const CopCar3D = {
     const world = this.mapWorldEl || document.getElementById('map-world');
     if (!world) return;
 
-    // Mirror the exact transform so the 3D overlay follows pan/zoom 1:1
-    // but without being nested inside the transformed element.
-    const tf = world.style.transform || getComputedStyle(world).transform || '';
-    this.layer.style.transform = (tf && tf !== 'none') ? tf : '';
+    // The layer is nested inside #map-world, so it inherits pan/zoom
+    // transforms automatically. We only need to clear any stale transform
+    // and keep the dimensions in sync.
+    const isInsideWorld = world.contains(this.layer);
+    if (isInsideWorld) {
+      // Inside #map-world: do NOT copy transform (would double it)
+      this.layer.style.transform = '';
+    } else {
+      // Fallback: outside #map-world, mirror the transform (legacy path)
+      const tf = world.style.transform || getComputedStyle(world).transform || '';
+      this.layer.style.transform = (tf && tf !== 'none') ? tf : '';
+    }
 
     // Match the untransformed (base) world size.
     const w = world.offsetWidth || 0;
@@ -631,12 +648,13 @@ const CopCar3D = {
     this.canvas.style.width = '100%';
     this.canvas.style.height = '100%';
     this.canvas.style.pointerEvents = 'none';
-    this.canvas.style.zIndex = '6';
+    this.canvas.style.zIndex = '1';
 
     // Ensure parent is positioned
+    const layerParent = (this.layer && this.layer.parentElement) || this.container;
     try {
-      const pos = getComputedStyle(this.container).position;
-      if (!pos || pos === 'static') this.container.style.position = 'relative';
+      const pos = getComputedStyle(layerParent).position;
+      if (!pos || pos === 'static') layerParent.style.position = 'relative';
     } catch (e) {}
 
     this._ensureLayer();
