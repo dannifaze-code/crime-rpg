@@ -15364,6 +15364,11 @@ function ensureLandmarkProperties() {
       console.log(`✅ Rendered ${renderedCount}/${GameState.propertyBuildings.length} property buildings`);
       console.log('Property buildings in DOM:', container.querySelectorAll('.property-building').length);
       console.log('========================================');
+
+      // Apply saved building scales
+      if (typeof BuildingScaleSystem !== 'undefined' && BuildingScaleSystem._scales) {
+        BuildingScaleSystem._applyAllScales();
+      }
     }
 
     // Show property purchase/management modal
@@ -16838,6 +16843,26 @@ function ensureLandmarkProperties() {
             }
           });
           mapEl.appendChild(moveBldgBtn);
+
+          // Scale Buildings button (admin only - right under Move Buildings)
+          const scaleBldgBtn = document.createElement('button');
+          scaleBldgBtn.id = 'scale-buildings-btn';
+          scaleBldgBtn.textContent = 'Scale Buildings';
+          scaleBldgBtn.style.cssText = 'position:absolute;top:32px;right:194px;z-index:100;padding:4px 10px;font-size:11px;background:rgba(0,0,0,0.7);color:#ff0;border:1px solid #ff0;border-radius:4px;cursor:pointer;font-family:monospace;';
+          scaleBldgBtn.addEventListener('click', () => {
+            if (BuildingScaleSystem.active) {
+              BuildingScaleSystem.disable();
+              scaleBldgBtn.textContent = 'Scale Buildings';
+              scaleBldgBtn.style.color = '#ff0';
+              scaleBldgBtn.style.borderColor = '#ff0';
+            } else {
+              BuildingScaleSystem.enable();
+              scaleBldgBtn.textContent = 'Scaling...';
+              scaleBldgBtn.style.color = '#f60';
+              scaleBldgBtn.style.borderColor = '#f60';
+            }
+          });
+          mapEl.appendChild(scaleBldgBtn);
         }
       }
     };
@@ -17265,6 +17290,256 @@ function ensureLandmarkProperties() {
     };
 
     window.BuildingMoveSystem = BuildingMoveSystem;
+
+    // ========================================
+    // BUILDING SCALE SYSTEM (Admin Only)
+    // ========================================
+    const BuildingScaleSystem = {
+      active: false,
+      _selectedEl: null,
+      _selectedId: null,
+      _selectedType: null,
+      _isLandmark: false,
+      _scaleBar: null,
+      _scales: {},  // { buildingId: scaleValue, landmarkType: scaleValue }
+
+      isAdmin() {
+        return BuildingMoveSystem.isAdmin();
+      },
+
+      enable() {
+        this.active = true;
+        console.log('📏 Building Scale Mode ENABLED');
+
+        // Highlight all buildings for selection
+        const buildings = document.querySelectorAll('.property-building');
+        buildings.forEach(el => {
+          el.style.outline = '2px dashed #0ff';
+          el.dataset.scaleable = 'true';
+        });
+
+        const landmarks = document.querySelectorAll('.map-icon');
+        landmarks.forEach(el => {
+          el.style.outline = '2px dashed #0ff';
+          el.dataset.scaleable = 'true';
+        });
+
+        const drugLabHitbox = document.getElementById('druglab-hitbox');
+        if (drugLabHitbox) {
+          drugLabHitbox.style.outline = '2px dashed #0ff';
+          drugLabHitbox.dataset.scaleable = 'true';
+        }
+
+        this._bindClickEvents();
+      },
+
+      disable() {
+        this.active = false;
+        console.log('📏 Building Scale Mode DISABLED');
+
+        this._removeScaleBar();
+
+        const buildings = document.querySelectorAll('.property-building');
+        buildings.forEach(el => {
+          el.style.outline = '';
+          delete el.dataset.scaleable;
+        });
+
+        const landmarks = document.querySelectorAll('.map-icon');
+        landmarks.forEach(el => {
+          el.style.outline = '';
+          delete el.dataset.scaleable;
+        });
+
+        const drugLabHitbox = document.getElementById('druglab-hitbox');
+        if (drugLabHitbox) {
+          drugLabHitbox.style.outline = '';
+          delete drugLabHitbox.dataset.scaleable;
+        }
+
+        this._unbindClickEvents();
+      },
+
+      _onScaleClick(e) {
+        if (!BuildingScaleSystem.active) return;
+        const el = e.target.closest('.property-building[data-scaleable], .map-icon[data-scaleable], #druglab-hitbox[data-scaleable]');
+        if (!el) return;
+        e.preventDefault();
+        e.stopPropagation();
+        BuildingScaleSystem._selectBuilding(el);
+      },
+
+      _selectBuilding(el) {
+        // Remove previous selection highlight
+        if (this._selectedEl) {
+          this._selectedEl.style.outline = '2px dashed #0ff';
+        }
+
+        this._selectedEl = el;
+        el.style.outline = '3px solid #0f0';
+
+        // Determine ID
+        if (el.id === 'druglab-hitbox') {
+          this._selectedId = 'drugLab';
+          this._selectedType = 'drugLab';
+          this._isLandmark = true;
+        } else if (el.classList.contains('map-icon')) {
+          this._selectedType = el.dataset.type;
+          this._selectedId = el.dataset.type;
+          this._isLandmark = true;
+        } else {
+          this._selectedId = el.dataset.id;
+          this._selectedType = el.dataset.type;
+          this._isLandmark = false;
+        }
+
+        // Get current scale
+        const currentScale = this._scales[this._selectedId] || 1.0;
+        this._showScaleBar(currentScale);
+      },
+
+      _showScaleBar(currentScale) {
+        this._removeScaleBar();
+
+        const mapEl = document.getElementById('city-map');
+        if (!mapEl) return;
+
+        const bar = document.createElement('div');
+        bar.id = 'building-scale-bar';
+        bar.style.cssText = 'position:absolute;top:58px;right:194px;z-index:200;display:flex;align-items:center;gap:6px;background:rgba(0,0,0,0.85);padding:5px 10px;border:1px solid #0ff;border-radius:4px;font-family:monospace;';
+
+        const label = document.createElement('span');
+        label.style.cssText = 'color:#0ff;font-size:11px;white-space:nowrap;';
+        label.textContent = 'Scale:';
+
+        const slider = document.createElement('input');
+        slider.type = 'range';
+        slider.id = 'building-scale-slider';
+        slider.min = '0.3';
+        slider.max = '3.0';
+        slider.step = '0.1';
+        slider.value = String(currentScale);
+        slider.style.cssText = 'width:100px;cursor:pointer;accent-color:#0ff;';
+
+        const valueLabel = document.createElement('span');
+        valueLabel.id = 'building-scale-value';
+        valueLabel.style.cssText = 'color:#fff;font-size:11px;min-width:30px;text-align:center;';
+        valueLabel.textContent = currentScale.toFixed(1) + 'x';
+
+        slider.addEventListener('input', () => {
+          const val = parseFloat(slider.value);
+          valueLabel.textContent = val.toFixed(1) + 'x';
+          BuildingScaleSystem._applyScaleToSelected(val);
+        });
+
+        const saveBtn = document.createElement('button');
+        saveBtn.id = 'save-building-scale-btn';
+        saveBtn.textContent = '💾 Save Scale';
+        saveBtn.style.cssText = 'padding:3px 8px;font-size:11px;background:rgba(0,0,0,0.7);color:#0f0;border:1px solid #0f0;border-radius:4px;cursor:pointer;font-family:monospace;white-space:nowrap;';
+        saveBtn.addEventListener('click', () => BuildingScaleSystem.saveScales());
+
+        bar.appendChild(label);
+        bar.appendChild(slider);
+        bar.appendChild(valueLabel);
+        bar.appendChild(saveBtn);
+        mapEl.appendChild(bar);
+        this._scaleBar = bar;
+      },
+
+      _removeScaleBar() {
+        if (this._scaleBar) {
+          this._scaleBar.remove();
+          this._scaleBar = null;
+        }
+        // Also remove by ID in case of stale reference
+        const existing = document.getElementById('building-scale-bar');
+        if (existing) existing.remove();
+      },
+
+      _applyScaleToSelected(scaleVal) {
+        if (!this._selectedEl || !this._selectedId) return;
+        this._scales[this._selectedId] = scaleVal;
+        this._applyScaleToElement(this._selectedEl, scaleVal);
+      },
+
+      _applyScaleToElement(el, scaleVal) {
+        // Preserve translate(-50%, -50%) and add scale
+        el.style.transform = 'translate(-50%, -50%) scale(' + scaleVal + ')';
+      },
+
+      _bindClickEvents() {
+        const mapEl = document.getElementById('city-map');
+        if (!mapEl) return;
+        mapEl.addEventListener('click', this._onScaleClick, true);
+      },
+
+      _unbindClickEvents() {
+        const mapEl = document.getElementById('city-map');
+        if (!mapEl) return;
+        mapEl.removeEventListener('click', this._onScaleClick, true);
+      },
+
+      saveScales() {
+        if (typeof database !== 'undefined' && database) {
+          const payload = { scales: this._scales, updatedAt: Date.now() };
+          database.ref('gameConfig/buildingScales').set(payload)
+            .then(() => {
+              console.log('📏 ✅ Building scales saved globally to Firebase');
+              alert('Building scales saved globally! All players will see the new sizes.');
+            })
+            .catch((err) => {
+              console.error('📏 Firebase save failed:', err);
+              alert('Save failed: ' + err.message);
+            });
+        } else {
+          alert('Firebase not available - scales not saved globally.');
+        }
+      },
+
+      loadScales() {
+        if (typeof database !== 'undefined' && database) {
+          database.ref('gameConfig/buildingScales').once('value').then((snapshot) => {
+            const data = snapshot.val();
+            if (data && data.scales && typeof data.scales === 'object') {
+              console.log('📏 Loading saved building scales from Firebase...');
+              this._scales = data.scales;
+              this._applyAllScales();
+              console.log('📏 ✅ Building scales loaded and applied');
+            }
+          }).catch(err => {
+            console.warn('📏 Failed to load building scales from Firebase:', err);
+          });
+        }
+      },
+
+      _applyAllScales() {
+        // Apply scales to property buildings
+        const buildings = document.querySelectorAll('.property-building');
+        buildings.forEach(el => {
+          const id = el.dataset.id;
+          if (id && this._scales[id]) {
+            this._applyScaleToElement(el, this._scales[id]);
+          }
+        });
+
+        // Apply scales to landmarks
+        const landmarks = document.querySelectorAll('.map-icon');
+        landmarks.forEach(el => {
+          const type = el.dataset.type;
+          if (type && this._scales[type]) {
+            this._applyScaleToElement(el, this._scales[type]);
+          }
+        });
+
+        // Apply scale to drug lab hitbox
+        const drugLabHitbox = document.getElementById('druglab-hitbox');
+        if (drugLabHitbox && this._scales['drugLab']) {
+          this._applyScaleToElement(drugLabHitbox, this._scales['drugLab']);
+        }
+      }
+    };
+
+    window.BuildingScaleSystem = BuildingScaleSystem;
 
     window.CopNodeDebug = CopNodeDebug;
 
@@ -26878,6 +27153,11 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
         
         // Update risk-based brightness
         this.updateIconRiskLevels();
+
+        // Apply saved building scales to landmarks
+        if (typeof BuildingScaleSystem !== 'undefined' && BuildingScaleSystem._scales) {
+          BuildingScaleSystem._applyAllScales();
+        }
       },
       
       renderCharacter() {
@@ -29377,6 +29657,11 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       // Load globally saved building positions from Firebase (admin can move buildings)
       if (typeof BuildingMoveSystem !== 'undefined') {
         BuildingMoveSystem.loadPositions();
+      }
+
+      // Load globally saved building scales from Firebase (admin can scale buildings)
+      if (typeof BuildingScaleSystem !== 'undefined') {
+        BuildingScaleSystem.loadScales();
       }
       
       // ===== NUCLEAR OPTION: FORCE POSITION UPDATE AFTER INIT =====
