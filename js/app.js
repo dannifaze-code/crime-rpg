@@ -12504,8 +12504,8 @@ function updateTurfDefense(dt) {
         return;
       }
 
-      // Path to the turf map image
-      const mapImagePath = 'sprites/turf-map/TurfMap.png';
+      // Path to the turf map image (day/night aware)
+      const mapImagePath = window.DayNightCycle ? DayNightCycle.getCurrentMapPath() : 'sprites/turf-map/TurfMap.png';
 
       // Create an Image object to load the PNG (needed for RoadPathfinder)
       const mapImage = new Image();
@@ -12513,7 +12513,7 @@ function updateTurfDefense(dt) {
 
       mapImage.onload = () => {
         console.log('✅ Static map loaded successfully');
-        // Set the background image on the div
+        // Set the background image on the div (DayNightCycle will manage ongoing switches)
         mapBackground.style.backgroundImage = `url('${mapImagePath}')`;
         mapBackground.style.backgroundSize = 'cover';
         mapBackground.style.backgroundPosition = 'center';
@@ -12541,6 +12541,100 @@ function updateTurfDefense(dt) {
     }
     // CRITICAL: Expose to window immediately after definition so callers can use window.initStaticMap()
     window.initStaticMap = initStaticMap;
+
+    // ========================================
+    // DAY/NIGHT CYCLE SYSTEM
+    // Synchronized to EST (UTC-5) - simulates a full 24-hour day.
+    // Night: 8 PM to 6 AM EST  |  Day: 6 AM to 8 PM EST
+    // ========================================
+    const DayNightCycle = {
+      _intervalId: null,
+      _isNight: null,           // current state (null = not yet determined)
+      _nightImagePreloaded: false,
+      DAY_MAP: 'sprites/turf-map/TurfMap.png',
+      NIGHT_MAP: 'sprites/turf-map/TurMapNight.png',
+      // EST offset: UTC-5 hours (standard Eastern Time, no DST adjustment - server canonical time)
+      EST_OFFSET: -5,
+
+      // Get current hour in EST (0-23)
+      getESTHour: function() {
+        const now = new Date();
+        // Convert UTC hours to EST by applying offset
+        const utcHours = now.getUTCHours();
+        let estHour = utcHours + this.EST_OFFSET;
+        if (estHour < 0) estHour += 24;
+        if (estHour >= 24) estHour -= 24;
+        return estHour;
+      },
+
+      // Determine if it's currently night in EST (8 PM - 6 AM)
+      isNightTime: function() {
+        const hour = this.getESTHour();
+        // Night = 20:00 (8 PM) through 05:59 (6 AM)
+        return hour >= 20 || hour < 6;
+      },
+
+      // Preload the night map image so switching is instant
+      preloadNightMap: function() {
+        if (this._nightImagePreloaded) return;
+        const img = new Image();
+        img.src = this.NIGHT_MAP;
+        img.onload = () => {
+          this._nightImagePreloaded = true;
+          console.log('[DayNightCycle] Night map preloaded');
+        };
+      },
+
+      // Apply the correct map image to #map-background (background only, no effect on nodes/buildings)
+      applyMapImage: function(forceUpdate) {
+        const night = this.isNightTime();
+        // Skip if state hasn't changed (unless forced)
+        if (!forceUpdate && night === this._isNight) return;
+
+        this._isNight = night;
+        const mapPath = night ? this.NIGHT_MAP : this.DAY_MAP;
+
+        const mapBackground = document.getElementById('map-background');
+        if (mapBackground) {
+          mapBackground.style.backgroundImage = "url('" + mapPath + "')";
+          console.log('[DayNightCycle] ' + (night ? 'Night' : 'Day') + ' map applied (EST hour: ' + this.getESTHour() + ')');
+        }
+      },
+
+      // Get the current map image path based on time of day
+      getCurrentMapPath: function() {
+        return this.isNightTime() ? this.NIGHT_MAP : this.DAY_MAP;
+      },
+
+      // Initialize the day/night cycle system
+      init: function() {
+        console.log('[DayNightCycle] Initializing EST-synchronized day/night cycle...');
+        console.log('[DayNightCycle] Current EST hour: ' + this.getESTHour() + ', Night: ' + this.isNightTime());
+
+        // Preload night map for instant switching
+        this.preloadNightMap();
+
+        // Apply correct map immediately
+        this.applyMapImage(true);
+
+        // Check every 60 seconds for time-of-day change
+        if (this._intervalId) clearInterval(this._intervalId);
+        var self = this;
+        this._intervalId = setInterval(function() { self.applyMapImage(false); }, 60000);
+
+        console.log('[DayNightCycle] Initialized');
+      },
+
+      // Clean up interval
+      dispose: function() {
+        if (this._intervalId) {
+          clearInterval(this._intervalId);
+          this._intervalId = null;
+        }
+      }
+    };
+    window.DayNightCycle = DayNightCycle;
+
     // ========================================
     // ROAD-MASK PATHFINDING (A* on a grid) for Cop Patrol
     // ========================================
@@ -22626,6 +22720,11 @@ function ensureLandmarkProperties() {
         console.log('[TurfTab] Initializing weather overlay...');
         WeatherOverlay.init();
 
+        // Initialize day/night cycle (EST-synchronized)
+        if (window.DayNightCycle) {
+          DayNightCycle.init();
+        }
+
         // Ensure the top-down player sprite exists and idles at the Safehouse (even when not roaming)
         // Delay a tick so the map/buildings have time to render on mobile.
         setTimeout(() => {
@@ -29828,16 +29927,16 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
           return;
         }
 
-        const mapImagePath = 'sprites/turf-map/TurfMap.png';
+        const mapImagePath = window.DayNightCycle ? DayNightCycle.getCurrentMapPath() : 'sprites/turf-map/TurfMap.png';
 
-        // Set background image directly
+        // Set background image directly (day/night aware)
         mapBackground.style.backgroundImage = `url('${mapImagePath}')`;
         mapBackground.style.backgroundSize = 'cover';
         mapBackground.style.backgroundPosition = 'center';
         mapBackground.style.backgroundRepeat = 'no-repeat';
         console.log('[RoadPathfinder] ✅ Map background set');
 
-        // Load image for RoadPathfinder
+        // Load DAY map image for RoadPathfinder analysis (road detection always uses day map)
         const mapImage = new Image();
         mapImage.crossOrigin = 'anonymous';
 
@@ -29885,7 +29984,8 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
           console.error('[RoadPathfinder] ❌ Failed to load map image:', e);
         };
 
-        mapImage.src = mapImagePath;
+        // Always use the day map for road analysis (roads are the same day/night)
+        mapImage.src = 'sprites/turf-map/TurfMap.png';
       };
 
       // Execute immediately
