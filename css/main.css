@@ -4577,7 +4577,7 @@
     #freeRoamPlayer {
       position: absolute;
       /* Single source of truth for sprite size */
-      --fr-size: 64px;
+      --fr-size: 32px;
       width: var(--fr-size);
       height: var(--fr-size);
       pointer-events: none;
@@ -4602,7 +4602,7 @@
 
     /* Mobile: make the character roughly "cop car" sized */
     @media (max-width: 700px) {
-      #freeRoamPlayer { --fr-size: 44px; }
+      #freeRoamPlayer { --fr-size: 22px; }
     }
 
     /* Rotator owns facing direction (rotate), bob owns movement bounce. */
