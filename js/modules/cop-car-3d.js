@@ -144,7 +144,7 @@ const CopCar3D = {
     },
 
     lanePx: LANE_PX,
-    laneWidthFactor: 0.8,
+    laneWidthFactor: 0.35,
     laneDebugLengthFactor: 1.6,
     // Percent-based sample pairs on the turf map used to estimate lane width in CSS px.
     laneSamplePairs: [
@@ -152,8 +152,8 @@ const CopCar3D = {
       { a: { x: 55.5, y: 40 }, b: { x: 58.5, y: 40 } },
       { a: { x: 72, y: 63.5 }, b: { x: 72, y: 66.5 } }
     ],
-    carWidthPercentUnits: 2.0,
-    carLengthPercentUnits: 3.5,
+    carWidthPercentUnits: 0.9,
+    carLengthPercentUnits: 1.5,
     carWidthSlimFactor: 1.0,
     carLengthStretchFactor: 1.0,
 
