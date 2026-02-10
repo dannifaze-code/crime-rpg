@@ -1688,6 +1688,156 @@
       50% { opacity: 0.5; }
     }
 
+    /* ========================================
+       PROPERTY MODAL BUTTONS
+       ======================================== */
+    .prop-btn {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      padding: 12px 16px;
+      border: 1px solid #333;
+      border-radius: 8px;
+      color: #e0e0e0;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      margin-bottom: 8px;
+      min-height: 48px;
+      pointer-events: auto;
+      touch-action: manipulation;
+      position: relative;
+      z-index: 15002;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .prop-btn:active { transform: scale(0.97); }
+    .prop-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      filter: grayscale(0.5);
+    }
+    .prop-btn-icon { font-size: 20px; flex-shrink: 0; }
+    .prop-btn-label { flex: 1; text-align: left; }
+    .prop-btn-cost {
+      font-size: 12px;
+      opacity: 0.8;
+      white-space: nowrap;
+    }
+
+    /* Collect Income — green */
+    .prop-btn-collect {
+      background: linear-gradient(135deg, #1a3a1a 0%, #0d260d 100%);
+      border-color: #2d6b2d;
+    }
+    .prop-btn-collect:hover:not(:disabled) {
+      background: linear-gradient(135deg, #245524 0%, #153a15 100%);
+      border-color: #3d8b3d;
+      box-shadow: 0 0 12px rgba(0, 255, 0, 0.15);
+    }
+
+    /* Upgrade — gold/amber */
+    .prop-btn-upgrade {
+      background: linear-gradient(135deg, #3a2e0a 0%, #261f06 100%);
+      border-color: #6b5a1a;
+    }
+    .prop-btn-upgrade:hover:not(:disabled) {
+      background: linear-gradient(135deg, #4a3d10 0%, #362c08 100%);
+      border-color: #8b7520;
+      box-shadow: 0 0 12px rgba(255, 215, 0, 0.2);
+    }
+
+    /* Max Level — star gold */
+    .prop-btn-maxed {
+      background: linear-gradient(135deg, #2a2210 0%, #1a1508 100%);
+      border-color: #554a20;
+      color: #ffd700;
+    }
+
+    /* Purchase — blue */
+    .prop-btn-purchase {
+      background: linear-gradient(135deg, #0a1a3a 0%, #061026 100%);
+      border-color: #1a4a8b;
+    }
+    .prop-btn-purchase:hover:not(:disabled) {
+      background: linear-gradient(135deg, #102855 0%, #0a1a3a 100%);
+      border-color: #2a6abb;
+      box-shadow: 0 0 12px rgba(74, 144, 226, 0.2);
+    }
+
+    /* Close — neutral dark */
+    .prop-btn-close {
+      background: #1a1a1a;
+      border-color: #333;
+      justify-content: center;
+      font-weight: 400;
+      color: #999;
+      min-height: 40px;
+      margin-bottom: 0;
+    }
+    .prop-btn-close:hover { background: #252525; border-color: #444; color: #ccc; }
+
+    /* ========================================
+       UPGRADE PARTICLE EFFECT
+       ======================================== */
+    .upgrade-particle-burst {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      width: 0;
+      height: 0;
+      z-index: 99;
+      pointer-events: none;
+    }
+
+    .upgrade-particle {
+      position: absolute;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: radial-gradient(circle, #ffd700, #ff8c00);
+      box-shadow: 0 0 6px 2px rgba(255, 215, 0, 0.6);
+      animation: upgrade-particle-fly 0.9s ease-out forwards;
+    }
+
+    @keyframes upgrade-particle-fly {
+      0% {
+        transform: rotate(var(--angle)) translateY(0) scale(1);
+        opacity: 1;
+      }
+      70% {
+        opacity: 0.8;
+      }
+      100% {
+        transform: rotate(var(--angle)) translateY(calc(var(--dist) * -1)) scale(0);
+        opacity: 0;
+      }
+    }
+
+    .upgrade-ring {
+      position: absolute;
+      left: -30px;
+      top: -30px;
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 215, 0, 0.8);
+      box-shadow: 0 0 15px rgba(255, 215, 0, 0.4), inset 0 0 15px rgba(255, 215, 0, 0.1);
+      animation: upgrade-ring-expand 0.8s ease-out forwards;
+    }
+
+    @keyframes upgrade-ring-expand {
+      0% {
+        transform: scale(0.3);
+        opacity: 1;
+      }
+      100% {
+        transform: scale(2.2);
+        opacity: 0;
+      }
+    }
+
     /* Cop Car on Map (2D marker only — 3D overlay renders the vehicle) */
     .cop-car {
       position: absolute;

@@ -5108,7 +5108,7 @@ const CartoonSpriteGenerator = {
 
         // ROW 2 - Upper-middle (y: 25)
         { id: 'dealer1', type: 'dealership', x: 8, y: 25, name: 'Premium Auto Sales', price: 50000, income: 1200 },
-        { id: 'apt1', type: 'apartment', x: 28, y: 25, name: '347 Apartment', price: 20000, income: 500, sprite: 'sprites/turf-map/347apartmentbase.png' },
+        { id: 'apt1', type: 'apartment', x: 28, y: 25, name: '347 Apartment', price: 20000, income: 500, sprite: 'sprites/turf-map/347apartmentbase.png', sprites: ['sprites/turf-map/347apartmentbase.png', 'sprites/turf-map/347apartmentlvl2.png', 'sprites/turf-map/347apartmentlvl3.png', 'sprites/turf-map/347apartmentlvl4.png', 'sprites/turf-map/347apartmentlvl5.png'] },
         { id: 'apt3', type: 'apartment', x: 65, y: 25, name: 'Eastside Apartments', price: 20000, income: 500 },
 
         // ROW 3 - Middle (y: 38)
@@ -15271,7 +15271,7 @@ function ensureLandmarkProperties() {
       console.log('=== Initializing Property Buildings ===');
       
       // === FORCE REFRESH FLAG: Change this version to force reload all properties ===
-      const PROPERTY_LAYOUT_VERSION = 8; // Increment this to force refresh - BUMPED TO 8 for 347 Apartment rename + sprite
+      const PROPERTY_LAYOUT_VERSION = 9; // BUMPED TO 9 for 347 Apartment upgrade sprites array
       
       // Always ensure we have the canonical fixedPropertyPositions from DEFAULT_STATE
       // This guarantees all 21 buildings are available
@@ -15330,6 +15330,28 @@ function ensureLandmarkProperties() {
       }
       
       console.log('========================================');
+    }
+
+    // --- Property Upgrade Helpers ---
+    const MAX_UPGRADE_LEVEL = 4; // 5 visual tiers: base(0), lvl2(1), lvl3(2), lvl4(3), lvl5(4)
+
+    function getBuildingSprite(building) {
+      const level = building.upgradeLevel || 0;
+      if (building.sprites && building.sprites.length > 0) {
+        return building.sprites[Math.min(level, building.sprites.length - 1)];
+      }
+      return building.sprite || null;
+    }
+
+    function getUpgradeCost(building) {
+      const level = building.upgradeLevel || 0;
+      if (level >= MAX_UPGRADE_LEVEL) return null;
+      return Math.round(building.price * (1 + level * 0.75));
+    }
+
+    function getUpgradedIncome(building) {
+      const level = building.upgradeLevel || 0;
+      return Math.round(building.income * (1 + level * 0.5));
     }
 
     // Render property buildings on the map
@@ -15399,8 +15421,9 @@ function ensureLandmarkProperties() {
         el.dataset.id = building.id;
         el.dataset.type = building.type;
         el.dataset.label = `${building.name} - $${(building.price / 1000).toFixed(0)}k`;
-        if (building.sprite) {
-          el.innerHTML = `<img src="${building.sprite}" alt="${building.name}" style="width: 48px; height: 48px; object-fit: contain; display: block;">`;
+        const currentSprite = getBuildingSprite(building);
+        if (currentSprite) {
+          el.innerHTML = `<img src="${currentSprite}" alt="${building.name}" style="width: 48px; height: 48px; object-fit: contain; display: block;">`;
         } else {
           el.innerHTML = buildingType.icon;
         }
@@ -15408,11 +15431,11 @@ function ensureLandmarkProperties() {
         el.style.top = building.y + '%';
         // Ensure visibility with inline styles
         el.style.position = 'absolute';
-        el.style.fontSize = building.sprite ? '0' : '28px';  // Hide font-size when using sprite
+        el.style.fontSize = currentSprite ? '0' : '28px';  // Hide font-size when using sprite
         el.style.zIndex = '100';
         el.style.cursor = 'pointer';
         el.style.transform = 'translate(-50%, -50%)';
-        el.style.textShadow = building.sprite ? 'none' : '0 0 4px rgba(0,0,0,0.9)';
+        el.style.textShadow = currentSprite ? 'none' : '0 0 4px rgba(0,0,0,0.9)';
         el.style.pointerEvents = 'auto';
         
         // Add click handler
@@ -15439,29 +15462,41 @@ function ensureLandmarkProperties() {
     function showPropertyModal(building) {
       console.log('🏢 showPropertyModal() called for:', building.name);
       console.log('Building data:', building);
-      
+
       const buildingType = PROPERTY_TYPES[building.type];
       const owned = building.owned;
       const canAfford = GameState.player.cash >= building.price;
-      
+      const currentSprite = getBuildingSprite(building);
+      const level = building.upgradeLevel || 0;
+      const displayLevel = level + 1; // Visual level: 1-5
+      const upgradeCost = getUpgradeCost(building);
+      const currentIncome = getUpgradedIncome(building);
+      const isMaxLevel = level >= MAX_UPGRADE_LEVEL;
+      const canAffordUpgrade = upgradeCost !== null && GameState.player.cash >= upgradeCost;
+
       console.log('Player cash:', GameState.player.cash, 'Building price:', building.price, 'Can afford:', canAfford);
-      
+
+      // Build level pips (visual dots for upgrade level)
+      let levelPips = '';
+      for (let i = 0; i < MAX_UPGRADE_LEVEL + 1; i++) {
+        levelPips += `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;margin:0 2px;${i < displayLevel ? 'background:linear-gradient(135deg,#ffd700,#ff8c00);box-shadow:0 0 4px rgba(255,215,0,0.5);' : 'background:#333;border:1px solid #555;'}"></span>`;
+      }
+
       const modalHTML = `
         <div class="event-modal" id="property-modal">
           <div class="event-modal-content">
-            <div class="event-modal-icon">${building.sprite ? `<img src="${building.sprite}" alt="${building.name}" style="width: 64px; height: 64px; object-fit: contain;">` : buildingType.icon}</div>
+            <div class="event-modal-icon">${currentSprite ? `<img src="${currentSprite}" alt="${building.name}" style="width: 80px; height: 80px; object-fit: contain;">` : buildingType.icon}</div>
             <div class="event-modal-title">${building.name}</div>
             <div class="event-modal-description" style="text-align: center; margin-bottom: 16px;">
               <div style="font-size: 14px; color: #888; margin-bottom: 8px;">${buildingType.name}</div>
-              ${owned ? 
-                `<div style="color: #00ff00; font-weight: 600; margin-bottom: 12px;">● OWNED</div>
-                 <div style="margin-bottom: 8px;">
-                   <strong>Income:</strong> $${building.income.toLocaleString()}/day
+              ${owned ?
+                `<div style="color: #00ff00; font-weight: 600; margin-bottom: 8px;">● OWNED</div>
+                 <div style="margin-bottom: 6px;">
+                   <strong>Income:</strong> <span style="color: #ffd700;">$${currentIncome.toLocaleString()}/day</span>
                  </div>
-                 <div style="margin-bottom: 8px;">
-                   <strong>Upgrade Level:</strong> ${building.upgradeLevel}/5
-                 </div>` 
-                : 
+                 <div style="margin-bottom: 4px; font-size: 13px; color: #aaa;">Level ${displayLevel}/${MAX_UPGRADE_LEVEL + 1}</div>
+                 <div style="margin-bottom: 12px;">${levelPips}</div>`
+                :
                 `<div style="color: #ffd700; font-size: 24px; font-weight: 600; margin: 12px 0;">
                    $${building.price.toLocaleString()}
                  </div>
@@ -15473,21 +15508,31 @@ function ensureLandmarkProperties() {
                  </div>`
               }
             </div>
-            
+
             ${owned ?
-              `<button class="choice-btn" onclick="collectPropertyIncome('${building.id}')" style="margin-bottom: 8px;">
-                💰 Collect Income
+              `<button class="prop-btn prop-btn-collect" onclick="collectPropertyIncome('${building.id}')">
+                <span class="prop-btn-icon">💰</span>
+                <span class="prop-btn-label">Collect Income</span>
               </button>
-              <button class="choice-btn" onclick="upgradeProperty('${building.id}')">
-                ⬆️ Upgrade (Coming Soon)
-              </button>` 
+              ${isMaxLevel ?
+                `<button class="prop-btn prop-btn-maxed" disabled>
+                  <span class="prop-btn-icon">⭐</span>
+                  <span class="prop-btn-label">MAX LEVEL</span>
+                </button>` :
+                `<button class="prop-btn prop-btn-upgrade" onclick="upgradeProperty('${building.id}')" ${!canAffordUpgrade ? 'disabled' : ''}>
+                  <span class="prop-btn-icon">⬆️</span>
+                  <span class="prop-btn-label">Upgrade</span>
+                  <span class="prop-btn-cost">${canAffordUpgrade ? '$' + upgradeCost.toLocaleString() : 'Need $' + upgradeCost.toLocaleString()}</span>
+                </button>`
+              }`
               :
-              `<button class="choice-btn" onclick="purchaseProperty('${building.id}')" ${!canAfford ? 'disabled' : ''}>
-                ${canAfford ? '💵 Purchase Property' : '❌ Not Enough Money'}
+              `<button class="prop-btn prop-btn-purchase" onclick="purchaseProperty('${building.id}')" ${!canAfford ? 'disabled' : ''}>
+                <span class="prop-btn-icon">${canAfford ? '💵' : '❌'}</span>
+                <span class="prop-btn-label">${canAfford ? 'Purchase Property' : 'Not Enough Money'}</span>
               </button>`
             }
-            
-            <button class="choice-btn" onclick="closePropertyModal()" style="background: #2a2a2a;">
+
+            <button class="prop-btn prop-btn-close" onclick="closePropertyModal()">
               Close
             </button>
           </div>
@@ -15544,7 +15589,8 @@ function ensureLandmarkProperties() {
         return;
       }
       
-      const income = building.income * Math.min(daysSince, 7); // Max 7 days
+      const dailyIncome = getUpgradedIncome(building);
+      const income = dailyIncome * Math.min(daysSince, 7); // Max 7 days
       GameState.player.cash += income;
       building.lastCollected = now;
       
@@ -15555,6 +15601,76 @@ function ensureLandmarkProperties() {
       TurfTab.showTemporaryNotification(`💰 Collected $${income.toLocaleString()}!`);
       ProfileTab.render();
     };
+
+    // Upgrade a property building
+    window.upgradeProperty = function(buildingId) {
+      const building = GameState.propertyBuildings.find(b => b.id === buildingId);
+      if (!building || !building.owned) return;
+
+      const level = building.upgradeLevel || 0;
+      if (level >= MAX_UPGRADE_LEVEL) {
+        TurfTab.showTemporaryNotification('⭐ Already at max level!');
+        return;
+      }
+
+      const cost = getUpgradeCost(building);
+      if (cost === null || GameState.player.cash < cost) {
+        TurfTab.showTemporaryNotification('❌ Not enough money!');
+        return;
+      }
+
+      // Deduct cost and upgrade
+      GameState.player.cash -= cost;
+      building.upgradeLevel = level + 1;
+
+      // Update the active sprite to match new level
+      const newSprite = getBuildingSprite(building);
+      if (newSprite) building.sprite = newSprite;
+
+      Storage.save();
+      closePropertyModal();
+      renderPropertyBuildings();
+
+      // Spawn upgrade particle effect at the building location
+      spawnUpgradeParticles(building);
+
+      TurfTab.showTemporaryNotification(`⬆️ ${building.name} upgraded to Level ${building.upgradeLevel + 1}!`);
+      ProfileTab.render();
+    };
+
+    // Spawn a particle burst effect under a building after upgrade
+    function spawnUpgradeParticles(building) {
+      const container = document.getElementById('map-icons');
+      if (!container) return;
+
+      const burst = document.createElement('div');
+      burst.className = 'upgrade-particle-burst';
+      burst.style.left = building.x + '%';
+      burst.style.top = building.y + '%';
+
+      // Create individual particles radiating outward
+      const particleCount = 12;
+      for (let i = 0; i < particleCount; i++) {
+        const p = document.createElement('div');
+        p.className = 'upgrade-particle';
+        const angle = (360 / particleCount) * i;
+        p.style.setProperty('--angle', angle + 'deg');
+        // Randomize distance and delay slightly
+        p.style.setProperty('--dist', (30 + Math.random() * 20) + 'px');
+        p.style.animationDelay = (Math.random() * 0.15) + 's';
+        burst.appendChild(p);
+      }
+
+      // Add a central glow ring
+      const ring = document.createElement('div');
+      ring.className = 'upgrade-ring';
+      burst.appendChild(ring);
+
+      container.appendChild(burst);
+
+      // Clean up after animation completes
+      setTimeout(() => burst.remove(), 1200);
+    }
 
     // Close property modal
     window.closePropertyModal = function() {
@@ -29828,6 +29944,7 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
           console.log(`   Before: ${apt1.name} sprite=${apt1.sprite || 'none'}`);
           apt1.name = '347 Apartment';
           apt1.sprite = 'sprites/turf-map/347apartmentbase.png';
+          apt1.sprites = ['sprites/turf-map/347apartmentbase.png', 'sprites/turf-map/347apartmentlvl2.png', 'sprites/turf-map/347apartmentlvl3.png', 'sprites/turf-map/347apartmentlvl4.png', 'sprites/turf-map/347apartmentlvl5.png'];
           console.log(`   ✅ After: ${apt1.name} sprite=${apt1.sprite}`);
         }
 
