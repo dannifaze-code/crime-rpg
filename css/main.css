@@ -1780,6 +1780,91 @@
     .prop-btn-close:hover { background: #252525; border-color: #444; color: #ccc; }
 
     /* ========================================
+       PROPERTY POPUP (in-game alert replacement)
+       ======================================== */
+    .property-popup-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.75);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 16000;
+      animation: property-popup-fade-in 0.25s ease-out;
+      padding: 16px;
+    }
+
+    @keyframes property-popup-fade-in {
+      from { opacity: 0; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    .property-popup {
+      background: linear-gradient(145deg, #1e1e1e 0%, #141414 100%);
+      border: 1px solid #333;
+      border-radius: 12px;
+      padding: 28px 24px 20px;
+      max-width: 320px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+      animation: property-popup-slide-in 0.3s ease-out;
+    }
+
+    @keyframes property-popup-slide-in {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    .property-popup-icon {
+      font-size: 48px;
+      margin-bottom: 12px;
+    }
+
+    .property-popup-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: #e0e0e0;
+      margin-bottom: 8px;
+    }
+
+    .property-popup-message {
+      font-size: 14px;
+      color: #999;
+      line-height: 1.6;
+      margin-bottom: 20px;
+    }
+
+    .property-popup-btn {
+      display: inline-block;
+      padding: 10px 40px;
+      background: linear-gradient(135deg, #1a3a1a 0%, #0d260d 100%);
+      border: 1px solid #2d6b2d;
+      border-radius: 8px;
+      color: #e0e0e0;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .property-popup-btn:hover {
+      background: linear-gradient(135deg, #245524 0%, #153a15 100%);
+      border-color: #3d8b3d;
+      box-shadow: 0 0 12px rgba(0, 255, 0, 0.15);
+    }
+
+    .property-popup-btn:active {
+      transform: scale(0.97);
+    }
+
+    /* ========================================
        UPGRADE PARTICLE EFFECT
        ======================================== */
     .upgrade-particle-burst {

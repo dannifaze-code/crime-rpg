@@ -15460,6 +15460,10 @@ function ensureLandmarkProperties() {
 
     // Show property purchase/management modal
     function showPropertyModal(building) {
+      // Prevent duplicate modals or opening during/after scroll
+      if (document.getElementById('property-modal')) return;
+      if (typeof TurfTab !== 'undefined' && TurfTab._lastScrollEnd && (Date.now() - TurfTab._lastScrollEnd < 300)) return;
+
       console.log('🏢 showPropertyModal() called for:', building.name);
       console.log('Building data:', building);
 
@@ -15544,13 +15548,40 @@ function ensureLandmarkProperties() {
       try { TurfTab.cancelPanZoomCapture && TurfTab.cancelPanZoomCapture(); } catch (e) {}
     }
 
+    // In-game styled popup for property messages (replaces browser alert)
+    function showPropertyPopup(icon, title, message, duration) {
+      // Remove any existing popup
+      const existing = document.getElementById('property-popup-overlay');
+      if (existing) existing.remove();
+
+      const popupHTML = `
+        <div class="property-popup-overlay" id="property-popup-overlay">
+          <div class="property-popup">
+            <div class="property-popup-icon">${icon}</div>
+            <div class="property-popup-title">${title}</div>
+            <div class="property-popup-message">${message}</div>
+            <button class="property-popup-btn" onclick="document.getElementById('property-popup-overlay').remove()">OK</button>
+          </div>
+        </div>
+      `;
+      document.body.insertAdjacentHTML('beforeend', popupHTML);
+
+      // Auto-dismiss after duration (default 4s)
+      if (duration !== 0) {
+        setTimeout(() => {
+          const el = document.getElementById('property-popup-overlay');
+          if (el) el.remove();
+        }, duration || 4000);
+      }
+    }
+
     // Purchase a property
     window.purchaseProperty = function(buildingId) {
       const building = GameState.propertyBuildings.find(b => b.id === buildingId);
       if (!building) return;
       
       if (GameState.player.cash < building.price) {
-        alert('Not enough money!');
+        showPropertyPopup('❌', 'Not Enough Money', `You need $${building.price.toLocaleString()} but only have $${GameState.player.cash.toLocaleString()}.`, 0);
         return;
       }
       
@@ -15585,7 +15616,14 @@ function ensureLandmarkProperties() {
       const daysSince = Math.floor((now - lastCollected) / (1000 * 60 * 60 * 24));
       
       if (daysSince < 1) {
-        alert('Income already collected today. Come back tomorrow!');
+        // Calculate time remaining until next collection
+        const msPerDay = 1000 * 60 * 60 * 24;
+        const nextCollectTime = lastCollected + msPerDay;
+        const msRemaining = nextCollectTime - now;
+        const hoursLeft = Math.floor(msRemaining / (1000 * 60 * 60));
+        const minsLeft = Math.floor((msRemaining % (1000 * 60 * 60)) / (1000 * 60));
+        const timeStr = hoursLeft > 0 ? `${hoursLeft}h ${minsLeft}m` : `${minsLeft}m`;
+        showPropertyPopup('⏳', 'Already Collected', `Income already collected today.<br>Come back in <strong style="color:#ffd700;">${timeStr}</strong>!`, 0);
         return;
       }
       
@@ -23131,6 +23169,11 @@ function ensureLandmarkProperties() {
             }
           }
 
+          // Track pan end time to prevent accidental property modal opens
+          if (!wasTap) {
+            this._lastScrollEnd = Date.now();
+          }
+
           // Reset tap tracking
           this._tapPointerId = null;
           this._tapMoved = false;
@@ -23569,6 +23612,10 @@ function ensureLandmarkProperties() {
         this._touchTapMoved = false;
         this._touchTapStartX = null;
         this._touchTapStartY = null;
+        // Track scroll/pan end time to prevent accidental property modal opens
+        if (this._isScrolling || this.isPanning) {
+          this._lastScrollEnd = Date.now();
+        }
         this._isScrolling = false;
 
         this.isPinching = false;
