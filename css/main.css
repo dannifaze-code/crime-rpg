@@ -2787,9 +2787,11 @@
     }
 
     .heat-bar-glow {
+      position: absolute;
+      top: 0;
+      left: 0;
       width: 100%;
-      height: 100%;
-      object-fit: fill;
+      height: auto;
       clip-path: inset(0 100% 0 0);
       transition: clip-path 0.8s ease-in-out;
     }

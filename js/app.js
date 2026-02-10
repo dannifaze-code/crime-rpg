@@ -2850,14 +2850,14 @@ Then tighten the rules later.`);
               <div class="page-header">Turf</div>
               
               <div id="turf-heat-indicator" class="new-heat-bar-wrapper">
-                <div class="new-heat-bar-main">
+                <div id="heat-bar-main" class="new-heat-bar-main">
                   <img src="sprites/ui-new/heatbarmain/Heatbaruimain.png" class="heat-bar-frame" alt="Heat Bar" draggable="false">
                   <div class="heat-bar-glow-track">
                     <img src="sprites/ui-new/heatbarmain/heatbarglow.png" class="heat-bar-glow" id="heat-bar-glow" alt="" draggable="false">
                   </div>
                   <div class="heat-bar-value-label" id="heat-value">0%</div>
                 </div>
-                <div class="new-heat-bar-interface">
+                <div id="heat-bar-interface" class="new-heat-bar-interface">
                   <img src="sprites/ui-new/heatbarmain/heatbarfireandstarinterfacebase.png" class="heat-bar-interface-base" alt="" draggable="false">
                   <div class="heat-bar-icons-container">
                     <div class="heat-bar-stars" id="heat-bar-stars"></div>
@@ -3439,14 +3439,14 @@ Then tighten the rules later.`);
                 <div class="page-header">Turf</div>
                 
                 <div id="turf-heat-indicator" class="new-heat-bar-wrapper">
-                  <div class="new-heat-bar-main">
+                  <div id="heat-bar-main" class="new-heat-bar-main">
                     <img src="sprites/ui-new/heatbarmain/Heatbaruimain.png" class="heat-bar-frame" alt="Heat Bar" draggable="false">
                     <div class="heat-bar-glow-track">
                       <img src="sprites/ui-new/heatbarmain/heatbarglow.png" class="heat-bar-glow" id="heat-bar-glow" alt="" draggable="false">
                     </div>
                     <div class="heat-bar-value-label" id="heat-value">0%</div>
                   </div>
-                  <div class="new-heat-bar-interface">
+                  <div id="heat-bar-interface" class="new-heat-bar-interface">
                     <img src="sprites/ui-new/heatbarmain/heatbarfireandstarinterfacebase.png" class="heat-bar-interface-base" alt="" draggable="false">
                     <div class="heat-bar-icons-container">
                       <div class="heat-bar-stars" id="heat-bar-stars"></div>
@@ -17880,7 +17880,8 @@ function ensureLandmarkProperties() {
         { id: 'inventory-wrapper', label: 'Inventory Button' },
         { id: 'turf-popover-menu', label: 'Actions Popup' },
         { id: 'inventory-slots-panel', label: 'Inventory Popup' },
-        { id: 'turf-heat-indicator', label: 'Heat Bar' },
+        { id: 'heat-bar-main', label: 'Heat Bar Frame' },
+        { id: 'heat-bar-interface', label: 'Fire & Star Interface' },
         { id: 'turf-test-controls', label: 'Test Turf Defense' },
         { id: 'area-weather-info', label: 'Weather UI' }
       ],
