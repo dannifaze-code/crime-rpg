@@ -2274,7 +2274,7 @@
 
     /* Each button precisely positioned over its PNG region (matches cropped image) */
     .turf-popover-hit[data-action="laylow"] {
-      top: 8.7%;
+      top: 10.5%;
       height: 21.7%;
     }
 
@@ -2284,7 +2284,7 @@
     }
 
     .turf-popover-hit[data-action="freeroam"] {
-      top: 65.4%;
+      top: 63.5%;
       height: 24.2%;
     }
 
