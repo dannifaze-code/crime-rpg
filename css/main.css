@@ -2258,8 +2258,8 @@
 
     .turf-popover-hit {
       position: absolute;
-      left: 7%;
-      width: 86%;
+      left: 4.6%;
+      width: 91.6%;
       border: none;
       background: transparent;
       cursor: pointer;
@@ -2272,20 +2272,20 @@
       font-size: 0;
     }
 
-    /* Each button precisely positioned over its PNG region */
+    /* Each button precisely positioned over its PNG region (matches cropped image) */
     .turf-popover-hit[data-action="laylow"] {
-      top: 11%;
-      height: 24%;
+      top: 8.7%;
+      height: 21.7%;
     }
 
     .turf-popover-hit[data-action="active"] {
-      top: 37%;
-      height: 24%;
+      top: 36.2%;
+      height: 23.4%;
     }
 
     .turf-popover-hit[data-action="freeroam"] {
-      top: 63%;
-      height: 24%;
+      top: 65.4%;
+      height: 24.2%;
     }
 
     /* Press-inward effect on click */
