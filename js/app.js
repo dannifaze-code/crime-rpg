@@ -27560,7 +27560,6 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
           // Clip the glow image: show only the left portion proportional to totalHeat
           const clipPercent = totalHeat;
           glowEl.style.clipPath = `inset(0 ${100 - clipPercent}% 0 0)`;
-          glowEl.style.opacity = totalHeat > 0 ? '1' : '0';
         }
 
         // Update percentage label
