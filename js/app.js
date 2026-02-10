@@ -2849,12 +2849,21 @@ Then tighten the rules later.`);
             <div id="turf-tab" class="tab-content">
               <div class="page-header">Turf</div>
               
-              <div id="turf-heat-indicator" class="heat-indicator">
-                <div class="heat-icon">🔥</div>
-                <div class="heat-bar-container">
-                  <div class="heat-bar-fill" id="heat-bar-fill" style="width: 0%"></div>
+              <div id="turf-heat-indicator" class="new-heat-bar-wrapper">
+                <div class="new-heat-bar-main">
+                  <img src="sprites/ui-new/heatbarmain/Heatbaruimain.png" class="heat-bar-frame" alt="Heat Bar" draggable="false">
+                  <div class="heat-bar-glow-track">
+                    <img src="sprites/ui-new/heatbarmain/heatbarglow.png" class="heat-bar-glow" id="heat-bar-glow" alt="" draggable="false">
+                  </div>
+                  <div class="heat-bar-value-label" id="heat-value">0%</div>
                 </div>
-                <div class="heat-value" id="heat-value">0%</div>
+                <div class="new-heat-bar-interface">
+                  <img src="sprites/ui-new/heatbarmain/heatbarfireandstarinterfacebase.png" class="heat-bar-interface-base" alt="" draggable="false">
+                  <div class="heat-bar-icons-container">
+                    <div class="heat-bar-stars" id="heat-bar-stars"></div>
+                    <div class="heat-bar-fires" id="heat-bar-fires"></div>
+                  </div>
+                </div>
               </div>
 
               <div id="turf-test-controls" class="test-controls" style="margin: 8px 16px;">
@@ -3429,12 +3438,21 @@ Then tighten the rules later.`);
               <div id="turf-tab" class="tab-content">
                 <div class="page-header">Turf</div>
                 
-                <div id="turf-heat-indicator" class="heat-indicator">
-                  <div class="heat-icon">🔥</div>
-                  <div class="heat-bar-container">
-                    <div class="heat-bar-fill" id="heat-bar-fill" style="width: 0%"></div>
+                <div id="turf-heat-indicator" class="new-heat-bar-wrapper">
+                  <div class="new-heat-bar-main">
+                    <img src="sprites/ui-new/heatbarmain/Heatbaruimain.png" class="heat-bar-frame" alt="Heat Bar" draggable="false">
+                    <div class="heat-bar-glow-track">
+                      <img src="sprites/ui-new/heatbarmain/heatbarglow.png" class="heat-bar-glow" id="heat-bar-glow" alt="" draggable="false">
+                    </div>
+                    <div class="heat-bar-value-label" id="heat-value">0%</div>
                   </div>
-                  <div class="heat-value" id="heat-value">0%</div>
+                  <div class="new-heat-bar-interface">
+                    <img src="sprites/ui-new/heatbarmain/heatbarfireandstarinterfacebase.png" class="heat-bar-interface-base" alt="" draggable="false">
+                    <div class="heat-bar-icons-container">
+                      <div class="heat-bar-stars" id="heat-bar-stars"></div>
+                      <div class="heat-bar-fires" id="heat-bar-fires"></div>
+                    </div>
+                  </div>
                 </div>
                 
                 <div id="city-map">
@@ -27532,15 +27550,59 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       },
       
       updateHeatIndicator() {
-        const heatBar = document.getElementById('heat-bar-fill');
-        const heatValue = document.getElementById('heat-value');
-        
-        if (heatBar) {
-          heatBar.style.width = `${GameState.player.heat}%`;
+        const regularHeat = GameState.player.heat || 0;
+        const globalHeat = GameState.player.globalHeat || 0;
+        const totalHeat = Math.min(100, regularHeat + (globalHeat * 0.5));
+
+        // Update glow fill (clip from left based on total heat %)
+        const glowEl = document.getElementById('heat-bar-glow');
+        if (glowEl) {
+          // Clip the glow image: show only the left portion proportional to totalHeat
+          const clipPercent = totalHeat;
+          glowEl.style.clipPath = `inset(0 ${100 - clipPercent}% 0 0)`;
+          glowEl.style.opacity = totalHeat > 0 ? '1' : '0';
         }
-        
+
+        // Update percentage label
+        const heatValue = document.getElementById('heat-value');
         if (heatValue) {
-          heatValue.textContent = `${Math.round(GameState.player.heat)}%`;
+          heatValue.textContent = `${Math.round(totalHeat)}%`;
+        }
+
+        // Update stars (regular heat) - up to 5 stars
+        const starsContainer = document.getElementById('heat-bar-stars');
+        if (starsContainer) {
+          const starCount = Math.min(5, Math.ceil(regularHeat / 20));
+          const currentStars = starsContainer.children.length;
+          if (currentStars !== starCount) {
+            starsContainer.innerHTML = '';
+            for (let i = 0; i < starCount; i++) {
+              const star = document.createElement('img');
+              star.src = 'sprites/ui-new/heatbarmain/heatbarheatstar.png';
+              star.className = 'heat-bar-star-icon';
+              star.draggable = false;
+              star.style.animationDelay = (i * 0.1) + 's';
+              starsContainer.appendChild(star);
+            }
+          }
+        }
+
+        // Update fires (global heat) - up to 5 fires
+        const firesContainer = document.getElementById('heat-bar-fires');
+        if (firesContainer) {
+          const fireCount = Math.min(5, Math.ceil(globalHeat / 20));
+          const currentFires = firesContainer.children.length;
+          if (currentFires !== fireCount) {
+            firesContainer.innerHTML = '';
+            for (let i = 0; i < fireCount; i++) {
+              const fire = document.createElement('img');
+              fire.src = 'sprites/ui-new/heatbarmain/heatbarglobalfire.png';
+              fire.className = 'heat-bar-fire-icon';
+              fire.draggable = false;
+              fire.style.animationDelay = (i * 0.1) + 's';
+              firesContainer.appendChild(fire);
+            }
+          }
         }
       },
       
@@ -27563,6 +27625,9 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
         
         // Update police activity level
         this.updatePoliceActivity();
+        
+        // Update the heat bar UI with new global heat
+        this.updateHeatIndicator();
         
         console.log(`Global heat +${amount}%: ${reason}`);
       },
@@ -27601,6 +27666,7 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
           if (GameState.playerStatus === 'laying_low' && !GameState.character.freeRoam && !GameState.playerStatusTransition) {
             GameState.player.globalHeat = Math.max(0, GameState.player.globalHeat - 1);
             this.updateGlobalHeatDisplay();
+            this.updateHeatIndicator();
             this.updatePoliceActivity();
             ProfileTab.render();
             Storage.save();
