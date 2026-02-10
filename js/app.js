@@ -2886,10 +2886,10 @@ Then tighten the rules later.`);
               <div id="turf-popover-menu" class="turf-popover-menu">
                 <div class="turf-popover-inner">
                   <img src="sprites/ui-new/turfactionbutton/popovermenu.png" alt="Actions Menu" class="turf-popover-bg" draggable="false">
-                  <div class="turf-popover-buttons">
-                    <button id="popover-laylow-btn" class="turf-popover-btn" data-action="laylow">💤 Lay Low</button>
-                    <button id="popover-active-btn" class="turf-popover-btn" data-action="active">👁️ Active</button>
-                    <button id="popover-freeroam-btn" class="turf-popover-btn" data-action="freeroam">🚶 Free Roam</button>
+                  <div class="turf-popover-hitareas">
+                    <button id="popover-laylow-btn" class="turf-popover-hit" data-action="laylow" aria-label="Lay Low"></button>
+                    <button id="popover-active-btn" class="turf-popover-hit" data-action="active" aria-label="Active"></button>
+                    <button id="popover-freeroam-btn" class="turf-popover-hit" data-action="freeroam" aria-label="Free Roam"></button>
                   </div>
                 </div>
               </div>
@@ -27845,17 +27845,15 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
         const activeBtn = document.getElementById('popover-active-btn');
         const freeroamBtn = document.getElementById('popover-freeroam-btn');
 
+        // Toggle selected class only - text is baked into the PNG
         if (laylowBtn) {
           laylowBtn.classList.toggle('selected', status === 'laying_low' && !inTransition);
-          laylowBtn.textContent = status === 'laying_low' ? '💤 Laying Low' : '💤 Lay Low';
         }
         if (activeBtn) {
           activeBtn.classList.toggle('selected', status === 'active' && !inTransition);
-          activeBtn.textContent = status === 'active' ? '👁️ Active' : '👁️ Go Active';
         }
         if (freeroamBtn) {
           freeroamBtn.classList.toggle('selected', isRoaming);
-          freeroamBtn.textContent = isRoaming ? '⏸️ Stop Roaming' : '🚶 Free Roam';
         }
       },
 
