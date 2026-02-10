@@ -1366,6 +1366,7 @@
 /* Remove any grid patterns from Turf tab */
     #turf-tab {
       background: transparent;
+      position: relative;
     }
     
     #turf-tab::before,
@@ -2219,22 +2220,18 @@
       filter: brightness(0.85);
     }
 
-    /* Popover Menu */
+    /* Popover Menu - positioned via JS relative to turf tab */
     .turf-popover-menu {
       position: absolute;
-      bottom: calc(100% + 6px);
-      left: 50%;
-      transform: translateX(-50%) scale(0.85);
       opacity: 0;
       pointer-events: none;
-      transition: opacity 0.25s ease, transform 0.25s ease;
+      transition: opacity 0.25s ease;
       z-index: 100;
       width: 200px;
     }
 
     .turf-popover-menu.open {
       opacity: 1;
-      transform: translateX(-50%) scale(1);
       pointer-events: auto;
     }
 
@@ -2290,22 +2287,18 @@
       color: #8ab4f8;
     }
 
-    /* Inventory Slots Panel */
+    /* Inventory Slots Panel - positioned via JS relative to turf tab */
     .inventory-slots-panel {
       position: absolute;
-      bottom: calc(100% + 6px);
-      left: 50%;
-      transform: translateX(-50%) scale(0.85);
       opacity: 0;
       pointer-events: none;
-      transition: opacity 0.25s ease, transform 0.25s ease;
+      transition: opacity 0.25s ease;
       z-index: 100;
       width: 220px;
     }
 
     .inventory-slots-panel.open {
       opacity: 1;
-      transform: translateX(-50%) scale(1);
       pointer-events: auto;
     }
 
