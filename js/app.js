@@ -2849,7 +2849,7 @@ Then tighten the rules later.`);
             <div id="turf-tab" class="tab-content">
               <div class="page-header">Turf</div>
               
-              <div class="heat-indicator">
+              <div id="turf-heat-indicator" class="heat-indicator">
                 <div class="heat-icon">🔥</div>
                 <div class="heat-bar-container">
                   <div class="heat-bar-fill" id="heat-bar-fill" style="width: 0%"></div>
@@ -2857,7 +2857,7 @@ Then tighten the rules later.`);
                 <div class="heat-value" id="heat-value">0%</div>
               </div>
 
-              <div class="test-controls" style="margin: 8px 16px;">
+              <div id="turf-test-controls" class="test-controls" style="margin: 8px 16px;">
                 <button class="roam-btn" id="turf-defense-test-btn" style="width: 100%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: 2px solid rgba(255,255,255,0.2);">
                   <span>🛡️</span>
                   <span>Test Turf Defense</span>
@@ -3430,7 +3430,7 @@ Then tighten the rules later.`);
               <div id="turf-tab" class="tab-content">
                 <div class="page-header">Turf</div>
                 
-                <div class="heat-indicator">
+                <div id="turf-heat-indicator" class="heat-indicator">
                   <div class="heat-icon">🔥</div>
                   <div class="heat-bar-container">
                     <div class="heat-bar-fill" id="heat-bar-fill" style="width: 0%"></div>
@@ -17121,6 +17121,26 @@ function ensureLandmarkProperties() {
             }
           });
           container.appendChild(scaleBldgBtn);
+
+          // Custom Turf UI button (admin only)
+          const turfUIBtn = document.createElement('button');
+          turfUIBtn.id = 'turf-ui-editor-btn';
+          turfUIBtn.textContent = 'Custom Turf UI';
+          turfUIBtn.style.cssText = btnBase + 'color:#ff0;border:1px solid #ff0;';
+          turfUIBtn.addEventListener('click', () => {
+            if (TurfUIEditor.active) {
+              TurfUIEditor.disable();
+              turfUIBtn.textContent = 'Custom Turf UI';
+              turfUIBtn.style.color = '#ff0';
+              turfUIBtn.style.borderColor = '#ff0';
+            } else {
+              TurfUIEditor.enable();
+              turfUIBtn.textContent = 'Editing UI...';
+              turfUIBtn.style.color = '#f60';
+              turfUIBtn.style.borderColor = '#f60';
+            }
+          });
+          container.appendChild(turfUIBtn);
         }
       }
     };
@@ -17798,6 +17818,284 @@ function ensureLandmarkProperties() {
     };
 
     window.BuildingScaleSystem = BuildingScaleSystem;
+
+    // ========================================
+    // TURF UI EDITOR (Admin Only)
+    // Allows admin to drag and scale turf UI
+    // elements (heat bar, test turf defense,
+    // weather info, action buttons). Changes
+    // are saved globally via Firebase.
+    // ========================================
+    const TurfUIEditor = {
+      active: false,
+      _selectedId: null,
+      _dragEl: null,
+      _startX: 0,
+      _startY: 0,
+      _elStartLeft: 0,
+      _elStartTop: 0,
+      _scaleBar: null,
+      _layout: {},  // { elementId: { x, y, scale } }
+
+      // The specific elements the editor can manage
+      _editableElements: [
+        { id: 'turf-action-bar', label: 'Action Buttons' },
+        { id: 'turf-heat-indicator', label: 'Heat Bar' },
+        { id: 'turf-test-controls', label: 'Test Turf Defense' },
+        { id: 'area-weather-info', label: 'Weather UI' }
+      ],
+
+      isAdmin() {
+        return BuildingMoveSystem.isAdmin();
+      },
+
+      enable() {
+        this.active = true;
+        console.log('🎨 Turf UI Editor ENABLED');
+
+        // Make turf-tab position relative so absolute children position correctly
+        const turfTab = document.getElementById('turf-tab');
+        if (turfTab) {
+          turfTab.style.position = 'relative';
+        }
+
+        this._editableElements.forEach(item => {
+          const el = document.getElementById(item.id);
+          if (!el) return;
+          el.style.outline = '2px dashed #0ff';
+          el.style.cursor = 'grab';
+          el.dataset.turfUiEditable = 'true';
+          el.style.position = 'relative';
+          el.style.zIndex = '50';
+        });
+
+        this._bindDragEvents();
+
+        // Add save button
+        const controlsContainer = document.getElementById('map-editor-controls');
+        if (controlsContainer && !document.getElementById('save-turf-ui-btn')) {
+          const saveBtn = document.createElement('button');
+          saveBtn.id = 'save-turf-ui-btn';
+          saveBtn.textContent = '💾 Save UI Layout';
+          saveBtn.style.cssText = 'padding:4px 10px;font-size:11px;background:rgba(0,0,0,0.7);color:#0f0;border:1px solid #0f0;border-radius:4px;cursor:pointer;font-family:monospace;';
+          saveBtn.addEventListener('click', () => this.saveLayout());
+          controlsContainer.appendChild(saveBtn);
+        }
+      },
+
+      disable() {
+        this.active = false;
+        console.log('🎨 Turf UI Editor DISABLED');
+
+        this._removeScaleBar();
+
+        this._editableElements.forEach(item => {
+          const el = document.getElementById(item.id);
+          if (!el) return;
+          el.style.outline = '';
+          el.style.cursor = '';
+          delete el.dataset.turfUiEditable;
+        });
+
+        this._unbindDragEvents();
+
+        // Remove save button
+        const saveBtn = document.getElementById('save-turf-ui-btn');
+        if (saveBtn) saveBtn.remove();
+      },
+
+      _onPointerDown(e) {
+        if (!TurfUIEditor.active) return;
+        const el = e.target.closest('[data-turf-ui-editable]');
+        if (!el) return;
+        e.preventDefault();
+        e.stopPropagation();
+
+        TurfUIEditor._dragEl = el;
+        TurfUIEditor._selectedId = el.id;
+
+        const touch = e.touches ? e.touches[0] : e;
+        TurfUIEditor._startX = touch.clientX;
+        TurfUIEditor._startY = touch.clientY;
+        TurfUIEditor._elStartLeft = parseFloat(el.style.left) || 0;
+        TurfUIEditor._elStartTop = parseFloat(el.style.top) || 0;
+
+        el.style.cursor = 'grabbing';
+
+        // Show scale bar for selected element
+        const currentScale = (TurfUIEditor._layout[el.id] && TurfUIEditor._layout[el.id].scale) || 1.0;
+        TurfUIEditor._showScaleBar(el.id, currentScale);
+
+        document.addEventListener('mousemove', TurfUIEditor._onPointerMove, { passive: false });
+        document.addEventListener('mouseup', TurfUIEditor._onPointerUp);
+        document.addEventListener('touchmove', TurfUIEditor._onPointerMove, { passive: false });
+        document.addEventListener('touchend', TurfUIEditor._onPointerUp);
+      },
+
+      _onPointerMove(e) {
+        if (!TurfUIEditor._dragEl) return;
+        e.preventDefault();
+        const touch = e.touches ? e.touches[0] : e;
+        const dx = touch.clientX - TurfUIEditor._startX;
+        const dy = touch.clientY - TurfUIEditor._startY;
+        const newLeft = TurfUIEditor._elStartLeft + dx;
+        const newTop = TurfUIEditor._elStartTop + dy;
+        TurfUIEditor._dragEl.style.left = newLeft + 'px';
+        TurfUIEditor._dragEl.style.top = newTop + 'px';
+      },
+
+      _onPointerUp() {
+        if (!TurfUIEditor._dragEl) return;
+        const el = TurfUIEditor._dragEl;
+        el.style.cursor = 'grab';
+
+        // Save position to layout
+        const id = el.id;
+        if (!TurfUIEditor._layout[id]) {
+          TurfUIEditor._layout[id] = { x: 0, y: 0, scale: 1.0 };
+        }
+        TurfUIEditor._layout[id].x = parseFloat(el.style.left) || 0;
+        TurfUIEditor._layout[id].y = parseFloat(el.style.top) || 0;
+
+        TurfUIEditor._dragEl = null;
+
+        document.removeEventListener('mousemove', TurfUIEditor._onPointerMove);
+        document.removeEventListener('mouseup', TurfUIEditor._onPointerUp);
+        document.removeEventListener('touchmove', TurfUIEditor._onPointerMove);
+        document.removeEventListener('touchend', TurfUIEditor._onPointerUp);
+      },
+
+      _bindDragEvents() {
+        this._editableElements.forEach(item => {
+          const el = document.getElementById(item.id);
+          if (!el) return;
+          el.addEventListener('mousedown', this._onPointerDown, { passive: false });
+          el.addEventListener('touchstart', this._onPointerDown, { passive: false });
+        });
+      },
+
+      _unbindDragEvents() {
+        this._editableElements.forEach(item => {
+          const el = document.getElementById(item.id);
+          if (!el) return;
+          el.removeEventListener('mousedown', this._onPointerDown);
+          el.removeEventListener('touchstart', this._onPointerDown);
+        });
+      },
+
+      _showScaleBar(elementId, currentScale) {
+        this._removeScaleBar();
+
+        const controlsContainer = document.getElementById('map-editor-controls');
+        if (!controlsContainer) return;
+
+        const labelText = this._editableElements.find(e => e.id === elementId);
+
+        const bar = document.createElement('div');
+        bar.id = 'turf-ui-scale-bar';
+        bar.style.cssText = 'display:flex;align-items:center;gap:6px;background:rgba(0,0,0,0.85);padding:5px 10px;border:1px solid #0ff;border-radius:4px;font-family:monospace;';
+
+        const label = document.createElement('span');
+        label.style.cssText = 'color:#0ff;font-size:11px;white-space:nowrap;';
+        label.textContent = (labelText ? labelText.label : elementId) + ' Scale:';
+
+        const slider = document.createElement('input');
+        slider.type = 'range';
+        slider.min = '0.3';
+        slider.max = '3.0';
+        slider.step = '0.1';
+        slider.value = String(currentScale);
+        slider.style.cssText = 'width:100px;cursor:pointer;accent-color:#0ff;';
+
+        const valueLabel = document.createElement('span');
+        valueLabel.style.cssText = 'color:#fff;font-size:11px;min-width:30px;text-align:center;';
+        valueLabel.textContent = currentScale.toFixed(1) + 'x';
+
+        slider.addEventListener('input', () => {
+          const val = parseFloat(slider.value);
+          valueLabel.textContent = val.toFixed(1) + 'x';
+          TurfUIEditor._applyScaleToElement(elementId, val);
+        });
+
+        bar.appendChild(label);
+        bar.appendChild(slider);
+        bar.appendChild(valueLabel);
+        controlsContainer.appendChild(bar);
+        this._scaleBar = bar;
+      },
+
+      _removeScaleBar() {
+        if (this._scaleBar) {
+          this._scaleBar.remove();
+          this._scaleBar = null;
+        }
+        const existing = document.getElementById('turf-ui-scale-bar');
+        if (existing) existing.remove();
+      },
+
+      _applyScaleToElement(elementId, scaleVal) {
+        const el = document.getElementById(elementId);
+        if (!el) return;
+        if (!this._layout[elementId]) {
+          this._layout[elementId] = { x: 0, y: 0, scale: 1.0 };
+        }
+        this._layout[elementId].scale = scaleVal;
+        el.style.transform = 'scale(' + scaleVal + ')';
+        el.style.transformOrigin = 'left top';
+      },
+
+      saveLayout() {
+        if (typeof database !== 'undefined' && database) {
+          const payload = { layout: this._layout, updatedAt: Date.now() };
+          database.ref('gameConfig/turfUILayout').set(payload)
+            .then(() => {
+              console.log('🎨 ✅ Turf UI layout saved globally to Firebase');
+              alert('Turf UI layout saved globally! All players will see the new layout.');
+            })
+            .catch((err) => {
+              console.error('🎨 Firebase save failed:', err);
+              alert('Save failed: ' + err.message);
+            });
+        } else {
+          alert('Firebase not available - layout not saved globally.');
+        }
+      },
+
+      loadLayout() {
+        if (typeof database !== 'undefined' && database) {
+          database.ref('gameConfig/turfUILayout').once('value').then((snapshot) => {
+            const data = snapshot.val();
+            if (data && data.layout && typeof data.layout === 'object') {
+              console.log('🎨 Loading saved turf UI layout from Firebase...');
+              this._layout = data.layout;
+              this._applyAllLayout();
+              console.log('🎨 ✅ Turf UI layout loaded and applied');
+            }
+          }).catch(err => {
+            console.warn('🎨 Failed to load turf UI layout from Firebase:', err);
+          });
+        }
+      },
+
+      _applyAllLayout() {
+        Object.keys(this._layout).forEach(elementId => {
+          const el = document.getElementById(elementId);
+          if (!el) return;
+          const layout = this._layout[elementId];
+          if (typeof layout.x === 'number' && typeof layout.y === 'number') {
+            el.style.position = 'relative';
+            el.style.left = layout.x + 'px';
+            el.style.top = layout.y + 'px';
+          }
+          if (typeof layout.scale === 'number' && layout.scale !== 1.0) {
+            el.style.transform = 'scale(' + layout.scale + ')';
+            el.style.transformOrigin = 'left top';
+          }
+        });
+      }
+    };
+
+    window.TurfUIEditor = TurfUIEditor;
 
     window.CopNodeDebug = CopNodeDebug;
 
@@ -30076,6 +30374,11 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       // Load globally saved building scales from Firebase (admin can scale buildings)
       if (typeof BuildingScaleSystem !== 'undefined') {
         BuildingScaleSystem.loadScales();
+      }
+
+      // Load globally saved turf UI layout from Firebase (admin can customize UI positions/scales)
+      if (typeof TurfUIEditor !== 'undefined') {
+        TurfUIEditor.loadLayout();
       }
       
       // ===== NUCLEAR OPTION: FORCE POSITION UPDATE AFTER INIT =====
