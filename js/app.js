@@ -2868,6 +2868,35 @@ Then tighten the rules later.`);
                 <span id="current-area-display" style="opacity: 0.8;">📍 Area: Unknown</span>
                 <span id="current-weather-display" style="opacity: 0.8;">🌤️ Weather: Clear</span>
               </div>
+
+              <!-- Turf Action Buttons -->
+              <div id="turf-action-bar" class="turf-action-bar">
+                <div class="turf-action-btn-wrapper">
+                  <button id="turf-action-btn" class="turf-sprite-btn" aria-label="Turf Actions">
+                    <img src="sprites/ui-new/turfactionbutton/turfactionbuttonmain.png" alt="Turf Actions" draggable="false">
+                  </button>
+                  <!-- Popover Menu -->
+                  <div id="turf-popover-menu" class="turf-popover-menu">
+                    <div class="turf-popover-inner">
+                      <img src="sprites/ui-new/turfactionbutton/popovermenu.png" alt="Actions Menu" class="turf-popover-bg" draggable="false">
+                      <div class="turf-popover-buttons">
+                        <button id="popover-laylow-btn" class="turf-popover-btn" data-action="laylow">💤 Lay Low</button>
+                        <button id="popover-active-btn" class="turf-popover-btn" data-action="active">👁️ Active</button>
+                        <button id="popover-freeroam-btn" class="turf-popover-btn" data-action="freeroam">🚶 Free Roam</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="turf-action-btn-wrapper">
+                  <button id="inventory-btn" class="turf-sprite-btn" aria-label="Inventory">
+                    <img src="sprites/ui-new/turfactionbutton/inventorybuttonsquare.png" alt="Inventory" draggable="false">
+                  </button>
+                  <!-- Inventory Slots Panel -->
+                  <div id="inventory-slots-panel" class="inventory-slots-panel">
+                    <img src="sprites/ui-new/turfactionbutton/inventorybuttonslots.png" alt="Inventory Slots" draggable="false">
+                  </div>
+                </div>
+              </div>
               
               <div id="city-map" class="map-zoomable">
                 <div id="map-viewport">
@@ -22856,15 +22885,10 @@ function ensureLandmarkProperties() {
         }, 250);
 
         
-        // Initialize status button listeners
-        const statusButtons = document.querySelectorAll('.status-btn');
-        statusButtons.forEach(btn => {
-          btn.addEventListener('click', () => {
-            this.setPlayerStatus(btn.dataset.status);
-          });
-        });
+        // Initialize turf action sprite buttons
+        this.initTurfActionButtons();
         
-        // Initialize free roam toggle
+        // Initialize free roam toggle (legacy roam-toggle-btn fallback)
         const roamBtn = document.getElementById('roam-toggle-btn');
         if (roamBtn) {
           roamBtn.addEventListener('click', () => {
@@ -23635,12 +23659,15 @@ function ensureLandmarkProperties() {
         const icon = document.getElementById('roam-icon');
         const label = document.getElementById('roam-label');
         
-        if (!btn || !icon || !label) return;
-        
-        const isRoaming = GameState.character.freeRoam;
-        btn.classList.toggle('active', isRoaming);
-        icon.textContent = isRoaming ? '⏸️' : '🚶';
-        label.textContent = isRoaming ? 'Stop Roaming' : 'Start Free Roam';
+        if (btn && icon && label) {
+          const isRoaming = GameState.character.freeRoam;
+          btn.classList.toggle('active', isRoaming);
+          icon.textContent = isRoaming ? '⏸️' : '🚶';
+          label.textContent = isRoaming ? 'Stop Roaming' : 'Start Free Roam';
+        }
+
+        // Also update popover button states
+        this.updatePopoverButtonStates();
       },
       
       startFreeRoam() {
@@ -27327,7 +27354,111 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
           btn.classList.toggle('selected', isSelected);
           btn.classList.toggle('transitioning', inTransition);
         });
+
+        // Update popover menu button states
+        this.updatePopoverButtonStates();
       },
+
+      // ========================================
+      // TURF ACTION SPRITE BUTTONS
+      // ========================================
+
+      initTurfActionButtons() {
+        const turfActionBtn = document.getElementById('turf-action-btn');
+        const popover = document.getElementById('turf-popover-menu');
+        const inventoryBtn = document.getElementById('inventory-btn');
+        const inventoryPanel = document.getElementById('inventory-slots-panel');
+
+        if (!turfActionBtn || !popover) {
+          console.warn('[TurfActionButtons] Elements not found, retrying...');
+          setTimeout(() => this.initTurfActionButtons(), 300);
+          return;
+        }
+
+        // Turf Action button toggles popover
+        turfActionBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const isOpen = popover.classList.contains('open');
+          // Close inventory panel if open
+          if (inventoryPanel) inventoryPanel.classList.remove('open');
+          popover.classList.toggle('open', !isOpen);
+          if (!isOpen) this.updatePopoverButtonStates();
+        });
+
+        // Popover action buttons
+        const laylowBtn = document.getElementById('popover-laylow-btn');
+        const activeBtn = document.getElementById('popover-active-btn');
+        const freeroamBtn = document.getElementById('popover-freeroam-btn');
+
+        if (laylowBtn) {
+          laylowBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.setPlayerStatus('laying_low');
+            this.updatePopoverButtonStates();
+          });
+        }
+
+        if (activeBtn) {
+          activeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.setPlayerStatus('active');
+            this.updatePopoverButtonStates();
+          });
+        }
+
+        if (freeroamBtn) {
+          freeroamBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.toggleFreeRoam();
+            this.updatePopoverButtonStates();
+          });
+        }
+
+        // Inventory button toggles inventory slots
+        if (inventoryBtn && inventoryPanel) {
+          inventoryBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isOpen = inventoryPanel.classList.contains('open');
+            // Close popover if open
+            popover.classList.remove('open');
+            inventoryPanel.classList.toggle('open', !isOpen);
+          });
+        }
+
+        // Close popover/inventory when clicking elsewhere
+        document.addEventListener('click', (e) => {
+          if (!e.target.closest('.turf-action-btn-wrapper')) {
+            popover.classList.remove('open');
+            if (inventoryPanel) inventoryPanel.classList.remove('open');
+          }
+        });
+
+        console.log('[TurfActionButtons] ✅ Initialized successfully');
+      },
+
+      updatePopoverButtonStates() {
+        const status = GameState.playerStatus;
+        const isRoaming = GameState.character.freeRoam;
+        const inTransition = GameState.playerStatusTransition !== null;
+
+        const laylowBtn = document.getElementById('popover-laylow-btn');
+        const activeBtn = document.getElementById('popover-active-btn');
+        const freeroamBtn = document.getElementById('popover-freeroam-btn');
+
+        if (laylowBtn) {
+          laylowBtn.classList.toggle('selected', status === 'laying_low' && !inTransition);
+          laylowBtn.textContent = status === 'laying_low' ? '💤 Laying Low' : '💤 Lay Low';
+        }
+        if (activeBtn) {
+          activeBtn.classList.toggle('selected', status === 'active' && !inTransition);
+          activeBtn.textContent = status === 'active' ? '👁️ Active' : '👁️ Go Active';
+        }
+        if (freeroamBtn) {
+          freeroamBtn.classList.toggle('selected', isRoaming);
+          freeroamBtn.textContent = isRoaming ? '⏸️ Stop Roaming' : '🚶 Free Roam';
+        }
+      },
+
       
       renderMap() {
         const mapContainer = document.getElementById('city-map');
