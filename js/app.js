@@ -17140,6 +17140,26 @@ function ensureLandmarkProperties() {
             }
           });
           container.appendChild(turfUIBtn);
+
+          // Hit Area Editor button (admin only)
+          const hitAreaBtn = document.createElement('button');
+          hitAreaBtn.id = 'hit-area-editor-btn';
+          hitAreaBtn.textContent = 'Hit Area Editor';
+          hitAreaBtn.style.cssText = btnBase + 'color:#ff0;border:1px solid #ff0;';
+          hitAreaBtn.addEventListener('click', () => {
+            if (HitAreaEditor.active) {
+              HitAreaEditor.disable();
+              hitAreaBtn.textContent = 'Hit Area Editor';
+              hitAreaBtn.style.color = '#ff0';
+              hitAreaBtn.style.borderColor = '#ff0';
+            } else {
+              HitAreaEditor.enable();
+              hitAreaBtn.textContent = 'Editing Hits...';
+              hitAreaBtn.style.color = '#f60';
+              hitAreaBtn.style.borderColor = '#f60';
+            }
+          });
+          container.appendChild(hitAreaBtn);
         }
       }
     };
@@ -18185,6 +18205,335 @@ function ensureLandmarkProperties() {
     };
 
     window.TurfUIEditor = TurfUIEditor;
+
+    // ========================================
+    // HIT AREA EDITOR (Admin Only)
+    // Lets admin drag/resize the invisible hit areas
+    // on the turf action popup (Lay Low, Active, Free Roam)
+    // ========================================
+    const HitAreaEditor = {
+      active: false,
+      _dragEl: null,
+      _startX: 0,
+      _startY: 0,
+      _elStartLeft: 0,
+      _elStartTop: 0,
+      _resizeEl: null,
+      _resizeStartY: 0,
+      _resizeStartHeight: 0,
+      _layout: {},  // { buttonId: { top, left, width, height } }
+
+      _editableHitAreas: [
+        { id: 'popover-laylow-btn', label: 'Lay Low' },
+        { id: 'popover-active-btn', label: 'Active' },
+        { id: 'popover-freeroam-btn', label: 'Free Roam' }
+      ],
+
+      isAdmin() {
+        return BuildingMoveSystem.isAdmin();
+      },
+
+      enable() {
+        this.active = true;
+        console.log('🎯 Hit Area Editor ENABLED');
+
+        // Force the turf popover menu open so hit areas are visible
+        const popover = document.getElementById('turf-popover-menu');
+        if (popover) {
+          popover.classList.add('open');
+          popover.dataset.hitEditorForced = 'true';
+        }
+
+        // Position popup if needed using TurfUIEditor logic
+        if (typeof TurfUIEditor !== 'undefined') {
+          TurfUIEditor.positionPopupNearButton('turf-popover-menu', 'turf-actions-wrapper');
+        }
+
+        // Make hit areas visible and draggable
+        this._editableHitAreas.forEach(item => {
+          const el = document.getElementById(item.id);
+          if (!el) return;
+          el.style.outline = '2px dashed #0f0';
+          el.style.background = 'rgba(0, 255, 0, 0.15)';
+          el.style.cursor = 'grab';
+          el.dataset.hitEditable = 'true';
+
+          // Add label overlay
+          const labelEl = document.createElement('span');
+          labelEl.className = 'hit-area-editor-label';
+          labelEl.textContent = item.label;
+          labelEl.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#0f0;font-size:10px;font-family:monospace;pointer-events:none;text-shadow:0 0 3px #000;white-space:nowrap;';
+          el.appendChild(labelEl);
+
+          // Add resize handle at bottom of each hit area
+          const handle = document.createElement('div');
+          handle.className = 'hit-area-resize-handle';
+          handle.dataset.resizeFor = item.id;
+          handle.style.cssText = 'position:absolute;bottom:0;left:0;width:100%;height:6px;cursor:ns-resize;background:rgba(0,255,0,0.4);';
+          handle.addEventListener('mousedown', this._onResizeStart, { passive: false });
+          handle.addEventListener('touchstart', this._onResizeStart, { passive: false });
+          el.appendChild(handle);
+        });
+
+        this._bindDragEvents();
+
+        // Add save button
+        const controlsContainer = document.getElementById('map-editor-controls');
+        if (controlsContainer && !document.getElementById('save-hitarea-btn')) {
+          const saveBtn = document.createElement('button');
+          saveBtn.id = 'save-hitarea-btn';
+          saveBtn.textContent = '💾 Save Hit Areas';
+          saveBtn.style.cssText = 'padding:4px 10px;font-size:11px;background:rgba(0,0,0,0.7);color:#0f0;border:1px solid #0f0;border-radius:4px;cursor:pointer;font-family:monospace;';
+          saveBtn.addEventListener('click', () => this.saveLayout());
+          controlsContainer.appendChild(saveBtn);
+        }
+      },
+
+      disable() {
+        this.active = false;
+        console.log('🎯 Hit Area Editor DISABLED');
+
+        // Close popup if we forced it open
+        const popover = document.getElementById('turf-popover-menu');
+        if (popover && popover.dataset.hitEditorForced) {
+          popover.classList.remove('open');
+          delete popover.dataset.hitEditorForced;
+        }
+
+        // Remove editor styling, labels, and resize handles
+        this._editableHitAreas.forEach(item => {
+          const el = document.getElementById(item.id);
+          if (!el) return;
+          el.style.outline = '';
+          el.style.background = 'transparent';
+          el.style.cursor = 'pointer';
+          delete el.dataset.hitEditable;
+
+          // Remove labels
+          el.querySelectorAll('.hit-area-editor-label').forEach(l => l.remove());
+          // Remove resize handles
+          el.querySelectorAll('.hit-area-resize-handle').forEach(h => h.remove());
+        });
+
+        this._unbindDragEvents();
+
+        // Remove save button
+        const saveBtn = document.getElementById('save-hitarea-btn');
+        if (saveBtn) saveBtn.remove();
+      },
+
+      _onPointerDown(e) {
+        if (!HitAreaEditor.active) return;
+        // Ignore if clicking the resize handle
+        if (e.target.classList.contains('hit-area-resize-handle')) return;
+
+        const el = e.target.closest('[data-hit-editable]');
+        if (!el) return;
+        e.preventDefault();
+        e.stopPropagation();
+
+        HitAreaEditor._dragEl = el;
+        const touch = e.touches ? e.touches[0] : e;
+        HitAreaEditor._startX = touch.clientX;
+        HitAreaEditor._startY = touch.clientY;
+
+        // Hit areas use percentage-based positioning; get current pixel values relative to parent
+        const parent = el.parentElement;
+        const parentRect = parent.getBoundingClientRect();
+        const elRect = el.getBoundingClientRect();
+        HitAreaEditor._elStartLeft = ((elRect.left - parentRect.left) / parentRect.width) * 100;
+        HitAreaEditor._elStartTop = ((elRect.top - parentRect.top) / parentRect.height) * 100;
+        HitAreaEditor._parentWidth = parentRect.width;
+        HitAreaEditor._parentHeight = parentRect.height;
+
+        el.style.cursor = 'grabbing';
+
+        document.addEventListener('mousemove', HitAreaEditor._onPointerMove, { passive: false });
+        document.addEventListener('mouseup', HitAreaEditor._onPointerUp);
+        document.addEventListener('touchmove', HitAreaEditor._onPointerMove, { passive: false });
+        document.addEventListener('touchend', HitAreaEditor._onPointerUp);
+      },
+
+      _onPointerMove(e) {
+        if (!HitAreaEditor._dragEl) return;
+        e.preventDefault();
+        const touch = e.touches ? e.touches[0] : e;
+        const dx = touch.clientX - HitAreaEditor._startX;
+        const dy = touch.clientY - HitAreaEditor._startY;
+
+        // Convert pixel delta to percentage of parent
+        const dxPct = (dx / HitAreaEditor._parentWidth) * 100;
+        const dyPct = (dy / HitAreaEditor._parentHeight) * 100;
+
+        HitAreaEditor._dragEl.style.left = (HitAreaEditor._elStartLeft + dxPct) + '%';
+        HitAreaEditor._dragEl.style.top = (HitAreaEditor._elStartTop + dyPct) + '%';
+      },
+
+      _onPointerUp() {
+        if (!HitAreaEditor._dragEl) return;
+        const el = HitAreaEditor._dragEl;
+        el.style.cursor = 'grab';
+
+        // Save position
+        const id = el.id;
+        if (!HitAreaEditor._layout[id]) {
+          HitAreaEditor._layout[id] = {};
+        }
+        HitAreaEditor._layout[id].top = parseFloat(el.style.top);
+        HitAreaEditor._layout[id].left = parseFloat(el.style.left);
+        HitAreaEditor._layout[id].width = parseFloat(el.style.width);
+        HitAreaEditor._layout[id].height = parseFloat(el.style.height);
+
+        HitAreaEditor._dragEl = null;
+
+        document.removeEventListener('mousemove', HitAreaEditor._onPointerMove);
+        document.removeEventListener('mouseup', HitAreaEditor._onPointerUp);
+        document.removeEventListener('touchmove', HitAreaEditor._onPointerMove);
+        document.removeEventListener('touchend', HitAreaEditor._onPointerUp);
+      },
+
+      _onResizeStart(e) {
+        if (!HitAreaEditor.active) return;
+        e.preventDefault();
+        e.stopPropagation();
+
+        const handle = e.target;
+        const targetId = handle.dataset.resizeFor;
+        const el = document.getElementById(targetId);
+        if (!el) return;
+
+        HitAreaEditor._resizeEl = el;
+        const touch = e.touches ? e.touches[0] : e;
+        HitAreaEditor._resizeStartY = touch.clientY;
+
+        const parent = el.parentElement;
+        const parentRect = parent.getBoundingClientRect();
+        HitAreaEditor._resizeParentHeight = parentRect.height;
+        HitAreaEditor._resizeStartHeight = parseFloat(el.style.height) || (el.getBoundingClientRect().height / parentRect.height * 100);
+
+        document.addEventListener('mousemove', HitAreaEditor._onResizeMove, { passive: false });
+        document.addEventListener('mouseup', HitAreaEditor._onResizeEnd);
+        document.addEventListener('touchmove', HitAreaEditor._onResizeMove, { passive: false });
+        document.addEventListener('touchend', HitAreaEditor._onResizeEnd);
+      },
+
+      _onResizeMove(e) {
+        if (!HitAreaEditor._resizeEl) return;
+        e.preventDefault();
+        const touch = e.touches ? e.touches[0] : e;
+        const dy = touch.clientY - HitAreaEditor._resizeStartY;
+        const dyPct = (dy / HitAreaEditor._resizeParentHeight) * 100;
+        const newHeight = Math.max(5, HitAreaEditor._resizeStartHeight + dyPct);
+        HitAreaEditor._resizeEl.style.height = newHeight + '%';
+      },
+
+      _onResizeEnd() {
+        if (!HitAreaEditor._resizeEl) return;
+        const el = HitAreaEditor._resizeEl;
+        const id = el.id;
+
+        if (!HitAreaEditor._layout[id]) {
+          HitAreaEditor._layout[id] = {};
+        }
+        HitAreaEditor._layout[id].height = parseFloat(el.style.height);
+        HitAreaEditor._layout[id].top = parseFloat(el.style.top);
+        HitAreaEditor._layout[id].left = parseFloat(el.style.left);
+        HitAreaEditor._layout[id].width = parseFloat(el.style.width);
+
+        HitAreaEditor._resizeEl = null;
+
+        document.removeEventListener('mousemove', HitAreaEditor._onResizeMove);
+        document.removeEventListener('mouseup', HitAreaEditor._onResizeEnd);
+        document.removeEventListener('touchmove', HitAreaEditor._onResizeMove);
+        document.removeEventListener('touchend', HitAreaEditor._onResizeEnd);
+      },
+
+      _bindDragEvents() {
+        this._editableHitAreas.forEach(item => {
+          const el = document.getElementById(item.id);
+          if (!el) return;
+          el.addEventListener('mousedown', this._onPointerDown, { passive: false });
+          el.addEventListener('touchstart', this._onPointerDown, { passive: false });
+        });
+      },
+
+      _unbindDragEvents() {
+        this._editableHitAreas.forEach(item => {
+          const el = document.getElementById(item.id);
+          if (!el) return;
+          el.removeEventListener('mousedown', this._onPointerDown);
+          el.removeEventListener('touchstart', this._onPointerDown);
+        });
+      },
+
+      saveLayout() {
+        // Capture current state of all hit areas
+        this._editableHitAreas.forEach(item => {
+          const el = document.getElementById(item.id);
+          if (!el) return;
+          if (!this._layout[item.id]) {
+            this._layout[item.id] = {};
+          }
+          this._layout[item.id].top = parseFloat(el.style.top) || 0;
+          this._layout[item.id].left = parseFloat(el.style.left) || 0;
+          this._layout[item.id].width = parseFloat(el.style.width) || 0;
+          this._layout[item.id].height = parseFloat(el.style.height) || 0;
+        });
+
+        if (typeof database !== 'undefined' && database) {
+          const payload = { layout: this._layout, updatedAt: Date.now() };
+          database.ref('gameConfig/hitAreaLayout').set(payload)
+            .then(() => {
+              console.log('🎯 ✅ Hit area layout saved globally to Firebase');
+              alert('Hit area layout saved globally! All players will see the new layout.');
+            })
+            .catch((err) => {
+              console.error('🎯 Firebase save failed:', err);
+              alert('Save failed: ' + err.message);
+            });
+        } else {
+          alert('Firebase not available - layout not saved globally.');
+        }
+      },
+
+      loadLayout() {
+        if (typeof database !== 'undefined' && database) {
+          database.ref('gameConfig/hitAreaLayout').once('value').then((snapshot) => {
+            const data = snapshot.val();
+            if (data && data.layout && typeof data.layout === 'object') {
+              console.log('🎯 Loading saved hit area layout from Firebase...');
+              this._layout = data.layout;
+              this._applyAllLayout();
+              console.log('🎯 ✅ Hit area layout loaded and applied');
+            }
+          }).catch(err => {
+            console.warn('🎯 Failed to load hit area layout from Firebase:', err);
+          });
+        }
+      },
+
+      _applyAllLayout() {
+        Object.keys(this._layout).forEach(buttonId => {
+          const el = document.getElementById(buttonId);
+          if (!el) return;
+          const layout = this._layout[buttonId];
+          if (typeof layout.top === 'number') {
+            el.style.top = layout.top + '%';
+          }
+          if (typeof layout.left === 'number') {
+            el.style.left = layout.left + '%';
+          }
+          if (typeof layout.width === 'number' && layout.width > 0) {
+            el.style.width = layout.width + '%';
+          }
+          if (typeof layout.height === 'number' && layout.height > 0) {
+            el.style.height = layout.height + '%';
+          }
+        });
+      }
+    };
+
+    window.HitAreaEditor = HitAreaEditor;
 
     window.CopNodeDebug = CopNodeDebug;
 
@@ -27784,6 +28133,7 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
 
         if (laylowBtn) {
           laylowBtn.addEventListener('click', (e) => {
+            if (HitAreaEditor.active) return; // Don't trigger in hit area editor mode
             e.stopPropagation();
             this.setPlayerStatus('laying_low');
             this.updatePopoverButtonStates();
@@ -27792,6 +28142,7 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
 
         if (activeBtn) {
           activeBtn.addEventListener('click', (e) => {
+            if (HitAreaEditor.active) return; // Don't trigger in hit area editor mode
             e.stopPropagation();
             this.setPlayerStatus('active');
             this.updatePopoverButtonStates();
@@ -27800,6 +28151,7 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
 
         if (freeroamBtn) {
           freeroamBtn.addEventListener('click', (e) => {
+            if (HitAreaEditor.active) return; // Don't trigger in hit area editor mode
             e.stopPropagation();
             this.toggleFreeRoam();
             this.updatePopoverButtonStates();
@@ -30479,6 +30831,11 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       // Load globally saved turf UI layout from Firebase (admin can customize UI positions/scales)
       if (typeof TurfUIEditor !== 'undefined') {
         TurfUIEditor.loadLayout();
+      }
+
+      // Load globally saved hit area layout from Firebase
+      if (typeof HitAreaEditor !== 'undefined') {
+        HitAreaEditor.loadLayout();
       }
       
       // ===== NUCLEAR OPTION: FORCE POSITION UPDATE AFTER INIT =====
