@@ -2869,33 +2869,32 @@ Then tighten the rules later.`);
                 <span id="current-weather-display" style="opacity: 0.8;">🌤️ Weather: Clear</span>
               </div>
 
-              <!-- Turf Action Buttons -->
+              <!-- Turf Action Buttons - individually positionable -->
               <div id="turf-action-bar" class="turf-action-bar">
-                <div class="turf-action-btn-wrapper">
+                <div id="turf-actions-wrapper" class="turf-action-btn-wrapper">
                   <button id="turf-action-btn" class="turf-sprite-btn" aria-label="Turf Actions">
                     <img src="sprites/ui-new/turfactionbutton/turfactionbuttonmain.png" alt="Turf Actions" draggable="false">
                   </button>
-                  <!-- Popover Menu -->
-                  <div id="turf-popover-menu" class="turf-popover-menu">
-                    <div class="turf-popover-inner">
-                      <img src="sprites/ui-new/turfactionbutton/popovermenu.png" alt="Actions Menu" class="turf-popover-bg" draggable="false">
-                      <div class="turf-popover-buttons">
-                        <button id="popover-laylow-btn" class="turf-popover-btn" data-action="laylow">💤 Lay Low</button>
-                        <button id="popover-active-btn" class="turf-popover-btn" data-action="active">👁️ Active</button>
-                        <button id="popover-freeroam-btn" class="turf-popover-btn" data-action="freeroam">🚶 Free Roam</button>
-                      </div>
-                    </div>
-                  </div>
                 </div>
-                <div class="turf-action-btn-wrapper">
+                <div id="inventory-wrapper" class="turf-action-btn-wrapper">
                   <button id="inventory-btn" class="turf-sprite-btn" aria-label="Inventory">
                     <img src="sprites/ui-new/turfactionbutton/inventorybuttonsquare.png" alt="Inventory" draggable="false">
                   </button>
-                  <!-- Inventory Slots Panel -->
-                  <div id="inventory-slots-panel" class="inventory-slots-panel">
-                    <img src="sprites/ui-new/turfactionbutton/inventorybuttonslots.png" alt="Inventory Slots" draggable="false">
+                </div>
+              </div>
+              <!-- Popups - independently positionable, outside button wrappers -->
+              <div id="turf-popover-menu" class="turf-popover-menu">
+                <div class="turf-popover-inner">
+                  <img src="sprites/ui-new/turfactionbutton/popovermenu.png" alt="Actions Menu" class="turf-popover-bg" draggable="false">
+                  <div class="turf-popover-buttons">
+                    <button id="popover-laylow-btn" class="turf-popover-btn" data-action="laylow">💤 Lay Low</button>
+                    <button id="popover-active-btn" class="turf-popover-btn" data-action="active">👁️ Active</button>
+                    <button id="popover-freeroam-btn" class="turf-popover-btn" data-action="freeroam">🚶 Free Roam</button>
                   </div>
                 </div>
+              </div>
+              <div id="inventory-slots-panel" class="inventory-slots-panel">
+                <img src="sprites/ui-new/turfactionbutton/inventorybuttonslots.png" alt="Inventory Slots" draggable="false">
               </div>
               
               <div id="city-map" class="map-zoomable">
@@ -17837,13 +17836,19 @@ function ensureLandmarkProperties() {
       _scaleBar: null,
       _layout: {},  // { elementId: { x, y, scale } }
 
-      // The specific elements the editor can manage
+      // Each button and popup is independently editable
       _editableElements: [
-        { id: 'turf-action-bar', label: 'Action Buttons' },
+        { id: 'turf-actions-wrapper', label: 'Turf Actions Button' },
+        { id: 'inventory-wrapper', label: 'Inventory Button' },
+        { id: 'turf-popover-menu', label: 'Actions Popup' },
+        { id: 'inventory-slots-panel', label: 'Inventory Popup' },
         { id: 'turf-heat-indicator', label: 'Heat Bar' },
         { id: 'turf-test-controls', label: 'Test Turf Defense' },
         { id: 'area-weather-info', label: 'Weather UI' }
       ],
+
+      // IDs that are popups (force open in editor mode)
+      _popupIds: ['turf-popover-menu', 'inventory-slots-panel'],
 
       isAdmin() {
         return BuildingMoveSystem.isAdmin();
@@ -17859,13 +17864,29 @@ function ensureLandmarkProperties() {
           turfTab.style.position = 'relative';
         }
 
+        // Force popups open so they can be seen and dragged
+        this._popupIds.forEach(popupId => {
+          const popup = document.getElementById(popupId);
+          if (popup) {
+            popup.classList.add('open');
+            popup.dataset.editorForced = 'true';
+          }
+        });
+
+        // Position popups at defaults if no saved layout
+        this._ensurePopupDefaults();
+
         this._editableElements.forEach(item => {
           const el = document.getElementById(item.id);
           if (!el) return;
-          el.style.outline = '2px dashed #0ff';
+          // Color-code: cyan for buttons, magenta for popups
+          const isPopup = this._popupIds.includes(item.id);
+          el.style.outline = isPopup ? '2px dashed #f0f' : '2px dashed #0ff';
           el.style.cursor = 'grab';
           el.dataset.turfUiEditable = 'true';
-          el.style.position = 'relative';
+          if (!isPopup) {
+            el.style.position = 'relative';
+          }
           el.style.zIndex = '50';
         });
 
@@ -17883,11 +17904,46 @@ function ensureLandmarkProperties() {
         }
       },
 
+      // Set default popup positions if none saved
+      _ensurePopupDefaults() {
+        const turfTab = document.getElementById('turf-tab');
+        if (!turfTab) return;
+
+        // Position turf-popover-menu above the turf-actions-wrapper
+        const popover = document.getElementById('turf-popover-menu');
+        const actionsWrapper = document.getElementById('turf-actions-wrapper');
+        if (popover && actionsWrapper && !this._layout['turf-popover-menu']) {
+          const wRect = actionsWrapper.getBoundingClientRect();
+          const tRect = turfTab.getBoundingClientRect();
+          popover.style.left = (wRect.left - tRect.left) + 'px';
+          popover.style.top = (wRect.top - tRect.top - popover.offsetHeight - 6) + 'px';
+        }
+
+        // Position inventory-slots-panel above inventory-wrapper
+        const invPanel = document.getElementById('inventory-slots-panel');
+        const invWrapper = document.getElementById('inventory-wrapper');
+        if (invPanel && invWrapper && !this._layout['inventory-slots-panel']) {
+          const wRect = invWrapper.getBoundingClientRect();
+          const tRect = turfTab.getBoundingClientRect();
+          invPanel.style.left = (wRect.left - tRect.left) + 'px';
+          invPanel.style.top = (wRect.top - tRect.top - invPanel.offsetHeight - 6) + 'px';
+        }
+      },
+
       disable() {
         this.active = false;
         console.log('🎨 Turf UI Editor DISABLED');
 
         this._removeScaleBar();
+
+        // Close popups that were forced open by editor
+        this._popupIds.forEach(popupId => {
+          const popup = document.getElementById(popupId);
+          if (popup && popup.dataset.editorForced) {
+            popup.classList.remove('open');
+            delete popup.dataset.editorForced;
+          }
+        });
 
         this._editableElements.forEach(item => {
           const el = document.getElementById(item.id);
@@ -18078,12 +18134,14 @@ function ensureLandmarkProperties() {
       },
 
       _applyAllLayout() {
+        const isPopup = (id) => this._popupIds.includes(id);
         Object.keys(this._layout).forEach(elementId => {
           const el = document.getElementById(elementId);
           if (!el) return;
           const layout = this._layout[elementId];
           if (typeof layout.x === 'number' && typeof layout.y === 'number') {
-            el.style.position = 'relative';
+            // Popups use absolute positioning; buttons use relative
+            el.style.position = isPopup(elementId) ? 'absolute' : 'relative';
             el.style.left = layout.x + 'px';
             el.style.top = layout.y + 'px';
           }
@@ -18092,6 +18150,37 @@ function ensureLandmarkProperties() {
             el.style.transformOrigin = 'left top';
           }
         });
+      },
+
+      // Position a popup near its button when opened (if no saved layout)
+      positionPopupNearButton(popupId, buttonId) {
+        if (this._layout[popupId]) {
+          // Use saved layout position
+          const layout = this._layout[popupId];
+          const popup = document.getElementById(popupId);
+          if (!popup) return;
+          popup.style.position = 'absolute';
+          popup.style.left = layout.x + 'px';
+          popup.style.top = layout.y + 'px';
+          if (typeof layout.scale === 'number' && layout.scale !== 1.0) {
+            popup.style.transform = 'scale(' + layout.scale + ')';
+            popup.style.transformOrigin = 'left top';
+          }
+          return;
+        }
+        // No saved layout - position above the button
+        const turfTab = document.getElementById('turf-tab');
+        const button = document.getElementById(buttonId);
+        const popup = document.getElementById(popupId);
+        if (!turfTab || !button || !popup) return;
+
+        popup.style.position = 'absolute';
+        const bRect = button.getBoundingClientRect();
+        const tRect = turfTab.getBoundingClientRect();
+        const left = bRect.left - tRect.left + (bRect.width / 2) - (popup.offsetWidth / 2);
+        const top = bRect.top - tRect.top - popup.offsetHeight - 6;
+        popup.style.left = left + 'px';
+        popup.style.top = top + 'px';
       }
     };
 
@@ -27675,10 +27764,15 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
 
         // Turf Action button toggles popover
         turfActionBtn.addEventListener('click', (e) => {
+          if (TurfUIEditor.active) return; // Don't toggle in editor mode
           e.stopPropagation();
           const isOpen = popover.classList.contains('open');
           // Close inventory panel if open
           if (inventoryPanel) inventoryPanel.classList.remove('open');
+          if (!isOpen) {
+            // Position popup near button before showing
+            TurfUIEditor.positionPopupNearButton('turf-popover-menu', 'turf-actions-wrapper');
+          }
           popover.classList.toggle('open', !isOpen);
           if (!isOpen) this.updatePopoverButtonStates();
         });
@@ -27715,17 +27809,25 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
         // Inventory button toggles inventory slots
         if (inventoryBtn && inventoryPanel) {
           inventoryBtn.addEventListener('click', (e) => {
+            if (TurfUIEditor.active) return; // Don't toggle in editor mode
             e.stopPropagation();
             const isOpen = inventoryPanel.classList.contains('open');
             // Close popover if open
             popover.classList.remove('open');
+            if (!isOpen) {
+              // Position popup near button before showing
+              TurfUIEditor.positionPopupNearButton('inventory-slots-panel', 'inventory-wrapper');
+            }
             inventoryPanel.classList.toggle('open', !isOpen);
           });
         }
 
         // Close popover/inventory when clicking elsewhere
         document.addEventListener('click', (e) => {
-          if (!e.target.closest('.turf-action-btn-wrapper')) {
+          if (TurfUIEditor.active) return; // Don't close in editor mode
+          const clickedWrapper = e.target.closest('.turf-action-btn-wrapper');
+          const clickedPopup = e.target.closest('#turf-popover-menu, #inventory-slots-panel');
+          if (!clickedWrapper && !clickedPopup) {
             popover.classList.remove('open');
             if (inventoryPanel) inventoryPanel.classList.remove('open');
           }
