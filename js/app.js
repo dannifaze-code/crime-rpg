@@ -17871,6 +17871,8 @@ function ensureLandmarkProperties() {
       _startY: 0,
       _elStartLeft: 0,
       _elStartTop: 0,
+      _currentDragX: 0,
+      _currentDragY: 0,
       _scaleBar: null,
       _layout: {},  // { elementId: { x, y, scale } }
 
@@ -17923,9 +17925,6 @@ function ensureLandmarkProperties() {
           el.style.outline = isPopup ? '2px dashed #f0f' : '2px dashed #0ff';
           el.style.cursor = 'grab';
           el.dataset.turfUiEditable = 'true';
-          if (!isPopup) {
-            el.style.position = 'relative';
-          }
           el.style.zIndex = '50';
         });
 
@@ -18012,8 +18011,17 @@ function ensureLandmarkProperties() {
         const touch = e.touches ? e.touches[0] : e;
         TurfUIEditor._startX = touch.clientX;
         TurfUIEditor._startY = touch.clientY;
-        TurfUIEditor._elStartLeft = parseFloat(el.style.left) || 0;
-        TurfUIEditor._elStartTop = parseFloat(el.style.top) || 0;
+
+        var isPopup = TurfUIEditor._popupIds.includes(el.id);
+        if (isPopup) {
+          TurfUIEditor._elStartLeft = parseFloat(el.style.left) || 0;
+          TurfUIEditor._elStartTop = parseFloat(el.style.top) || 0;
+        } else {
+          // Non-popup: read current position from layout (used for transform)
+          var layoutData = TurfUIEditor._layout[el.id] || { x: 0, y: 0, scale: 1.0 };
+          TurfUIEditor._elStartLeft = layoutData.x || 0;
+          TurfUIEditor._elStartTop = layoutData.y || 0;
+        }
 
         el.style.cursor = 'grabbing';
 
@@ -18030,29 +18038,58 @@ function ensureLandmarkProperties() {
       _onPointerMove(e) {
         if (!TurfUIEditor._dragEl) return;
         e.preventDefault();
-        const touch = e.touches ? e.touches[0] : e;
-        const dx = touch.clientX - TurfUIEditor._startX;
-        const dy = touch.clientY - TurfUIEditor._startY;
-        const newLeft = TurfUIEditor._elStartLeft + dx;
-        const newTop = TurfUIEditor._elStartTop + dy;
-        TurfUIEditor._dragEl.style.left = newLeft + 'px';
-        TurfUIEditor._dragEl.style.top = newTop + 'px';
+        var touch = e.touches ? e.touches[0] : e;
+        var dx = touch.clientX - TurfUIEditor._startX;
+        var dy = touch.clientY - TurfUIEditor._startY;
+        var newLeft = TurfUIEditor._elStartLeft + dx;
+        var newTop = TurfUIEditor._elStartTop + dy;
+
+        // Track current position for _onPointerUp
+        TurfUIEditor._currentDragX = newLeft;
+        TurfUIEditor._currentDragY = newTop;
+
+        var el = TurfUIEditor._dragEl;
+        var isPopup = TurfUIEditor._popupIds.includes(el.id);
+
+        if (isPopup) {
+          el.style.left = newLeft + 'px';
+          el.style.top = newTop + 'px';
+        } else {
+          // Non-popup: use transform to avoid creating layout gaps
+          var scale = (TurfUIEditor._layout[el.id] && TurfUIEditor._layout[el.id].scale) || 1.0;
+          var transform = 'translate(' + newLeft + 'px, ' + newTop + 'px)';
+          if (scale !== 1.0) {
+            transform += ' scale(' + scale + ')';
+          }
+          el.style.transform = transform;
+          el.style.transformOrigin = 'left top';
+        }
       },
 
       _onPointerUp() {
         if (!TurfUIEditor._dragEl) return;
-        const el = TurfUIEditor._dragEl;
+        var el = TurfUIEditor._dragEl;
         el.style.cursor = 'grab';
 
         // Save position to layout
-        const id = el.id;
+        var id = el.id;
         if (!TurfUIEditor._layout[id]) {
           TurfUIEditor._layout[id] = { x: 0, y: 0, scale: 1.0 };
         }
-        TurfUIEditor._layout[id].x = parseFloat(el.style.left) || 0;
-        TurfUIEditor._layout[id].y = parseFloat(el.style.top) || 0;
+
+        var isPopup = TurfUIEditor._popupIds.includes(id);
+        if (isPopup) {
+          TurfUIEditor._layout[id].x = parseFloat(el.style.left) || 0;
+          TurfUIEditor._layout[id].y = parseFloat(el.style.top) || 0;
+        } else {
+          // Non-popup: position was tracked during drag via _currentDragX/Y
+          TurfUIEditor._layout[id].x = TurfUIEditor._currentDragX || 0;
+          TurfUIEditor._layout[id].y = TurfUIEditor._currentDragY || 0;
+        }
 
         TurfUIEditor._dragEl = null;
+        TurfUIEditor._currentDragX = 0;
+        TurfUIEditor._currentDragY = 0;
 
         document.removeEventListener('mousemove', TurfUIEditor._onPointerMove);
         document.removeEventListener('mouseup', TurfUIEditor._onPointerUp);
@@ -18129,14 +18166,31 @@ function ensureLandmarkProperties() {
       },
 
       _applyScaleToElement(elementId, scaleVal) {
-        const el = document.getElementById(elementId);
+        var el = document.getElementById(elementId);
         if (!el) return;
         if (!this._layout[elementId]) {
           this._layout[elementId] = { x: 0, y: 0, scale: 1.0 };
         }
         this._layout[elementId].scale = scaleVal;
-        el.style.transform = 'scale(' + scaleVal + ')';
-        el.style.transformOrigin = 'left top';
+
+        if (this._popupIds.includes(elementId)) {
+          // Popups: scale only (position handled by left/top)
+          el.style.transform = 'scale(' + scaleVal + ')';
+          el.style.transformOrigin = 'left top';
+        } else {
+          // Non-popup: combine translate + scale in one transform
+          var x = this._layout[elementId].x || 0;
+          var y = this._layout[elementId].y || 0;
+          var parts = [];
+          if (x !== 0 || y !== 0) {
+            parts.push('translate(' + x + 'px, ' + y + 'px)');
+          }
+          if (scaleVal !== 1.0) {
+            parts.push('scale(' + scaleVal + ')');
+          }
+          el.style.transform = parts.length > 0 ? parts.join(' ') : '';
+          el.style.transformOrigin = 'left top';
+        }
       },
 
       saveLayout() {
@@ -18173,20 +18227,38 @@ function ensureLandmarkProperties() {
       },
 
       _applyAllLayout() {
-        const isPopup = (id) => this._popupIds.includes(id);
         Object.keys(this._layout).forEach(elementId => {
           const el = document.getElementById(elementId);
           if (!el) return;
           const layout = this._layout[elementId];
-          if (typeof layout.x === 'number' && typeof layout.y === 'number') {
-            // Popups use absolute positioning; buttons use relative
-            el.style.position = isPopup(elementId) ? 'absolute' : 'relative';
-            el.style.left = layout.x + 'px';
-            el.style.top = layout.y + 'px';
-          }
-          if (typeof layout.scale === 'number' && layout.scale !== 1.0) {
-            el.style.transform = 'scale(' + layout.scale + ')';
-            el.style.transformOrigin = 'left top';
+          const x = (typeof layout.x === 'number') ? layout.x : 0;
+          const y = (typeof layout.y === 'number') ? layout.y : 0;
+          const scale = (typeof layout.scale === 'number') ? layout.scale : 1.0;
+
+          if (this._popupIds.includes(elementId)) {
+            // Popups use absolute positioning (they're overlays)
+            el.style.position = 'absolute';
+            el.style.left = x + 'px';
+            el.style.top = y + 'px';
+            if (scale !== 1.0) {
+              el.style.transform = 'scale(' + scale + ')';
+              el.style.transformOrigin = 'left top';
+            }
+          } else {
+            // Non-popup elements: use transform to avoid layout gaps
+            // position:relative + left/top creates empty space in document flow;
+            // transform: translate() moves visually without affecting flow
+            var parts = [];
+            if (x !== 0 || y !== 0) {
+              parts.push('translate(' + x + 'px, ' + y + 'px)');
+            }
+            if (scale !== 1.0) {
+              parts.push('scale(' + scale + ')');
+            }
+            if (parts.length > 0) {
+              el.style.transform = parts.join(' ');
+              el.style.transformOrigin = 'left top';
+            }
           }
         });
       },
