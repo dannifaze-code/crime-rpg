@@ -2866,14 +2866,14 @@ Then tighten the rules later.`);
                 </div>
               </div>
 
-              <div id="turf-test-controls" class="test-controls" style="margin: 8px 16px;">
+              <div id="turf-test-controls" class="test-controls" style="margin: 2px 16px;">
                 <button class="roam-btn" id="turf-defense-test-btn" style="width: 100%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: 2px solid rgba(255,255,255,0.2);">
                   <span>🛡️</span>
                   <span>Test Turf Defense</span>
                 </button>
               </div>
 
-              <div id="area-weather-info" style="margin: 8px 16px; padding: 6px 10px; background: rgba(0,0,0,0.3); border-radius: 4px; font-size: 11px; display: flex; justify-content: space-between; align-items: center;">
+              <div id="area-weather-info" style="margin: 2px 16px; padding: 6px 10px; background: rgba(0,0,0,0.3); border-radius: 4px; font-size: 11px; display: flex; justify-content: space-between; align-items: center;">
                 <span id="current-area-display" style="opacity: 0.8;">📍 Area: Unknown</span>
                 <span id="current-weather-display" style="opacity: 0.8;">🌤️ Weather: Clear</span>
               </div>

@@ -1374,9 +1374,30 @@
       display: none;
     }
     
-    /* Reduce empty space at top of turf tab */
+    /* Reduce empty space on turf tab */
     #turf-tab .page-header {
-      margin-bottom: 8px;
+      margin-bottom: 2px;
+      padding-top: 6px;
+      padding-bottom: 2px;
+      border-bottom: none;
+    }
+
+    #turf-tab .new-heat-bar-wrapper {
+      margin: 2px 8px 2px;
+    }
+
+    #turf-tab .test-controls {
+      margin-top: 2px;
+      margin-bottom: 2px;
+    }
+
+    #turf-tab #area-weather-info {
+      margin-top: 2px;
+      margin-bottom: 2px;
+    }
+
+    #turf-tab .turf-action-bar {
+      margin: 2px 16px;
     }
     
     /* CRITICAL: Keep icons within map bounds */
