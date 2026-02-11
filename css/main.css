@@ -1374,6 +1374,11 @@
       display: none;
     }
     
+    /* Reduce empty space at top of turf tab */
+    #turf-tab .page-header {
+      margin-bottom: 8px;
+    }
+    
     /* CRITICAL: Keep icons within map bounds */
     #map-icons {
       position: absolute;

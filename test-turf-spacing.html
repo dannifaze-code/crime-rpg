@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Turf Tab Spacing Test</title>
+  <link rel="stylesheet" href="http://localhost:8080/css/main.css">
+  <style>
+    body {
+      background: #0a0a0a;
+      color: white;
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+    }
+    .test-container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: #1a1a1a;
+      padding: 20px;
+      border-radius: 8px;
+    }
+    h1 {
+      color: #00ff00;
+      margin-bottom: 30px;
+    }
+    .comparison {
+      display: flex;
+      gap: 20px;
+      margin-top: 30px;
+    }
+    .comparison > div {
+      flex: 1;
+      background: #0a0a0a;
+      padding: 10px;
+      border: 1px solid #333;
+    }
+    .comparison h3 {
+      margin-top: 0;
+    }
+    .old-spacing .page-header {
+      margin-bottom: 20px;
+    }
+    .new-spacing #turf-tab .page-header {
+      margin-bottom: 8px;
+    }
+    .page-header {
+      font-size: 20px;
+      font-weight: 600;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #2a2a2a;
+      color: #ffffff;
+    }
+    .heat-bar-placeholder {
+      background: #444;
+      padding: 20px;
+      text-align: center;
+      color: #aaa;
+      margin-top: 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="test-container">
+    <h1>Turf Tab Spacing Fix Test</h1>
+    <p>Comparing the spacing before and after the CSS fix:</p>
+    
+    <div class="comparison">
+      <div class="old-spacing">
+        <h3>Before (20px margin)</h3>
+        <div id="turf-tab">
+          <div class="page-header">Turf</div>
+          <div class="heat-bar-placeholder">[ Heat Bar Would Be Here ]</div>
+        </div>
+      </div>
+      
+      <div class="new-spacing">
+        <h3>After (8px margin)</h3>
+        <div id="turf-tab">
+          <div class="page-header">Turf</div>
+          <div class="heat-bar-placeholder">[ Heat Bar Would Be Here ]</div>
+        </div>
+      </div>
+    </div>
+    
+    <div style="margin-top: 30px; padding: 15px; background: #2a2a2a; border-radius: 4px;">
+      <h3>Fix Details:</h3>
+      <p><strong>File:</strong> css/main.css</p>
+      <p><strong>Change:</strong> Added specific CSS rule for #turf-tab .page-header</p>
+      <p><strong>Before:</strong> margin-bottom: 20px (inherited from .page-header)</p>
+      <p><strong>After:</strong> margin-bottom: 8px (specific override)</p>
+      <p><strong>Result:</strong> Reduced empty space by 12px (60% reduction)</p>
+    </div>
+  </div>
+</body>
+</html>
