@@ -1387,13 +1387,13 @@
     }
 
     #turf-tab .test-controls {
-      margin-top: 2px !important;
-      margin-bottom: 2px !important;
+      margin-top: 2px;
+      margin-bottom: 2px;
     }
 
     #turf-tab #area-weather-info {
-      margin-top: 2px !important;
-      margin-bottom: 2px !important;
+      margin-top: 2px;
+      margin-bottom: 2px;
     }
 
     #turf-tab .turf-action-bar {
