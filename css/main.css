@@ -1325,7 +1325,8 @@
       width: 100%;
       aspect-ratio: 9 / 16;
       max-height: calc(100vh - 140px);
-      background-image: url('../sprites/turf-map/TurfMap.png');
+      /* background-image removed: managed by DayNightCycle on #map-background */
+      background-color: #1a1a2e;
       background-size: cover;
       background-position: center;
       background-repeat: no-repeat;
