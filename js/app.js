@@ -17989,6 +17989,7 @@ function ensureLandmarkProperties() {
           if (!el) return;
           el.style.outline = '';
           el.style.cursor = '';
+          el.style.zIndex = '';
           delete el.dataset.turfUiEditable;
         });
 
