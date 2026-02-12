@@ -3455,11 +3455,18 @@ Then tighten the rules later.`);
                   </div>
                 </div>
                 
-                <div id="city-map">
-                  
-                  <div id="event-notification-container"></div>
-                  <div id="map-icons"></div>
-                  <div id="floating-pickups"></div>
+                <div id="city-map" class="map-zoomable">
+                  <div id="map-viewport">
+                    <div id="map-world">
+                      <div id="map-background"></div>
+                      <div id="map-entities">
+                        <div id="event-notification-container"></div>
+                        <div id="map-icons"></div>
+                        <div id="floating-pickups"></div>
+                        <div id="cop-car" class="cop-car no-heat">🚔</div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -22709,8 +22716,24 @@ function ensureLandmarkProperties() {
               setTimeout(() => {
                 if (typeof TurfTab !== 'undefined' && typeof TurfTab.initZoomControls === 'function') {
                   TurfTab.initZoomControls();
-                  console.log('[TabSystem] ✅ Zoom controls re-initialized for turf tab');
                 }
+
+                // Recalculate zoom bounds now that viewport has real dimensions
+                if (typeof TurfTab !== 'undefined' && typeof TurfTab.ensureWorldSize === 'function') {
+                  var prevMinZoom = TurfTab.minZoom;
+                  TurfTab.worldSizeReady = false;
+                  TurfTab.ensureWorldSize();
+                  // If minZoom changed (real dimensions now available), fit map to viewport
+                  if (TurfTab.minZoom !== prevMinZoom || !TurfTab._viewportZoomApplied) {
+                    TurfTab.currentZoom = TurfTab.minZoom;
+                    TurfTab.panX = 0;
+                    TurfTab.panY = 0;
+                    TurfTab._viewportZoomApplied = true;
+                  }
+                  TurfTab.clampPan();
+                  TurfTab.applyMapTransform();
+                }
+                console.log('[TabSystem] ✅ Zoom controls re-initialized for turf tab');
 
                 // CRITICAL FIX: Force a final repaint to ensure everything is visible
                 setTimeout(() => {
@@ -23925,10 +23948,11 @@ function ensureLandmarkProperties() {
         const boundZoomIn = (e) => this.zoomIn(e);
         const boundZoomOut = (e) => this.zoomOut(e);
         const boundZoomReset = () => {
-          this.currentZoom = 1;
+          this.ensureWorldSize();
+          this.currentZoom = this.minZoom;
           this.panX = 0;
           this.panY = 0;
-          this.setZoom(1);
+          this.setZoom(this.minZoom);
         };
 
         if (zoomInBtn) {
@@ -24050,16 +24074,20 @@ function ensureLandmarkProperties() {
         viewport.addEventListener('touchend', (e) => this.handleTouchEnd(e), { passive: false });
         viewport.addEventListener('touchcancel', (e) => this.handleTouchEnd(e), { passive: false });
 
-        // Apply initial transform - force zoom to 1 on first load to prevent starting zoomed in
-        this.currentZoom = 1;
+        // Apply initial transform - fit map to viewport on first load
+        this.ensureWorldSize();
+        this.currentZoom = this.minZoom;
         this.panX = 0;
         this.panY = 0;
-        this.setZoom(1);
+        this.setZoom(this.minZoom);
         console.log('🔍 Turf map pan/zoom initialized');
       
         // Keep bounds correct on resize/orientation change
         window.addEventListener('resize', () => {
           this.ensureWorldSize();
+          if (this.currentZoom < this.minZoom) {
+            this.currentZoom = this.minZoom;
+          }
           this.clampPan();
           this.applyMapTransform();
         });
@@ -24118,7 +24146,8 @@ function ensureLandmarkProperties() {
       resetZoom() {
         this.panX = 0;
         this.panY = 0;
-        this.setZoom(1);
+        this.ensureWorldSize();
+        this.setZoom(this.minZoom);
       },
       
       setZoom(zoomLevel, anchorClientX = null, anchorClientY = null) {
@@ -24154,6 +24183,10 @@ function ensureLandmarkProperties() {
               this.worldIntrinsicH = probeImg.naturalHeight || this.worldIntrinsicH;
               this.worldSizeReady = false;
               this.ensureWorldSize();
+              // Reset zoom to fit map in viewport now that real dimensions are known
+              this.currentZoom = this.minZoom;
+              this.panX = 0;
+              this.panY = 0;
               this.clampPan();
               this.applyMapTransform();
             };
@@ -24280,6 +24313,13 @@ function ensureLandmarkProperties() {
           }
 
           this.worldSizeReady = true;
+        }
+
+        // Calculate minZoom so the map fits within the viewport at minimum zoom
+        const vpW = viewport.clientWidth;
+        const vpH = viewport.clientHeight;
+        if (vpW > 0 && vpH > 0 && baseW > 0 && baseH > 0) {
+          this.minZoom = Math.min(vpW / baseW, vpH / baseH);
         }
       },
 
@@ -28551,13 +28591,13 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
 
         if (mapBackground) {
           // Force background visibility
-          mapBackground.style.opacity = '1';
           mapBackground.style.visibility = 'visible';
           mapBackground.style.display = 'block';
 
-          // Ensure correct day/night map is shown on every render
+          // Ensure correct day/night map is shown (only force if no image set yet)
           if (window.DayNightCycle) {
-            DayNightCycle.applyMapImage(true);
+            var currentBgImg = getComputedStyle(mapBackground).backgroundImage;
+            DayNightCycle.applyMapImage(!currentBgImg || currentBgImg === 'none');
           }
           console.log('[TurfTab] ✅ Map background visibility ensured');
         }
@@ -31236,22 +31276,21 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
             // Force a repaint
             mapContainer.offsetHeight;
 
-            // Reset zoom to 1 and pan to center on first load
+            // Reset zoom to fit-to-viewport and pan to center on first load
             if (typeof TurfTab !== 'undefined') {
               // Only reset if this looks like an initial load (zoom might be weird)
               if (!TurfTab._initialZoomApplied) {
-                TurfTab.currentZoom = 1;
                 TurfTab.panX = 0;
                 TurfTab.panY = 0;
                 TurfTab._initialZoomApplied = true;
-                console.log('[DEBUG] ✅ TurfTab zoom reset to 1');
               }
 
               // Re-calculate world size now that elements have dimensions
               if (typeof TurfTab.ensureWorldSize === 'function') {
                 TurfTab.worldSizeReady = false; // Force recalculation
                 TurfTab.ensureWorldSize();
-                console.log('[DEBUG] ✅ TurfTab.ensureWorldSize() called');
+                TurfTab.currentZoom = TurfTab.minZoom;
+                console.log('[DEBUG] ✅ TurfTab.ensureWorldSize() called, zoom set to minZoom:', TurfTab.minZoom);
               }
 
               // Apply the transform to ensure correct display

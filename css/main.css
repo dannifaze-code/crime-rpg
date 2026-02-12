@@ -1332,7 +1332,7 @@
       background-repeat: no-repeat;
       border: 1px solid #2a2a2a;
       border-radius: 4px;
-      overflow: visible; /* Allow content to extend for scrolling */
+      overflow: hidden;
       margin: 0 auto;
       touch-action: pan-y; /* Allow vertical scroll */
     }
@@ -1342,7 +1342,7 @@
     #map-viewport {
       position: absolute;
       inset: 0;
-      overflow: visible; /* Allow scrolling */
+      overflow: hidden;
       touch-action: pan-y pan-x; /* Allow both vertical and horizontal scroll */
       -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
     }
