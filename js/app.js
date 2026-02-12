@@ -12549,23 +12549,15 @@ function updateTurfDefense(dt) {
       _nightImagePreloaded: false,
       DAY_MAP: 'sprites/turf-map/TurfMap.png',
       NIGHT_MAP: 'sprites/turf-map/TurMapNight.png',
-      // EST offset: UTC-5 hours (standard Eastern Time, no DST adjustment - server canonical time)
-      EST_OFFSET: -5,
 
-      // Get current hour in EST (0-23)
-      getESTHour: function() {
-        const now = new Date();
-        // Convert UTC hours to EST by applying offset
-        const utcHours = now.getUTCHours();
-        let estHour = utcHours + this.EST_OFFSET;
-        if (estHour < 0) estHour += 24;
-        if (estHour >= 24) estHour -= 24;
-        return estHour;
+      // Get current local hour (0-23)
+      getLocalHour: function() {
+        return new Date().getHours();
       },
 
-      // Determine if it's currently night in EST (8 PM - 6 AM)
+      // Determine if it's currently night in local time (8 PM - 6 AM)
       isNightTime: function() {
-        const hour = this.getESTHour();
+        const hour = this.getLocalHour();
         // Night = 20:00 (8 PM) through 05:59 (6 AM)
         return hour >= 20 || hour < 6;
       },
@@ -12581,7 +12573,7 @@ function updateTurfDefense(dt) {
         };
       },
 
-      // Apply the correct map image to #map-background (background only, no effect on nodes/buildings)
+      // Apply the correct map image to #map-background with a smooth crossfade
       applyMapImage: function(forceUpdate) {
         const night = this.isNightTime();
         // Skip if state hasn't changed (unless forced)
@@ -12592,8 +12584,19 @@ function updateTurfDefense(dt) {
 
         const mapBackground = document.getElementById('map-background');
         if (mapBackground) {
-          mapBackground.style.backgroundImage = "url('" + mapPath + "')";
-          console.log('[DayNightCycle] ' + (night ? 'Night' : 'Day') + ' map applied (EST hour: ' + this.getESTHour() + ')');
+          if (forceUpdate) {
+            // On init, apply immediately without fade
+            mapBackground.style.backgroundImage = "url('" + mapPath + "')";
+          } else {
+            // Smooth crossfade: fade out, swap image, fade back in
+            mapBackground.style.transition = 'opacity 0.6s ease';
+            mapBackground.style.opacity = '0';
+            setTimeout(function() {
+              mapBackground.style.backgroundImage = "url('" + mapPath + "')";
+              mapBackground.style.opacity = '1';
+            }, 600);
+          }
+          console.log('[DayNightCycle] ' + (night ? 'Night' : 'Day') + ' map applied (local hour: ' + this.getLocalHour() + ')');
         }
       },
 
@@ -12604,8 +12607,8 @@ function updateTurfDefense(dt) {
 
       // Initialize the day/night cycle system
       init: function() {
-        console.log('[DayNightCycle] Initializing EST-synchronized day/night cycle...');
-        console.log('[DayNightCycle] Current EST hour: ' + this.getESTHour() + ', Night: ' + this.isNightTime());
+        console.log('[DayNightCycle] Initializing local-time day/night cycle...');
+        console.log('[DayNightCycle] Current local hour: ' + this.getLocalHour() + ', Night: ' + this.isNightTime());
 
         // Preload night map for instant switching
         this.preloadNightMap();
@@ -23703,7 +23706,7 @@ function ensureLandmarkProperties() {
         console.log('[TurfTab] Initializing weather overlay...');
         WeatherOverlay.init();
 
-        // Initialize day/night cycle (EST-synchronized)
+        // Initialize day/night cycle (local-time-synchronized)
         if (window.DayNightCycle) {
           DayNightCycle.init();
         }
