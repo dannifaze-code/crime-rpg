@@ -2222,6 +2222,7 @@
     .turf-action-btn-wrapper {
       position: relative;
       flex: 1;
+      max-width: 120px;
     }
 
     .turf-sprite-btn {
