@@ -5276,8 +5276,10 @@ const CartoonSpriteGenerator = {
       },
       
       heatLog: [],  // Track heat-generating events
-      
+
       drainLog: [],  // Track money drains
+
+      crimeCooldowns: {},  // Persisted crime cooldown end times: { crimeId: endTimestamp }
       
       gang: null,  // Player's gang (null if not in gang)
       
@@ -5404,6 +5406,22 @@ const CartoonSpriteGenerator = {
         if (typeof at.totalActions !== 'number' || !isFinite(at.totalActions)) at.totalActions = 0;
         if (typeof at.actionsInCycle !== 'number' || !isFinite(at.actionsInCycle)) at.actionsInCycle = 0;
         if (at.cyclePhase !== 'initial' && at.cyclePhase !== 'escalated') at.cyclePhase = 'initial';
+
+        // ----- crime cooldowns (persisted across refreshes) -----
+        if (!GameState.crimeCooldowns || typeof GameState.crimeCooldowns !== 'object') {
+          GameState.crimeCooldowns = {};
+        }
+        // Restore runtime cooldowns from persisted state (prune expired ones)
+        if (typeof CrimesDatabase !== 'undefined') {
+          const now = Date.now();
+          Object.keys(GameState.crimeCooldowns).forEach(function(id) {
+            if (GameState.crimeCooldowns[id] > now) {
+              CrimesDatabase.cooldowns[id] = GameState.crimeCooldowns[id];
+            } else {
+              delete GameState.crimeCooldowns[id]; // expired, clean up
+            }
+          });
+        }
 
         // ----- player history -----
         if (!Array.isArray(p.history)) p.history = [];
@@ -21543,8 +21561,11 @@ function ensureLandmarkProperties() {
         // Apply consequences
         const result = this.applyOutcome(crime, outcome, specialEvent, crimeId);
         
-        // Set cooldown
-        CrimesDatabase.cooldowns[crimeId] = Date.now() + crime.costs.cooldown;
+        // Set cooldown (runtime + persisted so it survives page refresh)
+        const cooldownEnd = Date.now() + crime.costs.cooldown;
+        CrimesDatabase.cooldowns[crimeId] = cooldownEnd;
+        if (!GameState.crimeCooldowns) GameState.crimeCooldowns = {};
+        GameState.crimeCooldowns[crimeId] = cooldownEnd;
         
         // Add fatigue
         FatigueSystem.addFatigue('event', crime.name);
