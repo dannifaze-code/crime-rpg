@@ -237,6 +237,15 @@ try {
             input.style.height = 'auto';
             if (sendBtn) sendBtn.disabled = false;
             input.focus();
+
+            // Register this chat in both users' chat indexes (for private chats)
+            if (this.currentChatWith) {
+              const chatId = chatPath.replace('private_chats/', '');
+              const myUid = GameState.accountId;
+              const otherUid = this.currentChatWith;
+              database.ref('userChats/' + myUid + '/' + chatId).set(true).catch(() => {});
+              database.ref('userChats/' + otherUid + '/' + chatId).set(true).catch(() => {});
+            }
           })
           
           
@@ -393,33 +402,33 @@ Then tighten the rules later.`);
       },
       
       // Listen for new messages (for unread counts)
+      // Uses userChats/$uid index so we only read chats the player is part of
       startListeningForMessages() {
         if (!database || !GameState.accountId) return;
-        
-        // Listen to all chats involving this player
-        const chatsRef = database.ref('private_chats');
-        
-        chatsRef.on('child_added', (snapshot) => {
+
+        const myUid = GameState.accountId;
+        const userChatsRef = database.ref('userChats/' + myUid);
+
+        // Listen for chat rooms this player is part of
+        userChatsRef.on('child_added', (snapshot) => {
           const chatId = snapshot.key;
-          
-          // Check if this chat involves current player
-          if (chatId.includes(GameState.accountId)) {
-            const lastMessageRef = snapshot.ref.limitToLast(1);
-            
-            lastMessageRef.on('child_added', (msgSnapshot) => {
-              const message = msgSnapshot.val();
-              
-              // Increment unread if not from self and chat not open
-              if (message.senderId !== GameState.accountId) {
-                const otherPlayerId = chatId.replace(GameState.accountId, '').replace('_', '');
-                
-                if (this.currentChatWith !== otherPlayerId) {
-                  this.unreadCounts[otherPlayerId] = (this.unreadCounts[otherPlayerId] || 0) + 1;
-                  this.updateChatButton();
-                }
+
+          // Listen for new messages in this specific chat
+          const chatRef = database.ref('private_chats/' + chatId).limitToLast(1);
+
+          chatRef.on('child_added', (msgSnapshot) => {
+            const message = msgSnapshot.val();
+
+            // Increment unread if not from self and chat not open
+            if (message.senderId !== myUid) {
+              const otherPlayerId = chatId.replace(myUid, '').replace('_', '');
+
+              if (this.currentChatWith !== otherPlayerId) {
+                this.unreadCounts[otherPlayerId] = (this.unreadCounts[otherPlayerId] || 0) + 1;
+                this.updateChatButton();
               }
-            });
-          }
+            }
+          });
         });
       }
     };
