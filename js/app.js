@@ -751,16 +751,20 @@ Then tighten the rules later.`);
         return true;
       },
       
+      // Cloud backup disabled flag - set on first PERMISSION_DENIED to avoid repeated errors
+      _cloudBackupDisabled: false,
+
       // Create cloud backup (in addition to local backup)
       async createCloudBackup(userId, reason = 'periodic') {
         try {
+          if (this._cloudBackupDisabled) return false;
           if (!userId || !database) return false;
-          
+
           if (!this.isValidGameState(GameState)) {
             console.log('[AccountProtection] Skipping cloud backup - GameState appears empty');
             return false;
           }
-          
+
           const backupData = {
             timestamp: Date.now(),
             reason: reason,
@@ -769,12 +773,17 @@ Then tighten the rules later.`);
             playerCash: GameState.player?.cash || 0,
             gameState: buildSerializableGameStateForCloud(GameState)
           };
-          
+
           await database.ref('userBackups/' + userId + '/latest').set(backupData);
           console.log(`[AccountProtection] ✅ Cloud backup created for ${userId}`);
           return true;
         } catch (e) {
-          console.error('[AccountProtection] Failed to create cloud backup:', e);
+          if (e.code === 'PERMISSION_DENIED' || (e.message && e.message.includes('PERMISSION_DENIED'))) {
+            console.warn('[AccountProtection] Cloud backup not permitted by Firebase rules - disabling cloud backups for this session');
+            this._cloudBackupDisabled = true;
+          } else {
+            console.warn('[AccountProtection] Cloud backup failed:', e.message || e);
+          }
           return false;
         }
       },
@@ -782,20 +791,26 @@ Then tighten the rules later.`);
       // Attempt to recover data from cloud backup
       async recoverFromCloudBackup(userId) {
         try {
+          if (this._cloudBackupDisabled) return null;
           if (!userId || !database) return null;
-          
+
           const snapshot = await database.ref('userBackups/' + userId + '/latest').once('value');
           const backup = snapshot.val();
-          
+
           if (backup && backup.gameState) {
             console.log(`[AccountProtection] ✅ Found cloud backup from ${new Date(backup.timestamp).toISOString()}`);
             console.log(`[AccountProtection] Backup has: ${backup.playerName}, Level ${backup.playerLevel}, $${backup.playerCash}`);
             return backup.gameState;
           }
-          
+
           return null;
         } catch (e) {
-          console.error('[AccountProtection] Failed to recover from cloud backup:', e);
+          if (e.code === 'PERMISSION_DENIED' || (e.message && e.message.includes('PERMISSION_DENIED'))) {
+            console.warn('[AccountProtection] Cloud backup read not permitted - disabling cloud backups for this session');
+            this._cloudBackupDisabled = true;
+          } else {
+            console.warn('[AccountProtection] Cloud backup recovery failed:', e.message || e);
+          }
           return null;
         }
       }
@@ -12510,35 +12525,12 @@ function updateTurfDefense(dt) {
       // Path to the turf map image (day/night aware)
       const mapImagePath = window.DayNightCycle ? DayNightCycle.getCurrentMapPath() : 'sprites/turf-map/TurfMap.png';
 
-      // Create an Image object to load the PNG (needed for RoadPathfinder)
-      const mapImage = new Image();
-      mapImage.crossOrigin = 'anonymous';
-
-      mapImage.onload = () => {
-        console.log('✅ Static map loaded successfully');
-        // Set the background image on the div (DayNightCycle will manage ongoing switches)
-        mapBackground.style.backgroundImage = `url('${mapImagePath}')`;
-        mapBackground.style.backgroundSize = 'cover';
-        mapBackground.style.backgroundPosition = 'center';
-        mapBackground.style.backgroundRepeat = 'no-repeat';
-
-        // Build road mask grid for cop A* pathfinding
-        if (window.RoadPathfinder && typeof window.RoadPathfinder.buildFromImage === "function") {
-          window.RoadPathfinder.buildFromImage(mapImage);
-        } else {
-          window.__pendingRoadMaskImage = mapImage;
-        }
-        if (typeof window.ROAD_DEBUG !== 'undefined') {
-          window.ROAD_DEBUG = window.ROAD_DEBUG;
-        }
-      };
-      mapImage.onerror = () => {
-        console.error('❌ Failed to load static map');
-        staticMapInitialized = false;
-      };
-
-      // Start loading the image
-      mapImage.src = mapImagePath;
+      // Set the background image on the div (DayNightCycle will manage ongoing switches)
+      mapBackground.style.backgroundImage = `url('${mapImagePath}')`;
+      mapBackground.style.backgroundSize = 'cover';
+      mapBackground.style.backgroundPosition = 'center';
+      mapBackground.style.backgroundRepeat = 'no-repeat';
+      console.log('✅ Static map background set');
 
       console.log('==================================');
     }
@@ -13288,12 +13280,8 @@ function updateTurfDefense(dt) {
       };
     })();
     // Expose for other script scopes (e.g., module/event handlers)
+    // NOTE: RoadPathfinder is deprecated - kept for debug overlay compatibility but no longer auto-initialized
     window.RoadPathfinder = RoadPathfinder;
-    // If the map image loaded before RoadPathfinder was exposed, build the mask now.
-    if (window.__pendingRoadMaskImage && typeof window.RoadPathfinder.buildFromImage === "function") {
-      try { window.RoadPathfinder.buildFromImage(window.__pendingRoadMaskImage); } catch (e) { console.warn("RoadPathfinder build deferred failed:", e); }
-      window.__pendingRoadMaskImage = null;
-    }
 
 
 
@@ -31125,103 +31113,33 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       // Initialize inmate recruitment system (police station & hideout)
       initInmateSystem();
 
-      // Build the road mask used by RoadPathfinder (and set the map background div).
-      // RoadPathfinder is used by the player sprite for road-following movement.
+      // Set the map background image (day/night aware).
+      // NOTE: RoadPathfinder is deprecated - the game uses the node-based patrol system instead.
       // CopCarSystem uses its own 53-node patrol graph and does not depend on RoadPathfinder.
-      console.log('[DEBUG] Initializing static map and RoadPathfinder...');
+      console.log('[DEBUG] Initializing static map background...');
 
-      // INLINE IMPLEMENTATION: Directly load map and build road pathfinder
-      // This bypasses the initStaticMap function which has scoping issues
-      const initRoadPathfinderDirect = (attempt = 1) => {
-        console.log(`[RoadPathfinder] Initialization attempt ${attempt}...`);
-
+      const initMapBackground = (attempt = 1) => {
         const mapBackground = document.getElementById('map-background');
         if (!mapBackground) {
           if (attempt < 5) {
-            console.warn(`[RoadPathfinder] map-background not found, retrying in 200ms... (attempt ${attempt})`);
-            setTimeout(() => initRoadPathfinderDirect(attempt + 1), 200);
-          } else {
-            console.error('[RoadPathfinder] ❌ map-background never found after 5 attempts');
+            setTimeout(() => initMapBackground(attempt + 1), 200);
           }
           return;
         }
 
         const mapImagePath = window.DayNightCycle ? DayNightCycle.getCurrentMapPath() : 'sprites/turf-map/TurfMap.png';
 
-        // Set background image directly (day/night aware)
         mapBackground.style.backgroundImage = `url('${mapImagePath}')`;
         mapBackground.style.backgroundSize = 'cover';
         mapBackground.style.backgroundPosition = 'center';
         mapBackground.style.backgroundRepeat = 'no-repeat';
-        console.log('[RoadPathfinder] ✅ Map background set');
-
-        // Load DAY map image for RoadPathfinder analysis (road detection always uses day map)
-        const mapImage = new Image();
-        mapImage.crossOrigin = 'anonymous';
-
-        mapImage.onload = () => {
-          console.log('[RoadPathfinder] ✅ Map image loaded');
-
-          // Build road pathfinder graph
-          if (window.RoadPathfinder && typeof window.RoadPathfinder.buildFromImage === 'function') {
-            try {
-              window.RoadPathfinder.buildFromImage(mapImage);
-              console.log('[RoadPathfinder] ✅ buildFromImage called');
-
-              // Verify it's ready
-              setTimeout(() => {
-                if (window.RoadPathfinder && window.RoadPathfinder.ready) {
-                  console.log('[RoadPathfinder] ✅ RoadPathfinder is READY!');
-                } else {
-                  console.warn('[RoadPathfinder] ⚠️ buildFromImage completed but ready is still false');
-                }
-              }, 100);
-            } catch (e) {
-              console.error('[RoadPathfinder] ❌ buildFromImage error:', e);
-            }
-          } else {
-            console.warn('[RoadPathfinder] Not available yet, storing pending image');
-            window.__pendingRoadMaskImage = mapImage;
-
-            // Retry after RoadPathfinder might be available
-            setTimeout(() => {
-              if (window.__pendingRoadMaskImage && window.RoadPathfinder && typeof window.RoadPathfinder.buildFromImage === 'function') {
-                console.log('[RoadPathfinder] Processing pending image...');
-                try {
-                  window.RoadPathfinder.buildFromImage(window.__pendingRoadMaskImage);
-                  window.__pendingRoadMaskImage = null;
-                  console.log('[RoadPathfinder] ✅ Pending image processed');
-                } catch (e) {
-                  console.error('[RoadPathfinder] ❌ Pending image processing failed:', e);
-                }
-              }
-            }, 500);
-          }
-        };
-
-        mapImage.onerror = (e) => {
-          console.error('[RoadPathfinder] ❌ Failed to load map image:', e);
-        };
-
-        // Always use the day map for road analysis (roads are the same day/night)
-        mapImage.src = 'sprites/turf-map/TurfMap.png';
+        console.log('[MapInit] ✅ Map background set');
       };
 
-      // Execute immediately
-      initRoadPathfinderDirect(1);
-
-      // Also schedule a verification check later
-      setTimeout(() => {
-        if (!window.RoadPathfinder || !window.RoadPathfinder.ready) {
-          console.warn('[RoadPathfinder] ⚠️ Still not ready after 2 seconds, attempting rebuild...');
-          initRoadPathfinderDirect(1);
-        } else {
-          console.log('[RoadPathfinder] ✅ Verified ready after 2 seconds');
-        }
-      }, 2000);
+      initMapBackground(1);
       
       console.log('[DEBUG] Initializing cop car patrol system...');
-      // Initialize cop car patrol on map (after initStaticMap for road pathfinding)
+      // Initialize cop car patrol on map (uses its own 53-node patrol graph)
       CopCarSystem.init();
 
       // Inject cop car node debug overlay button and auto-show
