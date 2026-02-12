@@ -24129,41 +24129,37 @@ function ensureLandmarkProperties() {
         const mapBg = document.getElementById('map-background');
         const zoomDisplay = document.getElementById('zoom-level-display');
 
-        // Transfer background from #city-map to the real map image (once)
-        if (mapBg && cityMap && !this.worldSizeReady) {
-          const bg = getComputedStyle(cityMap).backgroundImage;
-          // bg is like: url("data:image/webp;base64,...")
-          const match = bg && bg !== 'none' ? bg.match(/url\((['"]?)(.*?)\1\)/) : null;
-          const url = match && match[2] ? match[2] : null;
-
-          if (url) {
+        // Transfer background to the real map image (once) - day/night aware
+        if (mapBg && !this.worldSizeReady) {
+          const mapPath = window.DayNightCycle ? DayNightCycle.getCurrentMapPath() : 'sprites/turf-map/TurfMap.png';
+          // Only set if #map-background has no image yet
+          const currentBg = getComputedStyle(mapBg).backgroundImage;
+          if (!currentBg || currentBg === 'none') {
             if (mapBg.tagName === 'IMG') {
               if (!mapBg.getAttribute('src')) {
-                mapBg.setAttribute('src', url);
+                mapBg.setAttribute('src', mapPath);
               }
             } else {
-              // Fallback if mapBg is not an <img>
-              mapBg.style.backgroundImage = `url("${url}")`;
+              mapBg.style.backgroundImage = "url('" + mapPath + "')";
               mapBg.style.backgroundSize = 'cover';
               mapBg.style.backgroundPosition = 'center';
               mapBg.style.backgroundRepeat = 'no-repeat';
-            
-              // Probe intrinsic pixel size so zoom/pan uses real map dimensions (Clash-of-Clans style)
-              if (!this.worldIntrinsicW) {
-                const probeImg = new Image();
-                probeImg.onload = () => {
-                  this.worldIntrinsicW = probeImg.naturalWidth || this.worldIntrinsicW;
-                  this.worldIntrinsicH = probeImg.naturalHeight || this.worldIntrinsicH;
-                  this.worldSizeReady = false;
-                  this.ensureWorldSize();
-                  this.clampPan();
-                  this.applyMapTransform();
-                };
-                probeImg.src = url;
-              }
-}
-            cityMap.style.backgroundImage = 'none';
+            }
           }
+          // Probe intrinsic pixel size so zoom/pan uses real map dimensions (Clash-of-Clans style)
+          if (!this.worldIntrinsicW) {
+            const probeImg = new Image();
+            probeImg.onload = () => {
+              this.worldIntrinsicW = probeImg.naturalWidth || this.worldIntrinsicW;
+              this.worldIntrinsicH = probeImg.naturalHeight || this.worldIntrinsicH;
+              this.worldSizeReady = false;
+              this.ensureWorldSize();
+              this.clampPan();
+              this.applyMapTransform();
+            };
+            probeImg.src = mapPath;
+          }
+          if (cityMap) cityMap.style.backgroundImage = 'none';
         }
 
         // Ensure the world has a real pixel size based on the map image
@@ -28558,6 +28554,11 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
           mapBackground.style.opacity = '1';
           mapBackground.style.visibility = 'visible';
           mapBackground.style.display = 'block';
+
+          // Ensure correct day/night map is shown on every render
+          if (window.DayNightCycle) {
+            DayNightCycle.applyMapImage(true);
+          }
           console.log('[TurfTab] ✅ Map background visibility ensured');
         }
 
@@ -30927,19 +30928,19 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
         return;
       }
 
-      // Transfer map background to separate layer for zoom
+      // Set map background on the zoom layer (day/night aware)
       const cityMap = document.getElementById('city-map');
       const mapBg = document.getElementById('map-background');
-      if (mapBg && cityMap) {
-        const bg = getComputedStyle(cityMap).backgroundImage;
-        if (bg && bg !== 'none') {
-          mapBg.style.backgroundImage = bg;
-          mapBg.style.backgroundSize = 'cover';
-          mapBg.style.backgroundPosition = 'center';
-          mapBg.style.backgroundRepeat = 'no-repeat';
-          cityMap.style.backgroundImage = 'none';
-          console.log('[DEBUG] Map background transferred to #map-background');
-        }
+      if (mapBg) {
+        const mapPath = window.DayNightCycle ? DayNightCycle.getCurrentMapPath() : 'sprites/turf-map/TurfMap.png';
+        mapBg.style.backgroundImage = "url('" + mapPath + "')";
+        mapBg.style.backgroundSize = 'cover';
+        mapBg.style.backgroundPosition = 'center';
+        mapBg.style.backgroundRepeat = 'no-repeat';
+        console.log('[DEBUG] Map background set on #map-background (day/night aware): ' + mapPath);
+      }
+      if (cityMap) {
+        cityMap.style.backgroundImage = 'none';
       }
       
       console.log('[DEBUG] Loading storage...');
