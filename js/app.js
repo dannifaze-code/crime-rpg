@@ -17885,7 +17885,8 @@ function ensureLandmarkProperties() {
         { id: 'heat-bar-main', label: 'Heat Bar Frame' },
         { id: 'heat-bar-interface', label: 'Fire & Star Interface' },
         { id: 'turf-test-controls', label: 'Test Turf Defense' },
-        { id: 'area-weather-info', label: 'Weather UI' }
+        { id: 'area-weather-info', label: 'Weather UI' },
+        { id: 'city-map', label: 'City Map' }
       ],
 
       // IDs that are popups (force open in editor mode)
@@ -18258,6 +18259,10 @@ function ensureLandmarkProperties() {
             if (parts.length > 0) {
               el.style.transform = parts.join(' ');
               el.style.transformOrigin = 'left top';
+            }
+            // Ensure heat bar elements stay above city-map when repositioned
+            if (elementId === 'heat-bar-main' || elementId === 'heat-bar-interface') {
+              el.style.zIndex = '10';
             }
           }
         });
@@ -23645,6 +23650,8 @@ function ensureLandmarkProperties() {
 
         // Handler function for button activation (TOGGLE mode)
         const handleTurfDefenseToggle = (e) => {
+          // Don't activate in editor mode - let drag handler work
+          if (TurfUIEditor && TurfUIEditor.active) return;
           if (e) {
             e.preventDefault();
             e.stopPropagation();

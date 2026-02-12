@@ -1321,6 +1321,7 @@
     /* City Map - Clean Background (No Grid) */
     #city-map {
       position: relative;
+      z-index: 1;
       width: 100%;
       aspect-ratio: 9 / 16;
       max-height: calc(100vh - 140px);
@@ -2785,12 +2786,14 @@
       align-items: center;
       margin: 4px 8px 8px;
       position: relative;
+      z-index: 10;
     }
 
     .new-heat-bar-main {
       position: relative;
       width: 100%;
       max-width: 420px;
+      z-index: 10;
     }
 
     .new-heat-bar-main .heat-bar-frame {
@@ -2824,7 +2827,7 @@
 
     .heat-bar-value-label {
       position: absolute;
-      top: 50%;
+      top: 84%;
       right: 8%;
       transform: translateY(-50%);
       z-index: 3;
@@ -2839,7 +2842,8 @@
       position: relative;
       width: 60%;
       max-width: 260px;
-      margin-top: -4px;
+      margin-top: -2px;
+      z-index: 10;
     }
 
     .new-heat-bar-interface .heat-bar-interface-base {
@@ -2851,10 +2855,10 @@
 
     .heat-bar-icons-container {
       position: absolute;
-      top: 15%;
+      top: 5%;
       left: 8%;
       right: 8%;
-      bottom: 15%;
+      bottom: 5%;
       display: flex;
       align-items: center;
       justify-content: center;
