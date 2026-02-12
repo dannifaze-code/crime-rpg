@@ -17805,6 +17805,8 @@ function ensureLandmarkProperties() {
       _applyScaleToElement(el, scaleVal) {
         // Preserve translate(-50%, -50%) and add scale
         el.style.transform = 'translate(-50%, -50%) scale(' + scaleVal + ')';
+        // Store scale so ::after label can counter-scale to stay readable
+        el.style.setProperty('--bld-scale', scaleVal);
       },
 
       _bindClickEvents() {
