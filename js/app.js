@@ -11672,7 +11672,7 @@ function updateTurfDefense(dt) {
       console.log('Size:', `${GameState.map.width}x${GameState.map.height}`);
       console.log('Total tiles:', GameState.map.width * GameState.map.height);
       console.log('Seed:', GameState.map.seed);
-      console.log('Generated:', new Date(GameState.map.generatedAt).toLocaleString());
+      console.log('Generated:', GameState.map.generatedAt ? new Date(GameState.map.generatedAt).toLocaleString() : 'unknown');
       showBiomeDistribution();
       console.log('==========================');
     };
@@ -20389,6 +20389,13 @@ function ensureLandmarkProperties() {
         state.flushTimer = null;
 
         try {
+          // Double-check auth right before the call to avoid unauthenticated errors
+          if (!window.auth?.currentUser) {
+            state.pendingCash += cashDelta;
+            state.pendingBaseXp += xpDelta;
+            state.pendingReason = reason;
+            return;
+          }
           const res = await applyReward({ cashDelta, xpDelta, reason });
           const data = res?.data || {};
           if (data.player) {
@@ -20397,7 +20404,11 @@ function ensureLandmarkProperties() {
           }
         } catch (e) {
           // If server call fails, we keep local changes (feels good) and will try again next award.
-          console.warn('[SecureEconomy] Server reconcile failed:', e);
+          // Silently ignore unauthenticated errors (expected before sign-in)
+          const code = e?.code || '';
+          if (!code.includes('unauthenticated')) {
+            console.warn('[SecureEconomy] Server reconcile failed:', e);
+          }
           // Re-queue the deltas so we don't lose them.
           state.pendingCash += cashDelta;
           state.pendingBaseXp += xpDelta;
@@ -30056,12 +30067,13 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
     // Global function for selling vehicles
     window.sellVehicle = function(vehicleId) {
       const result = CrimesSystem.sellVehicle(vehicleId);
+      if (!result) return;
       if (result.success) {
         SafeHouseTab.renderGarageTab();
         ProfileTab.render();
-        TurfTab.showTemporaryNotification(`💰 Sold vehicle for $${result.amount.toLocaleString()}!`);
+        TurfTab.showTemporaryNotification(`💰 Sold vehicle for $${result.value.toLocaleString()}!`);
       } else {
-        alert(result.message);
+        alert(result.reason || 'Cannot sell this vehicle.');
       }
     };
     
