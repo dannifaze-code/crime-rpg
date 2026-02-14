@@ -8681,6 +8681,8 @@ function updateTurfDefense(dt) {
             zoom: TurfTab.currentZoom,
             panX: TurfTab.panX,
             panY: TurfTab.panY,
+            baseOffsetX: TurfTab.baseOffsetX,
+            baseOffsetY: TurfTab.baseOffsetY,
             worldBaseW: TurfTab.worldBaseW,
             worldBaseH: TurfTab.worldBaseH,
             worldSizeReady: TurfTab.worldSizeReady
@@ -8711,6 +8713,9 @@ function updateTurfDefense(dt) {
             TurfTab.worldBaseW = w;
             TurfTab.worldBaseH = h;
             TurfTab.worldSizeReady = true;
+            // Disable framing bias during Turf Defense (its own camera controls framing)
+            TurfTab.baseOffsetX = 0;
+            TurfTab.baseOffsetY = 0;
           }
 
           // Ensure the TD canvas is inside the world so it gets transformed with the map
@@ -8747,6 +8752,9 @@ function updateTurfDefense(dt) {
             TurfTab.currentZoom = (typeof state.prev.zoom === 'number') ? state.prev.zoom : 1;
             TurfTab.panX = (typeof state.prev.panX === 'number') ? state.prev.panX : 0;
             TurfTab.panY = (typeof state.prev.panY === 'number') ? state.prev.panY : 0;
+            // Restore framing bias
+            TurfTab.baseOffsetX = (typeof state.prev.baseOffsetX === 'number') ? state.prev.baseOffsetX : 0;
+            TurfTab.baseOffsetY = (typeof state.prev.baseOffsetY === 'number') ? state.prev.baseOffsetY : 0;
             TurfTab.worldBaseW = state.prev.worldBaseW;
             TurfTab.worldBaseH = state.prev.worldBaseH;
             TurfTab.worldSizeReady = state.prev.worldSizeReady;
@@ -22756,11 +22764,13 @@ function ensureLandmarkProperties() {
                   TurfTab.ensureWorldSize();
                   // If minZoom changed (real dimensions now available), fit map to viewport
                   if (TurfTab.minZoom !== prevMinZoom || !TurfTab._viewportZoomApplied) {
-                    TurfTab.currentZoom = TurfTab.minZoom;
+                    // Start 20% zoomed in from min (Clash-of-Clans "player must zoom in" feel)
+                    TurfTab.currentZoom = TurfTab.minZoom * 1.20;
                     TurfTab.panX = 0;
                     TurfTab.panY = 0;
                     TurfTab._viewportZoomApplied = true;
                   }
+                  TurfTab.updateFramingBias();
                   TurfTab.clampPan();
                   TurfTab.applyMapTransform();
                 }
@@ -23893,6 +23903,9 @@ function ensureLandmarkProperties() {
       worldSizeReady: false,
       panX: 0,
       panY: 0,
+      // Camera framing bias (Clash-of-Clans style): shifts world down so more sky/space above
+      baseOffsetX: 0,
+      baseOffsetY: 0,
       isPanning: false,
       lastPointerX: 0,
       lastPointerY: 0,
@@ -23901,7 +23914,16 @@ function ensureLandmarkProperties() {
       isPinching: false,
       lastPinchDistance: 0,
       zoomLocked: false,
-      
+
+      /** Recalculate camera framing bias based on current viewport size. */
+      updateFramingBias() {
+        const viewport = document.getElementById('map-viewport');
+        if (!viewport) return;
+        const vh = viewport.clientHeight || 0;
+        this.baseOffsetX = 0;
+        this.baseOffsetY = vh * 0.25; // 25 % of viewport height – pushes world down (Clash vibe)
+      },
+
       initWeatherControls() {
         // Cycle is always ON now (2h real-time). UI controls were removed.
         // Ensure the overlay is in cycle mode and immediately synced to the cycle clock.
@@ -24015,6 +24037,18 @@ function ensureLandmarkProperties() {
         }, { passive: false });
         
         console.log('[TurfTab] ✅ Zoom controls initialized');
+
+        // Compute initial framing bias and keep it updated on resize / orientation change
+        this.updateFramingBias();
+        if (!this._framingResizeHandler) {
+          this._framingResizeHandler = () => {
+            this.updateFramingBias();
+            this.clampPan();
+            this.applyMapTransform();
+          };
+          window.addEventListener('resize', this._framingResizeHandler, { passive: true });
+          window.addEventListener('orientationchange', this._framingResizeHandler, { passive: true });
+        }
 
         // Pointer drag pan (desktop)
         viewport.addEventListener('pointerdown', (e) => {
@@ -24214,10 +24248,11 @@ function ensureLandmarkProperties() {
               this.worldIntrinsicH = probeImg.naturalHeight || this.worldIntrinsicH;
               this.worldSizeReady = false;
               this.ensureWorldSize();
-              // Reset zoom to fit map in viewport now that real dimensions are known
-              this.currentZoom = this.minZoom;
+              // Start 20% zoomed in from min (Clash-of-Clans "player must zoom in" feel)
+              this.currentZoom = this.minZoom * 1.20;
               this.panX = 0;
               this.panY = 0;
+              this.updateFramingBias();
               this.clampPan();
               this.applyMapTransform();
             };
@@ -24241,13 +24276,17 @@ function ensureLandmarkProperties() {
           const ax = anchorClientX - rect.left;
           const ay = anchorClientY - rect.top;
 
+          // Account for framing bias in screen-to-world conversion
+          const bx = this.baseOffsetX || 0;
+          const by = this.baseOffsetY || 0;
+
           // World-space point under anchor before zoom
-          const wx = (ax - this.panX) / prevZoom;
-          const wy = (ay - this.panY) / prevZoom;
+          const wx = (ax - this.panX - bx) / prevZoom;
+          const wy = (ay - this.panY - by) / prevZoom;
 
           // Keep the same world-space point under the anchor after zoom
-          this.panX = ax - wx * this.currentZoom;
-          this.panY = ay - wy * this.currentZoom;
+          this.panX = ax - bx - wx * this.currentZoom;
+          this.panY = ay - by - wy * this.currentZoom;
         }
 
         this.clampPan();
@@ -24261,7 +24300,10 @@ function ensureLandmarkProperties() {
       applyMapTransform() {
         const world = document.getElementById('map-world');
         if (!world) return;
-        world.style.transform = `translate(${this.panX}px, ${this.panY}px) scale(${this.currentZoom})`;
+        // Apply framing bias: shift rendered world by baseOffset (Clash-of-Clans style)
+        const tx = this.panX + (this.baseOffsetX || 0);
+        const ty = this.panY + (this.baseOffsetY || 0);
+        world.style.transform = `translate(${tx}px, ${ty}px) scale(${this.currentZoom})`;
         // Keep sprite readable on extreme zooms (soft clamp)
         try {
           const sc = this.currentZoom || 1;
@@ -24383,20 +24425,24 @@ function ensureLandmarkProperties() {
         const scaledW = worldW * this.currentZoom;
         const scaledH = worldH * this.currentZoom;
 
+        // Account for framing bias so the rendered map (pan + bias) never exposes empty space
+        const bx = this.baseOffsetX || 0;
+        const by = this.baseOffsetY || 0;
+
         // If the scaled world is smaller than the viewport, keep it centered
         if (scaledW <= vw) {
-          this.panX = (vw - scaledW) / 2;
+          this.panX = (vw - scaledW) / 2 - bx;
         } else {
-          const minX = vw - scaledW;
-          const maxX = 0;
+          const minX = vw - scaledW - bx;
+          const maxX = -bx;
           this.panX = Math.min(maxX, Math.max(minX, this.panX));
         }
 
         if (scaledH <= vh) {
-          this.panY = (vh - scaledH) / 2;
+          this.panY = (vh - scaledH) / 2 - by;
         } else {
-          const minY = vh - scaledH;
-          const maxY = 0;
+          const minY = vh - scaledH - by;
+          const maxY = -by;
           this.panY = Math.min(maxY, Math.max(minY, this.panY));
         }
       },
