@@ -2985,75 +2985,7 @@ Then tighten the rules later.`);
                 
                 <!-- Character Sub-Tab Content -->
                 <div id="safehouse-character-content" class="safehouse-sub-content active">
-                  <div class="character-creator">
-                    <div class="character-preview">
-                      <div class="preview-details" id="preview-details">
-                        <span class="preview-tag">Male</span>
-                        <span class="preview-tag">Caucasian</span>
-                        <span class="preview-tag">Average</span>
-                      </div>
-                    </div>
-
-                    <div class="creator-section">
-                      <div class="section-title">Gender</div>
-                      <div class="option-grid">
-                        <button class="option-btn selected" data-trait="gender" data-value="male">
-                          <span>♂️</span>
-                          <span>Male</span>
-                        </button>
-                        <button class="option-btn" data-trait="gender" data-value="female">
-                          <span>♀️</span>
-                          <span>Female</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    <div class="creator-section">
-                      <div class="section-title">Ethnicity</div>
-                      <div class="option-grid">
-                        <button class="option-btn selected" data-trait="race" data-value="caucasian">Caucasian</button>
-                        <button class="option-btn" data-trait="race" data-value="african">African</button>
-                        <button class="option-btn" data-trait="race" data-value="hispanic">Hispanic</button>
-                        <button class="option-btn" data-trait="race" data-value="asian">Asian</button>
-                        <button class="option-btn" data-trait="race" data-value="native">Native</button>
-                      </div>
-                    </div>
-
-                    <div class="creator-section">
-                      <div class="section-title">Face</div>
-                      <div class="option-grid">
-                        <button class="option-btn selected" data-trait="face" data-value="neutral">Neutral</button>
-                        <button class="option-btn" data-trait="face" data-value="sharp">Sharp</button>
-                        <button class="option-btn" data-trait="face" data-value="round">Round</button>
-                        <button class="option-btn" data-trait="face" data-value="weathered">Weathered</button>
-                      </div>
-                    </div>
-
-                    <div class="creator-section">
-                      <div class="section-title">Body Type</div>
-                      <div class="option-grid">
-                        <button class="option-btn selected" data-trait="body" data-value="average">Average</button>
-                        <button class="option-btn" data-trait="body" data-value="slim">Slim</button>
-                        <button class="option-btn" data-trait="body" data-value="athletic">Athletic</button>
-                        <button class="option-btn" data-trait="body" data-value="heavy">Heavy</button>
-                      </div>
-                    </div>
-
-                    <div class="creator-section">
-                      <div class="section-title">Hair Style</div>
-                      <div class="option-grid">
-                        <button class="option-btn selected" data-trait="hair" data-value="short">Short</button>
-                        <button class="option-btn" data-trait="hair" data-value="long">Long</button>
-                        <button class="option-btn" data-trait="hair" data-value="bald">Bald</button>
-                        <button class="option-btn" data-trait="hair" data-value="mohawk">Mohawk</button>
-                      </div>
-                    </div>
-
-                    <div class="creator-section">
-                      <div class="section-title">Wardrobe</div>
-                      <div class="wardrobe-grid" id="wardrobe-grid"></div>
-                    </div>
-                  </div>
+                  <!-- Character Forge opens automatically as overlay -->
                 </div>
                 
                 <!-- Weapons Sub-Tab Content -->
@@ -3534,78 +3466,7 @@ Then tighten the rules later.`);
                   
                   <!-- Character Sub-Tab Content -->
                   <div id="safehouse-character-content" class="safehouse-sub-content active">
-                    <div class="character-creator">
-                      <div class="character-preview">
-                        <div class="sprite-container" id="sprite-container">
-                        </div>
-                        <div class="preview-details" id="preview-details">
-                          <span class="preview-tag">Male</span>
-                          <span class="preview-tag">Caucasian</span>
-                          <span class="preview-tag">Average</span>
-                        </div>
-                        <div class="pose-indicator">Pose: <span>Relaxed</span> 🔒</div>
-                      </div>
-
-                      <div class="creator-section">
-                        <div class="section-title">Gender</div>
-                        <div class="option-grid">
-                          <button class="option-btn selected" data-trait="gender" data-value="male">
-                            <span>♂️</span>
-                            <span>Male</span>
-                          </button>
-                          <button class="option-btn" data-trait="gender" data-value="female">
-                            <span>♀️</span>
-                            <span>Female</span>
-                          </button>
-                        </div>
-                      </div>
-
-                      <div class="creator-section">
-                        <div class="section-title">Ethnicity</div>
-                        <div class="option-grid">
-                          <button class="option-btn selected" data-trait="race" data-value="caucasian">Caucasian</button>
-                          <button class="option-btn" data-trait="race" data-value="african">African</button>
-                          <button class="option-btn" data-trait="race" data-value="hispanic">Hispanic</button>
-                          <button class="option-btn" data-trait="race" data-value="asian">Asian</button>
-                          <button class="option-btn" data-trait="race" data-value="native">Native</button>
-                        </div>
-                      </div>
-
-                      <div class="creator-section">
-                        <div class="section-title">Face</div>
-                        <div class="option-grid">
-                          <button class="option-btn selected" data-trait="face" data-value="neutral">Neutral</button>
-                          <button class="option-btn" data-trait="face" data-value="sharp">Sharp</button>
-                          <button class="option-btn" data-trait="face" data-value="round">Round</button>
-                          <button class="option-btn" data-trait="face" data-value="weathered">Weathered</button>
-                        </div>
-                      </div>
-
-                      <div class="creator-section">
-                        <div class="section-title">Body Type</div>
-                        <div class="option-grid">
-                          <button class="option-btn selected" data-trait="body" data-value="average">Average</button>
-                          <button class="option-btn" data-trait="body" data-value="slim">Slim</button>
-                          <button class="option-btn" data-trait="body" data-value="athletic">Athletic</button>
-                          <button class="option-btn" data-trait="body" data-value="heavy">Heavy</button>
-                        </div>
-                      </div>
-
-                      <div class="creator-section">
-                        <div class="section-title">Hair Style</div>
-                        <div class="option-grid">
-                          <button class="option-btn selected" data-trait="hair" data-value="short">Short</button>
-                          <button class="option-btn" data-trait="hair" data-value="long">Long</button>
-                          <button class="option-btn" data-trait="hair" data-value="bald">Bald</button>
-                          <button class="option-btn" data-trait="hair" data-value="mohawk">Mohawk</button>
-                        </div>
-                      </div>
-
-                      <div class="creator-section">
-                        <div class="section-title">Wardrobe</div>
-                        <div class="wardrobe-grid" id="wardrobe-grid"></div>
-                      </div>
-                    </div>
+                    <!-- Character Forge opens automatically as overlay -->
                   </div>
                   
                   <!-- Weapons Sub-Tab Content -->
@@ -29448,6 +29309,13 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
         if (subtab === 'upgrades') {
           this.renderUpgradesTab();
         }
+        
+        // Open Character Forge overlay for character tab
+        if (subtab === 'character') {
+          if (typeof window.openCharacterForge === 'function') {
+            window.openCharacterForge();
+          }
+        }
       },
       
       selectTrait(trait, value) {
@@ -32143,7 +32011,7 @@ function getCameraShakeOffset(defense) {
 // ========================================
 // Character Forge – Safe entry point
 // Opens the new Character Forge overlay UI.
-// Does NOT replace existing character UI.
+// Replaces the old character creator in Safehouse tab.
 // ========================================
 if (typeof window.openCharacterForge !== 'function') {
   window.openCharacterForge = function () {
