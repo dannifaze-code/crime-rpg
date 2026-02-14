@@ -32139,3 +32139,18 @@ function getCameraShakeOffset(defense) {
     return { x: 0, y: 0 };
   }
 }
+
+// ========================================
+// Character Forge – Safe entry point
+// Opens the new Character Forge overlay UI.
+// Does NOT replace existing character UI.
+// ========================================
+if (typeof window.openCharacterForge !== 'function') {
+  window.openCharacterForge = function () {
+    if (window.CharacterForgeUI && window.CharacterForgeUI.open) {
+      window.CharacterForgeUI.open();
+    } else {
+      console.warn('[CharacterForge] UI module not loaded.');
+    }
+  };
+}
