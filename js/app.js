@@ -1330,13 +1330,19 @@ Then tighten the rules later.`);
             }
             if (typeof initializeGame === 'function') {
               initializeGame();
+              // Wait for turf data even in error recovery, but with shorter timeout
+              try {
+                const turfReady = window._turfDataReady || Promise.resolve();
+                const timeout = new Promise(resolve => setTimeout(resolve, 5000));
+                await Promise.race([turfReady, timeout]);
+              } catch (e) { /* ignore */ }
             }
           } catch (fallbackErr) {
             console.error('[GoogleAuth] Fallback initialization also failed:', fallbackErr);
           }
           this.hideLoadingScreen();
         }
-        
+
         // BULLETPROOF: Create backup after successful sign-in (non-blocking)
         if (typeof AccountDataProtection !== 'undefined' && AccountDataProtection.isValidGameState(GameState)) {
           AccountDataProtection.createEmergencyBackup(user.uid, 'post-signin-success');
@@ -1456,6 +1462,18 @@ Then tighten the rules later.`);
               }, 500);
             }
 
+            // Wait for all turf map Firebase data (building positions, scales, layouts)
+            // to load before dismissing the loading screen. This prevents the blank-map
+            // issue on first launch / cleared cache. Max 10s timeout to avoid infinite wait.
+            this.showLoadingScreen('turf-data');
+            try {
+              const turfReady = window._turfDataReady || Promise.resolve();
+              const timeout = new Promise(resolve => setTimeout(resolve, 10000));
+              await Promise.race([turfReady, timeout]);
+            } catch (e) {
+              console.warn('[GoogleAuth] Turf data load had errors, continuing:', e);
+            }
+
             this.showLoadingScreen('ready');
             setTimeout(() => this.hideLoadingScreen(), 400);
           }
@@ -1551,6 +1569,18 @@ Then tighten the rules later.`);
                 }, 500);
               }
 
+              // Wait for all turf map Firebase data (building positions, scales, layouts)
+              // to load before dismissing the loading screen. This prevents the blank-map
+              // issue on first launch / cleared cache. Max 10s timeout to avoid infinite wait.
+              this.showLoadingScreen('turf-data');
+              try {
+                const turfReady = window._turfDataReady || Promise.resolve();
+                const timeout = new Promise(resolve => setTimeout(resolve, 10000));
+                await Promise.race([turfReady, timeout]);
+              } catch (e) {
+                console.warn('[GoogleAuth] Turf data load had errors, continuing:', e);
+              }
+
               // Show ready and dismiss loading screen
               this.showLoadingScreen('ready');
               setTimeout(() => this.hideLoadingScreen(), 400);
@@ -1576,6 +1606,12 @@ Then tighten the rules later.`);
             }
             if (typeof initializeGame === 'function') {
               initializeGame();
+              // Wait for turf data even in error recovery, but with shorter timeout
+              try {
+                const turfReady = window._turfDataReady || Promise.resolve();
+                const timeout = new Promise(resolve => setTimeout(resolve, 5000));
+                await Promise.race([turfReady, timeout]);
+              } catch (e) { /* ignore */ }
             }
           } catch (fallbackErr) {
             console.error('[GoogleAuth] Fallback initialization also failed:', fallbackErr);
@@ -1715,8 +1751,9 @@ Then tighten the rules later.`);
           'authenticating': { text: 'Authenticating...', pct: 30 },
           'loading-data': { text: 'Loading save data...', pct: 50 },
           'recovering':   { text: 'Checking account data...', pct: 55 },
-          'preparing':    { text: 'Preparing game world...', pct: 75 },
-          'sprites':      { text: 'Loading assets...', pct: 90 },
+          'preparing':    { text: 'Preparing game world...', pct: 70 },
+          'sprites':      { text: 'Loading assets...', pct: 80 },
+          'turf-data':    { text: 'Loading turf map...', pct: 92 },
           'ready':        { text: 'Ready!', pct: 100 }
         };
         const s = steps[step] || { text: step, pct: 50 };
@@ -17411,9 +17448,10 @@ function ensureLandmarkProperties() {
       },
 
       // Load saved building positions from Firebase (called during init)
+      // Returns a Promise so callers can wait for data before rendering
       loadPositions() {
         if (typeof database !== 'undefined' && database) {
-          database.ref('gameConfig/buildingPositions').once('value').then((snapshot) => {
+          const buildingPromise = database.ref('gameConfig/buildingPositions').once('value').then((snapshot) => {
             const data = snapshot.val();
             if (data && data.positions && Array.isArray(data.positions)) {
               console.log('🏗️ Loading saved building positions from Firebase...');
@@ -17434,15 +17472,13 @@ function ensureLandmarkProperties() {
                 }
               });
               console.log(`🏗️ ✅ Updated positions for ${updated} buildings from Firebase`);
-              // Re-render buildings with new positions
-              renderPropertyBuildings();
             }
           }).catch(err => {
             console.warn('🏗️ Failed to load building positions from Firebase:', err);
           });
 
           // Load landmark positions (safeHouse, policeStation, drugLab)
-          database.ref('gameConfig/landmarkPositions').once('value').then((snapshot) => {
+          const landmarkPromise = database.ref('gameConfig/landmarkPositions').once('value').then((snapshot) => {
             const data = snapshot.val();
             if (data && data.positions && typeof data.positions === 'object') {
               console.log('🏗️ Loading saved landmark positions from Firebase...');
@@ -17486,15 +17522,14 @@ function ensureLandmarkProperties() {
                 }
               });
               console.log(`🏗️ ✅ Updated positions for ${updated} landmarks from Firebase`);
-              // Re-render landmark icons with new positions
-              if (typeof TurfTab !== 'undefined' && TurfTab.renderIcons) {
-                TurfTab.renderIcons();
-              }
             }
           }).catch(err => {
             console.warn('🏗️ Failed to load landmark positions from Firebase:', err);
           });
+
+          return Promise.all([buildingPromise, landmarkPromise]);
         }
+        return Promise.resolve();
       }
     };
 
@@ -17707,20 +17742,21 @@ function ensureLandmarkProperties() {
         }
       },
 
+      // Returns a Promise so callers can wait for data before rendering
       loadScales() {
         if (typeof database !== 'undefined' && database) {
-          database.ref('gameConfig/buildingScales').once('value').then((snapshot) => {
+          return database.ref('gameConfig/buildingScales').once('value').then((snapshot) => {
             const data = snapshot.val();
             if (data && data.scales && typeof data.scales === 'object') {
               console.log('📏 Loading saved building scales from Firebase...');
               this._scales = data.scales;
-              this._applyAllScales();
-              console.log('📏 ✅ Building scales loaded and applied');
+              console.log('📏 ✅ Building scales loaded');
             }
           }).catch(err => {
             console.warn('📏 Failed to load building scales from Firebase:', err);
           });
         }
+        return Promise.resolve();
       },
 
       _applyAllScales() {
@@ -18108,9 +18144,10 @@ function ensureLandmarkProperties() {
         }
       },
 
+      // Returns a Promise so callers can wait for data before rendering
       loadLayout() {
         if (typeof database !== 'undefined' && database) {
-          database.ref('gameConfig/turfUILayout').once('value').then((snapshot) => {
+          return database.ref('gameConfig/turfUILayout').once('value').then((snapshot) => {
             const data = snapshot.val();
             if (data && data.layout && typeof data.layout === 'object') {
               console.log('🎨 Loading saved turf UI layout from Firebase...');
@@ -18122,6 +18159,7 @@ function ensureLandmarkProperties() {
             console.warn('🎨 Failed to load turf UI layout from Firebase:', err);
           });
         }
+        return Promise.resolve();
       },
 
       _applyAllLayout() {
@@ -18489,9 +18527,10 @@ function ensureLandmarkProperties() {
         }
       },
 
+      // Returns a Promise so callers can wait for data before rendering
       loadLayout() {
         if (typeof database !== 'undefined' && database) {
-          database.ref('gameConfig/hitAreaLayout').once('value').then((snapshot) => {
+          return database.ref('gameConfig/hitAreaLayout').once('value').then((snapshot) => {
             const data = snapshot.val();
             if (data && data.layout && typeof data.layout === 'object') {
               console.log('🎯 Loading saved hit area layout from Firebase...');
@@ -18503,6 +18542,7 @@ function ensureLandmarkProperties() {
             console.warn('🎯 Failed to load hit area layout from Firebase:', err);
           });
         }
+        return Promise.resolve();
       },
 
       _applyAllLayout() {
@@ -30954,25 +30994,59 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       // Initialize property buildings (player-owned real estate)
       initPropertyBuildings();
 
+      // Load all Firebase turf config data (positions, scales, layouts) in parallel.
+      // Collect promises so auth flows can await them before dismissing the loading screen.
+      const _turfFirebasePromises = [];
+
       // Load globally saved building positions from Firebase (admin can move buildings)
       if (typeof BuildingMoveSystem !== 'undefined') {
-        BuildingMoveSystem.loadPositions();
+        _turfFirebasePromises.push(BuildingMoveSystem.loadPositions());
       }
 
       // Load globally saved building scales from Firebase (admin can scale buildings)
       if (typeof BuildingScaleSystem !== 'undefined') {
-        BuildingScaleSystem.loadScales();
+        _turfFirebasePromises.push(BuildingScaleSystem.loadScales());
       }
 
       // Load globally saved turf UI layout from Firebase (admin can customize UI positions/scales)
       if (typeof TurfUIEditor !== 'undefined') {
-        TurfUIEditor.loadLayout();
+        _turfFirebasePromises.push(TurfUIEditor.loadLayout());
       }
 
       // Load globally saved hit area layout from Firebase
       if (typeof HitAreaEditor !== 'undefined') {
-        HitAreaEditor.loadLayout();
+        _turfFirebasePromises.push(HitAreaEditor.loadLayout());
       }
+
+      // Master promise: resolves when ALL Firebase turf data has loaded, then does final render.
+      // Auth flows await this before dismissing the loading screen.
+      window._turfDataReady = Promise.all(_turfFirebasePromises).then(() => {
+        console.log('[initializeGame] All Firebase turf data loaded - performing final render...');
+        // Final authoritative render with correct Firebase positions/scales
+        renderPropertyBuildings();
+        if (typeof TurfTab !== 'undefined' && TurfTab.renderIcons) {
+          TurfTab.renderIcons();
+        }
+        // Apply scales now that buildings are in the DOM with correct positions
+        if (typeof BuildingScaleSystem !== 'undefined' && BuildingScaleSystem._scales) {
+          BuildingScaleSystem._applyAllScales();
+        }
+        // Initialize CopCar3D now that map data is fully loaded
+        if (typeof CopCar3D !== 'undefined' && typeof CopCar3D.init === 'function') {
+          if (!CopCar3D.isInitialized) {
+            CopCar3D.init();
+            console.log('[initializeGame] CopCar3D initialized after turf data load');
+          }
+        }
+        console.log('[initializeGame] Final turf render complete');
+      }).catch(err => {
+        console.warn('[initializeGame] Some Firebase turf loads failed, rendering with defaults:', err);
+        // Still render buildings even if some Firebase operations failed
+        renderPropertyBuildings();
+        if (typeof TurfTab !== 'undefined' && TurfTab.renderIcons) {
+          TurfTab.renderIcons();
+        }
+      });
       
       // ===== NUCLEAR OPTION: FORCE POSITION UPDATE AFTER INIT =====
       console.log('💥💥💥 NUCLEAR RESET: Forcing property position updates AFTER init...');
@@ -31185,6 +31259,17 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
                 WeatherOverlay.render();
               }
               console.log('[DEBUG] ✅ WeatherOverlay handled');
+            }
+
+            // Safety-net: re-render property buildings and icons in case they were
+            // missed during initial render (e.g., DOM wasn't ready or Firebase data arrived late)
+            renderPropertyBuildings();
+            if (typeof TurfTab !== 'undefined' && TurfTab.renderIcons) {
+              TurfTab.renderIcons();
+            }
+            // Apply scales after re-render
+            if (typeof BuildingScaleSystem !== 'undefined' && BuildingScaleSystem._scales) {
+              BuildingScaleSystem._applyAllScales();
             }
 
             // Initialize CopCar3D if available (needs valid map dimensions)
