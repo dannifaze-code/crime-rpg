@@ -1380,11 +1380,10 @@ Then tighten the rules later.`);
           ensureGameStateSchema();
         }
 
-        // CRITICAL FIX: Clear the app DOM completely to prevent broken state
+        // Hide app (keep DOM intact for re-use on next sign-in)
         const app = document.getElementById('app');
         if (app) {
-          console.log('[GoogleAuth] Clearing app DOM after sign-out');
-          app.innerHTML = '';
+          console.log('[GoogleAuth] Hiding app after sign-out');
           app.style.display = 'none';
         }
 
@@ -2142,13 +2141,13 @@ Then tighten the rules later.`);
         console.log('All game intervals stopped');
       },
       
-      // Show login screen (replace app content)
+      // Show login screen (hide app, show login overlay)
       showLoginScreen() {
-        // Clear app content
+        // Hide app (keep DOM intact)
         const app = document.getElementById('app');
-        if (!app) return;
-        
-        app.innerHTML = '';
+        if (app) {
+          app.style.display = 'none';
+        }
         
         // Show account creation/login UI
         AccountUI.showAccountCreationPrompt(false);
@@ -2780,19 +2779,18 @@ Then tighten the rules later.`);
               // Remove overlay
               overlay.remove();
               
-              // Rebuild app structure and initialize game
+              // Show app and reset state (HTML is already in index.html)
               const app = document.getElementById('app');
               if (!app) {
                 console.error('App container not found!');
                 return;
               }
               
-              // Show loading state briefly
-              app.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100vh; color: #e0e0e0; font-size: 18px;">🎮 Loading your criminal empire...</div>';
+              // Show app and reset UI state
+              this.rebuildAppStructure();
               
-              // Wait a moment, then rebuild and initialize
+              // Wait a moment, then initialize
               setTimeout(() => {
-                this.rebuildAppStructure();
                 initializeGame();
       
       // CRITICAL: Force immediate UI refresh after account creation
@@ -2840,290 +2838,62 @@ Then tighten the rules later.`);
         });
       },
       
+      // Show/hide the app and reset UI state to defaults.
+      // The HTML lives in index.html — we never rebuild it.
       rebuildAppStructure() {
         const app = document.getElementById('app');
         if (!app) return;
         
-        // Show app div
+        // Show app div (HTML is already in index.html)
         app.style.display = 'flex';
         
-        // Restore original app HTML structure
-        app.innerHTML = `
-          <div id="content">
-            <!-- Profile Tab -->
-            <div id="profile-tab" class="tab-content active">
-              <div class="page-header">Profile</div>
-              <button id="fullscreen-btn" class="fullscreen-toggle-btn" title="Toggle Fullscreen">
-                <svg id="fullscreen-icon-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
-                </svg>
-                <svg id="fullscreen-icon-compress" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;">
-                  <path d="M4 14h6v6m10-10h-6V4M4 10h6V4m10 10h-6v6"/>
-                </svg>
-              </button>
-              <div class="stat-grid">
-                <div class="stat-card">
-                  <div class="stat-label">Player</div>
-                  <div class="stat-value" id="player-name">Unknown</div>
-                </div>
-                <div class="stat-card">
-                  <div class="stat-label">Cash</div>
-                  <div class="stat-value" id="player-cash">$1,000</div>
-                </div>
-                <div class="stat-card">
-                  <div class="stat-label">XP / Level</div>
-                  <div class="stat-value">
-                    <span id="player-xp">0</span> / <span id="player-level">1</span>
-                  </div>
-                </div>
-                <div class="stat-card">
-                  <div class="stat-label">Reputation</div>
-                  <div class="stat-value" id="player-rep">0</div>
-                </div>
-                <div class="stat-card">
-                  <div class="stat-label">Heat Level</div>
-                  <div class="stat-value" id="player-heat">0%</div>
-                </div>
-                <div class="stat-card">
-                  <div class="stat-label">Global Heat</div>
-                  <div class="stat-value" id="player-global-heat">0%</div>
-                </div>
-                <div class="stat-card">
-                  <div class="stat-label">Stats</div>
-                  <div class="stat-row">
-                    <span>Strength</span>
-                    <span id="stat-strength">5</span>
-                  </div>
-                  <div class="stat-row">
-                    <span>Intelligence</span>
-                    <span id="stat-intelligence">5</span>
-                  </div>
-                  <div class="stat-row">
-                    <span>Charisma</span>
-                    <span id="stat-charisma">5</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Turf Tab -->
-            <div id="turf-tab" class="tab-content">
-              <div class="page-header">Turf</div>
-              
-              <div id="turf-heat-indicator" class="new-heat-bar-wrapper">
-                <div id="heat-bar-main" class="new-heat-bar-main">
-                  <img src="sprites/ui-new/heatbarmain/Heatbaruimain.png" class="heat-bar-frame" alt="Heat Bar" draggable="false">
-                  <div class="heat-bar-glow-track">
-                    <img src="sprites/ui-new/heatbarmain/heatbarglow.png" class="heat-bar-glow" id="heat-bar-glow" alt="" draggable="false">
-                  </div>
-                  <div class="heat-bar-value-label" id="heat-value">0%</div>
-                </div>
-                <div id="heat-bar-interface" class="new-heat-bar-interface">
-                  <img src="sprites/ui-new/heatbarmain/heatbarfireandstarinterfacebase.png" class="heat-bar-interface-base" alt="" draggable="false">
-                  <div class="heat-bar-icons-container">
-                    <div class="heat-bar-stars" id="heat-bar-stars"></div>
-                    <div class="heat-bar-fires" id="heat-bar-fires"></div>
-                  </div>
-                </div>
-              </div>
-
-              <div id="turf-test-controls" class="test-controls" style="margin: 2px 16px;">
-                <button class="roam-btn" id="turf-defense-test-btn" style="width: 100%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: 2px solid rgba(255,255,255,0.2);">
-                  <span>🛡️</span>
-                  <span>Test Turf Defense</span>
-                </button>
-              </div>
-
-              <div id="area-weather-info" style="margin: 2px 16px; padding: 6px 10px; background: rgba(0,0,0,0.3); border-radius: 4px; font-size: 11px; display: flex; justify-content: space-between; align-items: center;">
-                <span id="current-area-display" style="opacity: 0.8;">📍 Area: Unknown</span>
-                <span id="current-weather-display" style="opacity: 0.8;">🌤️ Weather: Clear</span>
-              </div>
-
-              <!-- Turf Action Buttons - individually positionable -->
-              <div id="turf-action-bar" class="turf-action-bar">
-                <div id="turf-actions-wrapper" class="turf-action-btn-wrapper">
-                  <button id="turf-action-btn" class="turf-sprite-btn" aria-label="Turf Actions">
-                    <img src="sprites/ui-new/turfactionbutton/turfactionbuttonmain.png" alt="Turf Actions" draggable="false">
-                  </button>
-                </div>
-                <div id="inventory-wrapper" class="turf-action-btn-wrapper">
-                  <button id="inventory-btn" class="turf-sprite-btn" aria-label="Inventory">
-                    <img src="sprites/ui-new/turfactionbutton/inventorybuttonsquare.png" alt="Inventory" draggable="false">
-                  </button>
-                </div>
-              </div>
-              <!-- Popups - independently positionable, outside button wrappers -->
-              <div id="turf-popover-menu" class="turf-popover-menu">
-                <div class="turf-popover-inner">
-                  <img src="sprites/ui-new/turfactionbutton/popovermenu.png" alt="Actions Menu" class="turf-popover-bg" draggable="false">
-                  <div class="turf-popover-hitareas">
-                    <button id="popover-laylow-btn" class="turf-popover-hit" data-action="laylow" aria-label="Lay Low"></button>
-                    <button id="popover-active-btn" class="turf-popover-hit" data-action="active" aria-label="Active"></button>
-                    <button id="popover-freeroam-btn" class="turf-popover-hit" data-action="freeroam" aria-label="Free Roam"></button>
-                  </div>
-                </div>
-              </div>
-              <div id="inventory-slots-panel" class="inventory-slots-panel">
-                <img src="sprites/ui-new/turfactionbutton/inventorybuttonslots.png" alt="Inventory Slots" draggable="false">
-              </div>
-              
-              <div id="city-map" class="map-zoomable">
-                <div id="map-viewport">
-                  <div id="map-world">
-                    <div id="map-background"></div>
-                    <div id="map-entities">
-                      <div id="event-notification-container"></div>
-                      <div id="map-icons"></div>
-                      <div id="floating-pickups"></div>
-                      <div id="cop-car" class="cop-car no-heat">🚔</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Crimes Tab -->
-            <div id="crimes-tab" class="tab-content">
-              <div class="page-header">Crimes</div>
-              <div class="placeholder">
-                <div class="placeholder-icon">🔫</div>
-                <div class="placeholder-text">No crimes available</div>
-              </div>
-            </div>
-
-            <!-- Safe House Tab -->
-            <div id="safehouse-tab" class="tab-content">
-              <div class="page-header">Safe House</div>
-              
-              <div class="safehouse-container">
-                <!-- Sub-Tab Navigation -->
-                <div class="safehouse-sub-tabs">
-                  <button class="safehouse-sub-tab active" data-subtab="character">
-                    <span class="safehouse-sub-tab-icon">👤</span>
-                    <span>Character</span>
-                  </button>
-                  <button class="safehouse-sub-tab" data-subtab="weapons">
-                    <span class="safehouse-sub-tab-icon">🔫</span>
-                    <span>Weapons</span>
-                  </button>
-                  <button class="safehouse-sub-tab" data-subtab="garage">
-                    <span class="safehouse-sub-tab-icon">📦</span>
-                    <span>Stash</span>
-                  </button>
-                  <button class="safehouse-sub-tab" data-subtab="hideout">
-                    <span class="safehouse-sub-tab-icon">🏠</span>
-                    <span>Hideout</span>
-                  </button>
-                  <button class="safehouse-sub-tab" data-subtab="upgrades">
-                    <span class="safehouse-sub-tab-icon">🛠️</span>
-                    <span>Upgrades</span>
-                  </button>
-                </div>
-                
-                <!-- Character Sub-Tab Content -->
-                <div id="safehouse-character-content" class="safehouse-sub-content active">
-                  <div class="cf-category-grid">
-                    <button class="cf-category-card" data-forge-tab="create">
-                      <span class="cf-category-icon">✏️</span>
-                      <span class="cf-category-label">Create</span>
-                      <span class="cf-category-desc">Gender, body, face & hair</span>
-                    </button>
-                    <button class="cf-category-card" data-forge-tab="wardrobe">
-                      <span class="cf-category-icon">👔</span>
-                      <span class="cf-category-label">Wardrobe</span>
-                      <span class="cf-category-desc">Jackets, shirts, pants & more</span>
-                    </button>
-                    <button class="cf-category-card" data-forge-tab="armor">
-                      <span class="cf-category-icon">🛡️</span>
-                      <span class="cf-category-label">Armour</span>
-                      <span class="cf-category-desc">Head, chest & hand protection</span>
-                    </button>
-                    <button class="cf-category-card" data-forge-tab="animals">
-                      <span class="cf-category-icon">🐾</span>
-                      <span class="cf-category-label">Animals</span>
-                      <span class="cf-category-desc">Recruit a companion</span>
-                    </button>
-                  </div>
-                </div>
-
-                <!-- Weapons Sub-Tab Content -->
-                <div id="safehouse-weapons-content" class="safehouse-sub-content">
-                  <div class="placeholder">
-                    <div class="placeholder-icon">🔫</div>
-                    <div class="placeholder-text">Weapons Locker</div>
-                    <div style="opacity: 0.5; font-size: 13px; margin-top: 8px;">Store and manage your arsenal</div>
-                  </div>
-                </div>
-                
-                <!-- Stash Sub-Tab Content -->
-                <div id="safehouse-garage-content" class="safehouse-sub-content">
-                  <div class="placeholder">
-                    <div class="placeholder-icon">📦</div>
-                    <div class="placeholder-text">Stash</div>
-                    <div style="opacity: 0.5; font-size: 13px; margin-top: 8px;">Store cash and valuables</div>
-                  </div>
-                </div>
-                
-                <!-- Hideout Sub-Tab Content -->
-                <div id="safehouse-hideout-content" class="safehouse-sub-content">
-                  <div class="placeholder">
-                    <div class="placeholder-icon">🏠</div>
-                    <div class="placeholder-text">Hideout</div>
-                    <div style="opacity: 0.5; font-size: 13px; margin-top: 8px;">Customize your safehouse</div>
-                  </div>
-                </div>
-                
-                <!-- Upgrades Sub-Tab Content -->
-                <div id="safehouse-upgrades-content" class="safehouse-sub-content">
-                  <div class="placeholder">
-                    <div class="placeholder-icon">🛠️</div>
-                    <div class="placeholder-text">Upgrades</div>
-                    <div style="opacity: 0.5; font-size: 13px; margin-top: 8px;">Improve your safehouse</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Inventory Tab -->
-            <div id="inventory-tab" class="tab-content">
-              <div class="page-header">Inventory</div>
-              <div class="placeholder">
-                <div class="placeholder-icon">🎒</div>
-                <div class="placeholder-text">Empty</div>
-              </div>
-            </div>
-
-            <!-- Gang Tab -->
-            <div id="gang-tab" class="tab-content">
-              <div class="page-header">Gang</div>
-              <div id="gang-content"></div>
-            </div>
-          </div>
-
-          <!-- Tab Bar -->
-          <div id="tab-bar">
-            <div class="tab active" data-tab="profile">
-              <div class="tab-icon">👤</div>
-              <div class="tab-label">Profile</div>
-            </div>
-            <div class="tab" data-tab="turf">
-              <div class="tab-icon">🗺️</div>
-              <div class="tab-label">Turf</div>
-            </div>
-            <div class="tab" data-tab="crimes">
-              <div class="tab-icon">🔫</div>
-              <div class="tab-label">Crimes</div>
-            </div>
-            <div class="tab" data-tab="safehouse">
-              <div class="tab-icon">🏠</div>
-              <div class="tab-label">Safe House</div>
-            </div>
-            <div class="tab" data-tab="gang">
-              <div class="tab-icon">👥</div>
-              <div class="tab-label">Gang</div>
-            </div>
-          </div>
-        `;
+        // Reset UI text values to defaults
+        this.resetAppState();
+      },
+      
+      // Lightweight state reset — clears text content without touching the DOM tree.
+      resetAppState() {
+        // Reset profile stats to defaults
+        const defaults = {
+          'player-name': 'Unknown',
+          'player-cash': '$1,000',
+          'player-xp': '0',
+          'player-level': '1',
+          'player-rep': '0',
+          'player-heat': '0%',
+          'player-global-heat': '0%',
+          'stat-strength': '5',
+          'stat-intelligence': '5',
+          'stat-charisma': '5',
+          'stat-stealth': '5',
+          'heat-value': '0%',
+          'current-area-display': '📍 Area: Unknown',
+          'current-weather-display': '🌤️ Weather: Clear'
+        };
+        
+        for (const [id, value] of Object.entries(defaults)) {
+          const el = document.getElementById(id);
+          if (el) el.textContent = value;
+        }
+        
+        // Clear dynamic content containers
+        const clearIds = ['gang-content', 'map-icons', 'floating-pickups', 'event-notification-container', 'heat-bar-stars', 'heat-bar-fires'];
+        for (const id of clearIds) {
+          const el = document.getElementById(id);
+          if (el) el.innerHTML = '';
+        }
+        
+        // Reset tab state — show profile tab, hide others
+        const tabs = document.querySelectorAll('.tab-content');
+        tabs.forEach(tab => tab.classList.remove('active'));
+        const profileTab = document.getElementById('profile-tab');
+        if (profileTab) profileTab.classList.add('active');
+        
+        // Reset tab bar active state
+        const tabBtns = document.querySelectorAll('#tab-bar .tab');
+        tabBtns.forEach(btn => btn.classList.remove('active'));
+        const profileTabBtn = document.querySelector('#tab-bar .tab[data-tab="profile"]');
+        if (profileTabBtn) profileTabBtn.classList.add('active');
       },
       
       // Show sign-in prompt
@@ -3374,260 +3144,15 @@ Then tighten the rules later.`);
           console.log('[SIGN IN DEBUG] Removing overlay...');
           overlay.remove();
           
-          console.log('[SIGN IN DEBUG] Rebuilding app structure...');
+          console.log('[SIGN IN DEBUG] Showing app and resetting state...');
           
-          // CRITICAL FIX: Rebuild the entire app HTML structure
-          const app = document.getElementById('app');
-          if (!app) {
-            console.error('[SIGN IN DEBUG] App container not found!');
-            return;
-          }
+          // Show app and reset UI state (HTML is already in index.html)
+          this.rebuildAppStructure();
           
-          // Show loading briefly
-          app.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100vh; color: #e0e0e0; font-size: 18px;">🎮 Loading your progress...</div>';
-          
-          // Wait briefly, then fully rebuild and initialize
+          // Wait briefly, then initialize
           setTimeout(() => {
           
-          // Restore original app HTML structure
-          app.innerHTML = `
-            <div id="content">
-              <!-- Profile Tab -->
-              <div id="profile-tab" class="tab-content active">
-                <div class="page-header">Profile</div>
-                <button id="fullscreen-btn" class="fullscreen-toggle-btn" title="Toggle Fullscreen">
-                  <svg id="fullscreen-icon-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
-                  </svg>
-                  <svg id="fullscreen-icon-compress" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;">
-                    <path d="M4 14h6v6m10-10h-6V4M4 10h6V4m10 10h-6v6"/>
-                  </svg>
-                </button>
-                <div class="stat-grid">
-                  <div class="stat-card">
-                    <div class="stat-label">Player</div>
-                    <div class="stat-value" id="player-name">Unknown</div>
-                  </div>
-                  <div class="stat-card">
-                    <div class="stat-label">Cash</div>
-                    <div class="stat-value" id="player-cash">$1,000</div>
-                  </div>
-                  <div class="stat-card">
-                    <div class="stat-label">XP / Level</div>
-                    <div class="stat-value">
-                      <span id="player-xp">0</span> / <span id="player-level">1</span>
-                    </div>
-                  </div>
-                  <div class="stat-card">
-                    <div class="stat-label">Reputation</div>
-                    <div class="stat-value" id="player-rep">0</div>
-                  </div>
-                  <div class="stat-card">
-                    <div class="stat-label">Heat Level</div>
-                    <div class="stat-value" id="player-heat">0%</div>
-                  </div>
-                  <div class="stat-card">
-                    <div class="stat-label">Global Heat</div>
-                    <div class="stat-value" id="player-global-heat">0%</div>
-                  </div>
-                  <div class="stat-card">
-                    <div class="stat-label">Stats</div>
-                    <div class="stat-row">
-                      <span>Strength</span>
-                      <span id="stat-strength">5</span>
-                    </div>
-                    <div class="stat-row">
-                      <span>Intelligence</span>
-                      <span id="stat-intelligence">5</span>
-                    </div>
-                    <div class="stat-row">
-                      <span>Charisma</span>
-                      <span id="stat-charisma">5</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Turf Tab -->
-              <div id="turf-tab" class="tab-content">
-                <div class="page-header">Turf</div>
-                
-                <div id="turf-heat-indicator" class="new-heat-bar-wrapper">
-                  <div id="heat-bar-main" class="new-heat-bar-main">
-                    <img src="sprites/ui-new/heatbarmain/Heatbaruimain.png" class="heat-bar-frame" alt="Heat Bar" draggable="false">
-                    <div class="heat-bar-glow-track">
-                      <img src="sprites/ui-new/heatbarmain/heatbarglow.png" class="heat-bar-glow" id="heat-bar-glow" alt="" draggable="false">
-                    </div>
-                    <div class="heat-bar-value-label" id="heat-value">0%</div>
-                  </div>
-                  <div id="heat-bar-interface" class="new-heat-bar-interface">
-                    <img src="sprites/ui-new/heatbarmain/heatbarfireandstarinterfacebase.png" class="heat-bar-interface-base" alt="" draggable="false">
-                    <div class="heat-bar-icons-container">
-                      <div class="heat-bar-stars" id="heat-bar-stars"></div>
-                      <div class="heat-bar-fires" id="heat-bar-fires"></div>
-                    </div>
-                  </div>
-                </div>
-                
-                <div id="city-map" class="map-zoomable">
-                  <div id="map-viewport">
-                    <div id="map-world">
-                      <div id="map-background"></div>
-                      <div id="map-entities">
-                        <div id="event-notification-container"></div>
-                        <div id="map-icons"></div>
-                        <div id="floating-pickups"></div>
-                        <div id="cop-car" class="cop-car no-heat">🚔</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Crimes Tab -->
-              <div id="crimes-tab" class="tab-content">
-                <div class="page-header">Crimes</div>
-                <div class="placeholder">
-                  <div class="placeholder-icon">🔫</div>
-                  <div class="placeholder-text">No crimes available</div>
-                </div>
-              </div>
-
-              <!-- Safe House Tab -->
-              <div id="safehouse-tab" class="tab-content">
-                <div class="page-header">Safe House</div>
-                
-                <div class="safehouse-container">
-                  <!-- Sub-Tab Navigation -->
-                  <div class="safehouse-sub-tabs">
-                    <button class="safehouse-sub-tab active" data-subtab="character">
-                      <span class="safehouse-sub-tab-icon">👤</span>
-                      <span>Character</span>
-                    </button>
-                    <button class="safehouse-sub-tab" data-subtab="weapons">
-                      <span class="safehouse-sub-tab-icon">🔫</span>
-                      <span>Weapons</span>
-                    </button>
-                    <button class="safehouse-sub-tab" data-subtab="garage">
-                      <span class="safehouse-sub-tab-icon">📦</span>
-                      <span>Stash</span>
-                    </button>
-                    <button class="safehouse-sub-tab" data-subtab="hideout">
-                      <span class="safehouse-sub-tab-icon">🏠</span>
-                      <span>Hideout</span>
-                    </button>
-                    <button class="safehouse-sub-tab" data-subtab="upgrades">
-                      <span class="safehouse-sub-tab-icon">🛠️</span>
-                      <span>Upgrades</span>
-                    </button>
-                  </div>
-                  
-                  <!-- Character Sub-Tab Content -->
-                  <div id="safehouse-character-content" class="safehouse-sub-content active">
-                    <div class="cf-category-grid">
-                      <button class="cf-category-card" data-forge-tab="create">
-                        <span class="cf-category-icon">✏️</span>
-                        <span class="cf-category-label">Create</span>
-                        <span class="cf-category-desc">Gender, body, face & hair</span>
-                      </button>
-                      <button class="cf-category-card" data-forge-tab="wardrobe">
-                        <span class="cf-category-icon">👔</span>
-                        <span class="cf-category-label">Wardrobe</span>
-                        <span class="cf-category-desc">Jackets, shirts, pants & more</span>
-                      </button>
-                      <button class="cf-category-card" data-forge-tab="armor">
-                        <span class="cf-category-icon">🛡️</span>
-                        <span class="cf-category-label">Armour</span>
-                        <span class="cf-category-desc">Head, chest & hand protection</span>
-                      </button>
-                      <button class="cf-category-card" data-forge-tab="animals">
-                        <span class="cf-category-icon">🐾</span>
-                        <span class="cf-category-label">Animals</span>
-                        <span class="cf-category-desc">Recruit a companion</span>
-                      </button>
-                    </div>
-                  </div>
-                  
-                  <!-- Weapons Sub-Tab Content -->
-                  <div id="safehouse-weapons-content" class="safehouse-sub-content">
-                    <div class="placeholder">
-                      <div class="placeholder-icon">🔫</div>
-                      <div class="placeholder-text">Weapons Locker</div>
-                      <div style="opacity: 0.5; font-size: 13px; margin-top: 8px;">Store and manage your arsenal</div>
-                    </div>
-                  </div>
-                  
-                  <!-- Stash Sub-Tab Content -->
-                  <div id="safehouse-garage-content" class="safehouse-sub-content">
-                    <div class="placeholder">
-                      <div class="placeholder-icon">📦</div>
-                      <div class="placeholder-text">Stash</div>
-                      <div style="opacity: 0.5; font-size: 13px; margin-top: 8px;">Store cash and valuables</div>
-                    </div>
-                  </div>
-                  
-                  <!-- Hideout Sub-Tab Content -->
-                  <div id="safehouse-hideout-content" class="safehouse-sub-content">
-                    <div class="placeholder">
-                      <div class="placeholder-icon">🏠</div>
-                      <div class="placeholder-text">Hideout</div>
-                      <div style="opacity: 0.5; font-size: 13px; margin-top: 8px;">Customize your safehouse</div>
-                    </div>
-                  </div>
-                  
-                  <!-- Upgrades Sub-Tab Content -->
-                  <div id="safehouse-upgrades-content" class="safehouse-sub-content">
-                    <div class="placeholder">
-                      <div class="placeholder-icon">🛠️</div>
-                      <div class="placeholder-text">Upgrades</div>
-                      <div style="opacity: 0.5; font-size: 13px; margin-top: 8px;">Improve your safehouse</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Inventory Tab -->
-              <div id="inventory-tab" class="tab-content">
-                <div class="page-header">Inventory</div>
-                <div class="placeholder">
-                  <div class="placeholder-icon">🎒</div>
-                  <div class="placeholder-text">Empty</div>
-                </div>
-              </div>
-
-              <!-- Gang Tab -->
-              <div id="gang-tab" class="tab-content">
-                <div class="page-header">Gang</div>
-                <div id="gang-content"></div>
-              </div>
-            </div>
-
-            <!-- Tab Bar -->
-            <div id="tab-bar">
-              <div class="tab active" data-tab="profile">
-                <div class="tab-icon">👤</div>
-                <div class="tab-label">Profile</div>
-              </div>
-              <div class="tab" data-tab="turf">
-                <div class="tab-icon">🗺️</div>
-                <div class="tab-label">Turf</div>
-              </div>
-              <div class="tab" data-tab="crimes">
-                <div class="tab-icon">🔫</div>
-                <div class="tab-label">Crimes</div>
-              </div>
-              <div class="tab" data-tab="safehouse">
-                <div class="tab-icon">🏠</div>
-                <div class="tab-label">Safe House</div>
-              </div>
-              <div class="tab" data-tab="gang">
-                <div class="tab-icon">👥</div>
-                <div class="tab-label">Gang</div>
-              </div>
-            </div>
-          `;
-          
-          console.log('[SIGN IN DEBUG] App structure rebuilt');
+          console.log('[SIGN IN DEBUG] App structure ready');
           console.log('[SIGN IN DEBUG] Initializing game and forcing UI refresh...');
           
           // Initialize game
@@ -30953,11 +30478,10 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
         } else {
           console.log('❌ No Google user signed in - showing login screen');
 
-          // CRITICAL FIX: Clear app DOM before showing login screen
+          // Hide app (keep DOM intact for re-use on sign-in)
           const app = document.getElementById('app');
           if (app) {
-            console.log('[Init] Clearing app DOM before showing login screen');
-            app.innerHTML = '';
+            console.log('[Init] Hiding app before showing login screen');
             app.style.display = 'none';
           }
 
