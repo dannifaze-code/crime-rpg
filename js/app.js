@@ -3022,9 +3022,30 @@ Then tighten the rules later.`);
                 
                 <!-- Character Sub-Tab Content -->
                 <div id="safehouse-character-content" class="safehouse-sub-content active">
-                  <!-- Character Forge opens automatically as overlay -->
+                  <div class="cf-category-grid">
+                    <button class="cf-category-card" data-forge-tab="create">
+                      <span class="cf-category-icon">✏️</span>
+                      <span class="cf-category-label">Create</span>
+                      <span class="cf-category-desc">Gender, body, face & hair</span>
+                    </button>
+                    <button class="cf-category-card" data-forge-tab="wardrobe">
+                      <span class="cf-category-icon">👔</span>
+                      <span class="cf-category-label">Wardrobe</span>
+                      <span class="cf-category-desc">Jackets, shirts, pants & more</span>
+                    </button>
+                    <button class="cf-category-card" data-forge-tab="armor">
+                      <span class="cf-category-icon">🛡️</span>
+                      <span class="cf-category-label">Armour</span>
+                      <span class="cf-category-desc">Head, chest & hand protection</span>
+                    </button>
+                    <button class="cf-category-card" data-forge-tab="animals">
+                      <span class="cf-category-icon">🐾</span>
+                      <span class="cf-category-label">Animals</span>
+                      <span class="cf-category-desc">Recruit a companion</span>
+                    </button>
+                  </div>
                 </div>
-                
+
                 <!-- Weapons Sub-Tab Content -->
                 <div id="safehouse-weapons-content" class="safehouse-sub-content">
                   <div class="placeholder">
@@ -3503,7 +3524,28 @@ Then tighten the rules later.`);
                   
                   <!-- Character Sub-Tab Content -->
                   <div id="safehouse-character-content" class="safehouse-sub-content active">
-                    <!-- Character Forge opens automatically as overlay -->
+                    <div class="cf-category-grid">
+                      <button class="cf-category-card" data-forge-tab="create">
+                        <span class="cf-category-icon">✏️</span>
+                        <span class="cf-category-label">Create</span>
+                        <span class="cf-category-desc">Gender, body, face & hair</span>
+                      </button>
+                      <button class="cf-category-card" data-forge-tab="wardrobe">
+                        <span class="cf-category-icon">👔</span>
+                        <span class="cf-category-label">Wardrobe</span>
+                        <span class="cf-category-desc">Jackets, shirts, pants & more</span>
+                      </button>
+                      <button class="cf-category-card" data-forge-tab="armor">
+                        <span class="cf-category-icon">🛡️</span>
+                        <span class="cf-category-label">Armour</span>
+                        <span class="cf-category-desc">Head, chest & hand protection</span>
+                      </button>
+                      <button class="cf-category-card" data-forge-tab="animals">
+                        <span class="cf-category-icon">🐾</span>
+                        <span class="cf-category-label">Animals</span>
+                        <span class="cf-category-desc">Recruit a companion</span>
+                      </button>
+                    </div>
                   </div>
                   
                   <!-- Weapons Sub-Tab Content -->
