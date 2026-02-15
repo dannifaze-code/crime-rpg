@@ -9,14 +9,14 @@ frame/
   frame.png              - Main overlay frame / border
 
 icons/
-  tab_create.png         - "Create" tab icon
-  tab_wardrobe.png       - "Wardrobe" tab icon
-  tab_armor.png          - "Armor" tab icon
-  tab_animals.png        - "Animals" tab icon
+  tab_create.png         - "Create" tab icon (overlay sidebar + category card)
+  tab_wardrobe.png       - "Wardrobe" tab icon (overlay sidebar + category card)
+  tab_armor.png          - "Armor" tab icon (overlay sidebar + category card)
+  tab_animals.png        - "Animals" tab icon (overlay sidebar + category card)
 
 panels/
   panel_bg.png           - Bottom context panel background
-  card_bg.png            - Item card background
+  card_bg.png            - Item card background + category card background
 
 buttons/
   btn_back.png           - Back / close button
