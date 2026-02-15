@@ -1,7 +1,7 @@
 /**
  * CharacterForgeUI.js
  * Main orchestration: mount/unmount the Character Forge overlay.
- * Isolated full-screen overlay — does not modify existing UI.
+ * Supports opening to a specific tab via open(initialTab).
  */
 (function () {
   'use strict';
@@ -31,12 +31,20 @@
     animals: window.PanelAnimals
   };
 
-  function open() {
+  /**
+   * Open the Character Forge overlay.
+   * @param {string} [initialTab] - Optional tab to open directly ('create','wardrobe','armor','animals').
+   *                                 If omitted, opens to the default 'create' tab.
+   */
+  function open(initialTab) {
     if (_isOpen) return;
     _isOpen = true;
-    log('Opening Character Forge');
+
+    var startTab = (initialTab && PANELS[initialTab]) ? initialTab : 'create';
+    log('Opening Character Forge, tab:', startTab);
 
     window.CharacterForgeState.reset();
+    window.CharacterForgeState.setTab(startTab);
     _buildOverlay();
     _renderActivePanel();
     _bindGlobalEvents();
@@ -219,6 +227,6 @@
     }
   };
 
-  // Expose global shortcut
+  // Expose global shortcut (supports optional tab argument)
   window.openCharacterForge = open;
 })();

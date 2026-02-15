@@ -29279,9 +29279,12 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       init() {
         // Initialize sub-tab listeners
         this.initSubTabs();
-        
+
         // Initialize trait selection listeners
         this.initTraitListeners();
+
+        // Wire up Character Forge category buttons (character is the default active sub-tab)
+        this.initForgeCategories();
       },
       
       initSubTabs() {
@@ -29350,14 +29353,28 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
           this.renderUpgradesTab();
         }
         
-        // Open Character Forge overlay for character tab
+        // Bind Character Forge category buttons when character tab is shown
         if (subtab === 'character') {
-          if (typeof window.openCharacterForge === 'function') {
-            window.openCharacterForge();
-          }
+          this.initForgeCategories();
         }
       },
-      
+
+      // Bind click handlers on the 4 Character Forge category cards
+      initForgeCategories() {
+        const cards = document.querySelectorAll('.cf-category-card[data-forge-tab]');
+        cards.forEach(card => {
+          // Clone-replace to avoid duplicate listeners on repeated tab switches
+          const fresh = card.cloneNode(true);
+          card.parentNode.replaceChild(fresh, card);
+          fresh.addEventListener('click', () => {
+            const tab = fresh.dataset.forgeTab;
+            if (typeof window.openCharacterForge === 'function') {
+              window.openCharacterForge(tab);
+            }
+          });
+        });
+      },
+
       selectTrait(trait, value) {
         GameState.character.appearance[trait] = value;
         
@@ -32099,9 +32116,9 @@ function getCameraShakeOffset(defense) {
 // Replaces the old character creator in Safehouse tab.
 // ========================================
 if (typeof window.openCharacterForge !== 'function') {
-  window.openCharacterForge = function () {
+  window.openCharacterForge = function (initialTab) {
     if (window.CharacterForgeUI && window.CharacterForgeUI.open) {
-      window.CharacterForgeUI.open();
+      window.CharacterForgeUI.open(initialTab);
     } else {
       console.warn('[CharacterForge] UI module not loaded.');
     }
