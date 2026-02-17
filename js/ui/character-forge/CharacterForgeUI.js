@@ -63,9 +63,16 @@
     var state = window.CharacterForgeState.get();
     var html = '';
 
+    // Resolve section title from TABS
+    var activeTabInfo = null;
+    for (var ti = 0; ti < TABS.length; ti++) {
+      if (TABS[ti].id === state.selectedTab) { activeTabInfo = TABS[ti]; break; }
+    }
+
     // === TOP BAR ===
     html += '<div class="cf-topbar">';
     html += '  <button class="cf-btn cf-btn-back" id="cf-back">✕</button>';
+    html += '  <span class="cf-section-title">' + (activeTabInfo ? activeTabInfo.icon + ' ' + activeTabInfo.label : '') + '</span>';
     html += '  <input class="cf-name-input" id="cf-name" type="text" maxlength="20" value="' + _escHtml(state.meta.name) + '" />';
     html += '  <div class="cf-slots">';
     for (var i = 0; i < 3; i++) {
@@ -76,22 +83,10 @@
     html += '  <button class="cf-btn cf-btn-confirm" id="cf-confirm">✓</button>';
     html += '</div>';
 
-    // === MAIN BODY (tabs + stage + panel) ===
+    // === MAIN BODY (stage + panel, no tab sidebar) ===
     html += '<div class="cf-body">';
 
-    // Left tabs
-    html += '<div class="cf-tabs">';
-    for (var t = 0; t < TABS.length; t++) {
-      var tab = TABS[t];
-      var active = (state.selectedTab === tab.id) ? ' cf-tab-active' : '';
-      html += '<button class="cf-tab' + active + '" data-tab="' + tab.id + '">';
-      html += '<span class="cf-tab-icon">' + tab.icon + '</span>';
-      html += '<span class="cf-tab-label">' + tab.label + '</span>';
-      html += '</button>';
-    }
-    html += '</div>';
-
-    // Center: stage + panel
+    // Content: stage + panel (full width, no left tab bar)
     html += '<div class="cf-content">';
     html += '  <div class="cf-stage-wrap" id="cf-stage-wrap"></div>';
     html += '  <div class="cf-panel" id="cf-panel"></div>';
@@ -143,19 +138,8 @@
       });
     }
 
-    // Tab buttons
-    var tabs = _overlay.querySelectorAll('.cf-tab');
-    for (var t = 0; t < tabs.length; t++) {
-      tabs[t].addEventListener('click', function () {
-        var tabId = this.getAttribute('data-tab');
-        window.CharacterForgeState.setTab(tabId);
-        // Update active state visually
-        var allTabs = _overlay.querySelectorAll('.cf-tab');
-        for (var j = 0; j < allTabs.length; j++) allTabs[j].classList.remove('cf-tab-active');
-        this.classList.add('cf-tab-active');
-        _renderActivePanel();
-      });
-    }
+    // Tab sidebar removed — each section is now opened individually
+    // from the Safe House category cards. No tab switching inside the forge.
   }
 
   function _renderActivePanel() {

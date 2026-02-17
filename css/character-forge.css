@@ -96,6 +96,14 @@
   color: #4caf50;
 }
 
+#character-forge-overlay .cf-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--cf-text);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 #character-forge-overlay .cf-name-input {
   flex: 1;
   min-width: 0;
