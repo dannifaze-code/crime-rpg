@@ -27829,15 +27829,21 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       // TURF ACTION SPRITE BUTTONS
       // ========================================
 
-      initTurfActionButtons() {
+      initTurfActionButtons(retryCount) {
+        retryCount = retryCount || 0;
+        const MAX_RETRIES = 10;
         const turfActionBtn = document.getElementById('turf-action-btn');
         const popover = document.getElementById('turf-popover-menu');
         const inventoryBtn = document.getElementById('inventory-btn');
         const inventoryPanel = document.getElementById('inventory-slots-panel');
 
         if (!turfActionBtn || !popover) {
-          console.warn('[TurfActionButtons] Elements not found, retrying...');
-          setTimeout(() => this.initTurfActionButtons(), 300);
+          if (retryCount >= MAX_RETRIES) {
+            console.warn('[TurfActionButtons] Elements not found after ' + MAX_RETRIES + ' retries, giving up.');
+            return;
+          }
+          console.warn('[TurfActionButtons] Elements not found, retrying (' + (retryCount + 1) + '/' + MAX_RETRIES + ')...');
+          setTimeout(() => this.initTurfActionButtons(retryCount + 1), 300);
           return;
         }
 
@@ -30922,12 +30928,6 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       
       console.log('=== PHASE D: Sign-In Flow - COMPLETE ===');
       console.log('=== PHASE E: Multi-User Support - COMPLETE ===');
-      
-      // Check if current user is admin and show cheats tab if true
-      checkAndShowAdminFeatures();
-      
-      // Initialize cheat buttons
-      initCheatButtons();
 
       // ========================================
       // GAME LOOP: Turf Defense Update
@@ -30989,34 +30989,6 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
 
       console.log('=== [DEBUG] initializeGame() COMPLETE ===');
       console.log('==========================================');
-    }
-    
-    // Admin check - only show cheats for admin account
-    function checkAndShowAdminFeatures() {
-      const ADMIN_EMAIL = 'dannifaze@gmail.com';
-      
-      // Get current account from AccountManager
-      const account = AccountManager.getAccount(GameState.accountId);
-      
-      if (account) {
-        try {
-          const isAdmin = account.email && account.email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
-          
-          if (isAdmin) {
-            console.log('🛠️ Admin account detected - enabling dev tools');
-            // Show cheats tab and tab button
-            const cheatsTab = document.getElementById('cheats-tab');
-            const cheatsTabButton = document.querySelector('.tab[data-tab="cheats"]');
-            
-            if (cheatsTab) cheatsTab.style.display = 'block';
-            if (cheatsTabButton) cheatsTabButton.style.display = 'flex';
-          } else {
-            console.log('👤 Regular user account - dev tools hidden');
-          }
-        } catch (e) {
-          console.error('Error checking admin status:', e);
-        }
-      }
     }
     
     // Procedural Police Siren (Web Audio API)
@@ -31093,75 +31065,6 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       }
     }
     
-    // Cheat system for dev testing
-    function initCheatButtons() {
-      const cheatMoney = document.getElementById('cheat-money');
-      const cheatMaxLevel = document.getElementById('cheat-max-level');
-      const cheatMaxStats = document.getElementById('cheat-max-stats');
-      const cheatClearHeat = document.getElementById('cheat-clear-heat');
-      const cheatFullEnergy = document.getElementById('cheat-full-energy');
-      
-      if (cheatMoney) {
-        cheatMoney.addEventListener('click', () => {
-          GameState.player.cash += 1000000;
-          Storage.save();
-          UI.update();
-          showToast('💰 +$1,000,000!', 'success');
-          console.log('[CHEAT] Added $1,000,000. Total:', GameState.player.cash);
-        });
-      }
-      
-      if (cheatMaxLevel) {
-        cheatMaxLevel.addEventListener('click', () => {
-          GameState.player.level = 100;
-          GameState.player.xp = 0;
-          Storage.save();
-          UI.update();
-          showToast('⭐ Level maxed to 100!', 'success');
-          console.log('[CHEAT] Set level to 100');
-        });
-      }
-      
-      if (cheatMaxStats) {
-        cheatMaxStats.addEventListener('click', () => {
-          GameState.player.stats.attack = 999;
-          GameState.player.stats.defense = 999;
-          GameState.player.stats.stealth = 999;
-          Storage.save();
-          UI.update();
-          showToast('💪 All stats maxed!', 'success');
-          console.log('[CHEAT] Maxed all stats to 999');
-        });
-      }
-      
-      if (cheatClearHeat) {
-        cheatClearHeat.addEventListener('click', () => {
-          GameState.player.heat = 0;
-          Storage.save();
-          UI.update();
-          if (typeof CopCarSystem !== 'undefined') {
-            CopCarSystem.updateHeatLevel();
-          }
-          // Update police siren with new heat level
-          updateSirenByHeat(GameState.player.heat);
-          showToast('❄️ Heat cleared!', 'success');
-          console.log('[CHEAT] Heat cleared');
-        });
-      }
-      
-      if (cheatFullEnergy) {
-        cheatFullEnergy.addEventListener('click', () => {
-          GameState.player.energy = GameState.player.maxEnergy || 100;
-          Storage.save();
-          UI.update();
-          showToast('⚡ Energy restored!', 'success');
-          console.log('[CHEAT] Energy restored to max');
-        });
-      }
-      
-      console.log('[DEBUG] Cheat buttons initialized');
-    }
-
     // Cleanup on page unload
     window.addEventListener('beforeunload', () => {
       if (TurfTab.roamInterval) clearInterval(TurfTab.roamInterval);
