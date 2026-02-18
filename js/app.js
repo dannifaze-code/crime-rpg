@@ -17427,7 +17427,15 @@ function ensureLandmarkProperties() {
           el.style.outline = isPopup ? '2px dashed #f0f' : '2px dashed #0ff';
           el.style.cursor = 'grab';
           el.dataset.turfUiEditable = 'true';
-          el.style.zIndex = '50';
+          // Differentiate z-index so button wrappers (60) are always above
+          // city-map (40) even when dragged into that area. Popups get 80.
+          if (isPopup) {
+            el.style.zIndex = '80';
+          } else if (item.id === 'city-map') {
+            el.style.zIndex = '40';
+          } else {
+            el.style.zIndex = '60';
+          }
         });
 
         this._bindDragEvents();
@@ -17537,6 +17545,7 @@ function ensureLandmarkProperties() {
         }
 
         el.style.cursor = 'grabbing';
+        el.style.zIndex = '100'; // Bring to absolute front while dragging
 
         // Show scale bar for selected element
         const currentScale = (TurfUIEditor._layout[el.id] && TurfUIEditor._layout[el.id].scale) || 1.0;
@@ -17583,6 +17592,9 @@ function ensureLandmarkProperties() {
         if (!TurfUIEditor._dragEl) return;
         var el = TurfUIEditor._dragEl;
         el.style.cursor = 'grab';
+        // Restore z-index to the editor-mode level (not 100 which is drag-time)
+        var isPopupEl = TurfUIEditor._popupIds.includes(el.id);
+        el.style.zIndex = isPopupEl ? '80' : (el.id === 'city-map' ? '40' : '60');
 
         // Save position to layout
         var id = el.id;
