@@ -17416,6 +17416,11 @@ function ensureLandmarkProperties() {
           }
         });
 
+        // Deactivate the backdrop so it can't block touch events while editing
+        // (backdrop z-index 90 would otherwise swallow all taps on buttons/popups)
+        const _editorBackdrop = document.getElementById('turf-modal-backdrop');
+        if (_editorBackdrop) _editorBackdrop.classList.remove('active');
+
         // Position popups at defaults if no saved layout
         this._ensurePopupDefaults();
 
@@ -17427,14 +17432,18 @@ function ensureLandmarkProperties() {
           el.style.outline = isPopup ? '2px dashed #f0f' : '2px dashed #0ff';
           el.style.cursor = 'grab';
           el.dataset.turfUiEditable = 'true';
-          // Differentiate z-index so button wrappers (60) are always above
-          // city-map (40) even when dragged into that area. Popups get 80.
+          // Button wrappers get z-index 85 (ABOVE popups at 80) so that if a
+          // popup panel is saved at an overlapping position, the button still
+          // sits on top and receives touch/click events correctly.
+          // city-map stays at 40 (below everything else in the editor).
           if (isPopup) {
             el.style.zIndex = '80';
           } else if (item.id === 'city-map') {
             el.style.zIndex = '40';
           } else {
-            el.style.zIndex = '60';
+            el.style.zIndex = '85';
+            // Prevent mobile browser scroll from stealing touch events from draggable elements
+            el.style.touchAction = 'none';
           }
         });
 
@@ -17509,10 +17518,15 @@ function ensureLandmarkProperties() {
           el.style.outline = '';
           el.style.cursor = '';
           el.style.zIndex = '';
+          el.style.touchAction = '';
           delete el.dataset.turfUiEditable;
         });
 
         this._unbindDragEvents();
+
+        // Re-apply saved layout so z-indices and transforms are fully restored
+        // (disable() cleared inline z-index to '', which would lose _applyAllLayout values)
+        this._applyAllLayout();
 
         // Remove save button
         const saveBtn = document.getElementById('save-turf-ui-btn');
@@ -17592,9 +17606,10 @@ function ensureLandmarkProperties() {
         if (!TurfUIEditor._dragEl) return;
         var el = TurfUIEditor._dragEl;
         el.style.cursor = 'grab';
-        // Restore z-index to the editor-mode level (not 100 which is drag-time)
+        // Restore z-index to the editor-mode level (not 100 which is drag-time).
+        // Button wrappers restore to 85 (above popups at 80) to keep them touchable.
         var isPopupEl = TurfUIEditor._popupIds.includes(el.id);
-        el.style.zIndex = isPopupEl ? '80' : (el.id === 'city-map' ? '40' : '60');
+        el.style.zIndex = isPopupEl ? '80' : (el.id === 'city-map' ? '40' : '85');
 
         // Save position to layout
         var id = el.id;
