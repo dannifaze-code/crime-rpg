@@ -17378,6 +17378,7 @@ function ensureLandmarkProperties() {
       // Each button and popup is independently editable
       _editableElements: [
         { id: 'turf-actions-wrapper', label: 'Turf Actions Button' },
+        { id: 'worldmap-wrapper', label: 'World Map Button' },
         { id: 'inventory-wrapper', label: 'Inventory Button' },
         { id: 'turf-popover-menu', label: 'Actions Popup' },
         { id: 'inventory-slots-panel', label: 'Inventory Popup' },
@@ -17805,6 +17806,7 @@ function ensureLandmarkProperties() {
             // Ensure heat bar and button elements stay above city-map when repositioned
             if (elementId === 'heat-bar-main' || elementId === 'heat-bar-interface'
                 || elementId === 'turf-actions-wrapper'
+                || elementId === 'worldmap-wrapper'
                 || elementId === 'inventory-wrapper') {
               el.style.zIndex = '10';
             }
@@ -27936,6 +27938,16 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
             e.stopPropagation();
             this.toggleFreeRoam();
             this.updatePopoverButtonStates();
+          });
+        }
+
+        // World Map button - registers click for future implementation
+        const worldmapBtn = document.getElementById('worldmap-btn');
+        if (worldmapBtn) {
+          worldmapBtn.addEventListener('click', (e) => {
+            if (TurfUIEditor.active) return; // Don't trigger in editor mode
+            e.stopPropagation();
+            console.log('[WorldMap] World Map button clicked');
           });
         }
 
