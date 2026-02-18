@@ -17445,6 +17445,13 @@ function ensureLandmarkProperties() {
             // Prevent mobile browser scroll from stealing touch events from draggable elements
             el.style.touchAction = 'none';
           }
+          // Disable pointer-events on child buttons/interactive elements so
+          // touches land directly on the wrapper, preventing the <button>
+          // from absorbing touch events that should drive the drag.
+          el.querySelectorAll('button, a, input').forEach(child => {
+            child.style.pointerEvents = 'none';
+            child.style.touchAction = 'none';
+          });
         });
 
         this._bindDragEvents();
@@ -17520,6 +17527,11 @@ function ensureLandmarkProperties() {
           el.style.zIndex = '';
           el.style.touchAction = '';
           delete el.dataset.turfUiEditable;
+          // Restore pointer-events on child buttons/interactive elements
+          el.querySelectorAll('button, a, input').forEach(child => {
+            child.style.pointerEvents = '';
+            child.style.touchAction = '';
+          });
         });
 
         this._unbindDragEvents();
