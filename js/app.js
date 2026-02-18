@@ -17378,9 +17378,11 @@ function ensureLandmarkProperties() {
       // Each button and popup is independently editable
       _editableElements: [
         { id: 'turf-actions-wrapper', label: 'Turf Actions Button' },
+        { id: 'worldmap-wrapper', label: 'World Map Button' },
         { id: 'inventory-wrapper', label: 'Inventory Button' },
         { id: 'turf-popover-menu', label: 'Actions Popup' },
         { id: 'inventory-slots-panel', label: 'Inventory Popup' },
+        { id: 'worldmap-panel', label: 'World Map Popup' },
         { id: 'heat-bar-main', label: 'Heat Bar Frame' },
         { id: 'heat-bar-interface', label: 'Fire & Star Interface' },
         { id: 'turf-test-controls', label: 'Test Turf Defense' },
@@ -17389,7 +17391,7 @@ function ensureLandmarkProperties() {
       ],
 
       // IDs that are popups (force open in editor mode)
-      _popupIds: ['turf-popover-menu', 'inventory-slots-panel'],
+      _popupIds: ['turf-popover-menu', 'inventory-slots-panel', 'worldmap-panel'],
 
       isAdmin() {
         return BuildingMoveSystem.isAdmin();
@@ -17465,6 +17467,16 @@ function ensureLandmarkProperties() {
           const tRect = turfTab.getBoundingClientRect();
           invPanel.style.left = (wRect.left - tRect.left) + 'px';
           invPanel.style.top = (wRect.top - tRect.top - invPanel.offsetHeight - 6) + 'px';
+        }
+
+        // Position worldmap-panel above worldmap-wrapper
+        const wmPanel = document.getElementById('worldmap-panel');
+        const wmWrapper = document.getElementById('worldmap-wrapper');
+        if (wmPanel && wmWrapper && !this._layout['worldmap-panel']) {
+          const wRect = wmWrapper.getBoundingClientRect();
+          const tRect = turfTab.getBoundingClientRect();
+          wmPanel.style.left = (wRect.left - tRect.left) + 'px';
+          wmPanel.style.top = (wRect.top - tRect.top - wmPanel.offsetHeight - 6) + 'px';
         }
       },
 
@@ -27836,6 +27848,9 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
         const popover = document.getElementById('turf-popover-menu');
         const inventoryBtn = document.getElementById('inventory-btn');
         const inventoryPanel = document.getElementById('inventory-slots-panel');
+        const worldmapBtn = document.getElementById('worldmap-btn');
+        const worldmapPanel = document.getElementById('worldmap-panel');
+        const backdrop = document.getElementById('turf-modal-backdrop');
 
         if (!turfActionBtn || !popover) {
           if (retryCount >= MAX_RETRIES) {
@@ -27852,13 +27867,16 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
           if (TurfUIEditor.active) return; // Don't toggle in editor mode
           e.stopPropagation();
           const isOpen = popover.classList.contains('open');
-          // Close inventory panel if open
+          // Close inventory panel and world map panel if open
           if (inventoryPanel) inventoryPanel.classList.remove('open');
+          if (worldmapPanel) worldmapPanel.classList.remove('open');
           if (!isOpen) {
             // Position popup near button before showing
             TurfUIEditor.positionPopupNearButton('turf-popover-menu', 'turf-actions-wrapper');
           }
           popover.classList.toggle('open', !isOpen);
+          // Toggle backdrop
+          if (backdrop) backdrop.classList.toggle('active', !isOpen);
           if (!isOpen) this.updatePopoverButtonStates();
         });
 
@@ -27900,26 +27918,60 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
             if (TurfUIEditor.active) return; // Don't toggle in editor mode
             e.stopPropagation();
             const isOpen = inventoryPanel.classList.contains('open');
-            // Close popover if open
+            // Close popover and world map panel if open
             popover.classList.remove('open');
+            if (worldmapPanel) worldmapPanel.classList.remove('open');
             if (!isOpen) {
               // Position popup near button before showing
               TurfUIEditor.positionPopupNearButton('inventory-slots-panel', 'inventory-wrapper');
             }
             inventoryPanel.classList.toggle('open', !isOpen);
+            // Toggle backdrop
+            if (backdrop) backdrop.classList.toggle('active', !isOpen);
           });
         }
 
-        // Close popover/inventory when clicking elsewhere
+        // World Map button toggles world map panel
+        if (worldmapBtn && worldmapPanel) {
+          worldmapBtn.addEventListener('click', (e) => {
+            if (TurfUIEditor.active) return; // Don't toggle in editor mode
+            e.stopPropagation();
+            const isOpen = worldmapPanel.classList.contains('open');
+            // Close popover and inventory panel if open
+            popover.classList.remove('open');
+            if (inventoryPanel) inventoryPanel.classList.remove('open');
+            if (!isOpen) {
+              // Position popup near button before showing
+              TurfUIEditor.positionPopupNearButton('worldmap-panel', 'worldmap-wrapper');
+            }
+            worldmapPanel.classList.toggle('open', !isOpen);
+            // Toggle backdrop
+            if (backdrop) backdrop.classList.toggle('active', !isOpen);
+          });
+        }
+
+        // Close popover/inventory/worldmap when clicking elsewhere or on backdrop
         document.addEventListener('click', (e) => {
           if (TurfUIEditor.active) return; // Don't close in editor mode
           const clickedWrapper = e.target.closest('.turf-action-btn-wrapper');
-          const clickedPopup = e.target.closest('#turf-popover-menu, #inventory-slots-panel');
+          const clickedPopup = e.target.closest('#turf-popover-menu, #inventory-slots-panel, #worldmap-panel');
           if (!clickedWrapper && !clickedPopup) {
             popover.classList.remove('open');
             if (inventoryPanel) inventoryPanel.classList.remove('open');
+            if (worldmapPanel) worldmapPanel.classList.remove('open');
+            if (backdrop) backdrop.classList.remove('active');
           }
         });
+
+        if (backdrop) {
+          backdrop.addEventListener('click', (e) => {
+            e.stopPropagation();
+            popover.classList.remove('open');
+            if (inventoryPanel) inventoryPanel.classList.remove('open');
+            if (worldmapPanel) worldmapPanel.classList.remove('open');
+            backdrop.classList.remove('active');
+          });
+        }
 
         console.log('[TurfActionButtons] ✅ Initialized successfully');
       },

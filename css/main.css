@@ -2360,6 +2360,63 @@
       border-radius: 8px;
     }
 
+    /* Turf Modal Backdrop - blur, dimmer, vignette effect */
+    .turf-modal-backdrop {
+      position: absolute;
+      inset: 0;
+      z-index: 90;
+      pointer-events: none;
+      opacity: 0;
+      background: radial-gradient(ellipse at center, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.85) 100%);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      transition: opacity 0.35s ease;
+    }
+
+    .turf-modal-backdrop.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    /* World Map Panel - positioned via JS relative to turf tab */
+    .worldmap-panel {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+      z-index: 100;
+      width: 220px;
+    }
+
+    .worldmap-panel.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .worldmap-panel-content {
+      background: rgba(15,12,10,0.92);
+      border: 2px solid rgba(138,180,248,0.3);
+      border-radius: 10px;
+      padding: 14px;
+      text-align: center;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.05);
+    }
+
+    .worldmap-panel-content h3 {
+      margin: 0 0 10px;
+      font-size: 13px;
+      color: #8ab4f8;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+    }
+
+    .worldmap-panel-content p {
+      margin: 0;
+      font-size: 11px;
+      color: rgba(255,255,255,0.6);
+      line-height: 1.4;
+    }
+
     .map-refresh-btn {
       position: absolute;
       top: 50%;
