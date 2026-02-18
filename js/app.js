@@ -17774,8 +17774,10 @@ function ensureLandmarkProperties() {
               el.style.transform = parts.join(' ');
               el.style.transformOrigin = 'left top';
             }
-            // Ensure heat bar elements stay above city-map when repositioned
-            if (elementId === 'heat-bar-main' || elementId === 'heat-bar-interface') {
+            // Ensure heat bar and button elements stay above city-map when repositioned
+            if (elementId === 'heat-bar-main' || elementId === 'heat-bar-interface'
+                || elementId === 'turf-actions-wrapper' || elementId === 'worldmap-wrapper'
+                || elementId === 'inventory-wrapper') {
               el.style.zIndex = '10';
             }
           }
