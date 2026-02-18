@@ -2226,6 +2226,7 @@
       position: relative;
       flex: 1;
       max-width: 120px;
+      z-index: 10; /* Always above #city-map (z-index: 1) so buttons are clickable and draggable */
     }
 
     .turf-sprite-btn {
