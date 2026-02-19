@@ -4654,7 +4654,7 @@ const CartoonSpriteGenerator = {
         { id: 'apt3', type: 'apartment', x: 65, y: 25, name: 'Eastside Apartments', price: 20000, income: 500 },
 
         // ROW 3 - Middle (y: 38)
-        { id: 'warehouse', type: 'warehouse', x: 8, y: 38, name: 'Warehouse', price: 160000, income: 3200 },
+        { id: 'warehouse', type: 'warehouse', x: 8, y: 38, name: 'Warehouse', price: 160000, income: 3200, sprite: 'sprites/turf-map/wharehousebaseturf.png', sprites: ['sprites/turf-map/wharehousebaseturf.png', 'sprites/turf-map/wharehouselvl2.png', 'sprites/turf-map/wharehouselvl3.png', 'sprites/turf-map/wharehouselvl4.png', 'sprites/turf-map/wharehouselvl5.png'] },
         { id: 'apt2', type: 'apartment', x: 18, y: 55, name: 'Downtown Apartments', price: 20000, income: 500 },  // Moved to lower area near road intersection
 
         // ROW 4 - Center (y: 52)
@@ -4667,10 +4667,10 @@ const CartoonSpriteGenerator = {
         { id: 'docks', type: 'docks', x: 88, y: 65, name: 'Docks', price: 180000, income: 3500 },
 
         // ROW 6 - Lower (y: 78)
-        { id: 'nightclub', type: 'nightclub', x: 15, y: 78, name: 'Nightclub', price: 220000, income: 5200 },
-        { id: 'factory', type: 'factory', x: 45, y: 78, name: 'Factory', price: 320000, income: 7000 },
+        { id: 'nightclub', type: 'nightclub', x: 15, y: 78, name: 'Nightclub', price: 220000, income: 5200, sprite: 'sprites/turf-map/nightclubbaseturf.png', sprites: ['sprites/turf-map/nightclubbaseturf.png', 'sprites/turf-map/nightclublvl2.png', 'sprites/turf-map/nightclublvl3.png', 'sprites/turf-map/nightclublvl4.png', 'sprites/turf-map/nightclublvl5.png'] },
+        { id: 'factory', type: 'factory', x: 45, y: 78, name: 'Factory', price: 320000, income: 7000, sprite: 'sprites/turf-map/factorybaseturf.png', sprites: ['sprites/turf-map/factorybaseturf.png', 'sprites/turf-map/factorylvl2.png', 'sprites/turf-map/factorylvl3.png', 'sprites/turf-map/factorylvl4.png', 'sprites/turf-map/factorylvl5.png'] },
         { id: 'rise3', type: 'highrise', x: 70, y: 78, name: 'Empire Building', price: 300000, income: 5000 },
-        { id: 'casino', type: 'casino', x: 52, y: 88, name: 'Casino', price: 250000, income: 6000 },
+        { id: 'casino', type: 'casino', x: 52, y: 88, name: 'Casino', price: 250000, income: 6000, sprite: 'sprites/turf-map/casinobaseturf.png', sprites: ['sprites/turf-map/casinobaseturf.png', 'sprites/turf-map/casinolvl2.png', 'sprites/turf-map/casinolvl3.png', 'sprites/turf-map/casinolvl4.png', 'sprites/turf-map/casinolvl5.png'] },
 
         // ROW 7 - Bottom (y: 88)
         { id: 'bank', type: 'bank', x: 35, y: 88, name: 'Bank', price: 450000, income: 9000 },
@@ -30796,9 +30796,35 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
           console.log(`   Before: Casino at (${casino.x}, ${casino.y})`);
           casino.x = 52;
           casino.y = 88;
+          casino.sprite = 'sprites/turf-map/casinobaseturf.png';
+          casino.sprites = ['sprites/turf-map/casinobaseturf.png', 'sprites/turf-map/casinolvl2.png', 'sprites/turf-map/casinolvl3.png', 'sprites/turf-map/casinolvl4.png', 'sprites/turf-map/casinolvl5.png'];
           console.log(`   ✅ After: Casino at (${casino.x}, ${casino.y})`);
         } else {
           console.warn('   ⚠️ Casino not found in propertyBuildings (may be expected for new saves)');
+        }
+
+        // Update Factory sprites
+        const factory = GameState.propertyBuildings.find(p => p.id === 'factory');
+        if (factory) {
+          factory.sprite = 'sprites/turf-map/factorybaseturf.png';
+          factory.sprites = ['sprites/turf-map/factorybaseturf.png', 'sprites/turf-map/factorylvl2.png', 'sprites/turf-map/factorylvl3.png', 'sprites/turf-map/factorylvl4.png', 'sprites/turf-map/factorylvl5.png'];
+          console.log(`   ✅ Factory sprites updated`);
+        }
+
+        // Update Nightclub sprites
+        const nightclub = GameState.propertyBuildings.find(p => p.id === 'nightclub');
+        if (nightclub) {
+          nightclub.sprite = 'sprites/turf-map/nightclubbaseturf.png';
+          nightclub.sprites = ['sprites/turf-map/nightclubbaseturf.png', 'sprites/turf-map/nightclublvl2.png', 'sprites/turf-map/nightclublvl3.png', 'sprites/turf-map/nightclublvl4.png', 'sprites/turf-map/nightclublvl5.png'];
+          console.log(`   ✅ Nightclub sprites updated`);
+        }
+
+        // Update Warehouse sprites
+        const warehouse = GameState.propertyBuildings.find(p => p.id === 'warehouse');
+        if (warehouse) {
+          warehouse.sprite = 'sprites/turf-map/wharehousebaseturf.png';
+          warehouse.sprites = ['sprites/turf-map/wharehousebaseturf.png', 'sprites/turf-map/wharehouselvl2.png', 'sprites/turf-map/wharehouselvl3.png', 'sprites/turf-map/wharehouselvl4.png', 'sprites/turf-map/wharehouselvl5.png'];
+          console.log(`   ✅ Warehouse sprites updated`);
         }
         
         // Update Luxury Motors (dealer2)
