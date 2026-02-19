@@ -4797,7 +4797,10 @@ const CartoonSpriteGenerator = {
         lastResolvedAt: 0,
         lastResolvedLockdownId: null,
         cooldownUntil: 0
-      }
+      },
+
+      // Black Market inventory storage
+      marketInventory: {}
 
     };
 
@@ -5115,6 +5118,11 @@ const CartoonSpriteGenerator = {
         if (typeof GameState.turfDefense.magazineCount !== 'number' || !isFinite(GameState.turfDefense.magazineCount)) GameState.turfDefense.magazineCount = 100;
         if (typeof GameState.turfDefense.lastSpawnTime !== 'number' || !isFinite(GameState.turfDefense.lastSpawnTime)) GameState.turfDefense.lastSpawnTime = 0;
         if (typeof GameState.turfDefense.timeActiveMs !== 'number' || !isFinite(GameState.turfDefense.timeActiveMs)) GameState.turfDefense.timeActiveMs = 0;
+
+        // Market inventory (Black Market system)
+        if (!GameState.marketInventory || typeof GameState.marketInventory !== 'object') {
+          GameState.marketInventory = {};
+        }
 
       } catch (e) {
         console.warn('[SCHEMA] ensureGameStateSchema failed:', e);
