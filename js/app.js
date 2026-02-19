@@ -17428,6 +17428,15 @@ function ensureLandmarkProperties() {
         const _editorBackdrop = document.getElementById('turf-modal-backdrop');
         if (_editorBackdrop) _editorBackdrop.classList.remove('active');
 
+        // Lift the entire action bar above popups so ALL button wrappers
+        // (including worldmap-wrapper in the centre) receive pointer events
+        // even when a forced-open popup physically overlaps the button area.
+        const actionBar = document.getElementById('turf-action-bar');
+        if (actionBar) {
+          actionBar.style.position = 'relative';
+          actionBar.style.zIndex = '86';
+        }
+
         // Position popups at defaults if no saved layout
         this._ensurePopupDefaults();
 
@@ -17516,6 +17525,13 @@ function ensureLandmarkProperties() {
             delete popup.dataset.editorForced;
           }
         });
+
+        // Restore action bar stacking (was lifted above popups during editing)
+        const actionBar = document.getElementById('turf-action-bar');
+        if (actionBar) {
+          actionBar.style.position = '';
+          actionBar.style.zIndex = '';
+        }
 
         this._editableElements.forEach(item => {
           const el = document.getElementById(item.id);
