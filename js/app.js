@@ -21364,25 +21364,42 @@ function ensureLandmarkProperties() {
       // Vehicle storage system
       storeVehicle(crime) {
         const garage = GameState.player.garage;
-        
+
         // Check if garage is full
         if (garage.vehicles.length >= garage.capacity) {
           console.log('Garage full - vehicle sold instead');
           return false;
         }
-        
+
+        // Tier stat presets for the new garage UI
+        var tierPresets = {
+          junker:  { class: 'Rust',    grade: 'D', emoji: '🚙', speed: 80,  handling: 45, durability: 40, heat: 1, yearMin: 1995, yearMax: 2008 },
+          sedan:   { class: 'Street',  grade: 'B', emoji: '🚗', speed: 160, handling: 72, durability: 65, heat: 3, yearMin: 2008, yearMax: 2018 },
+          luxury:  { class: 'Premium', grade: 'A', emoji: '🚘', speed: 210, handling: 82, durability: 80, heat: 4, yearMin: 2016, yearMax: 2022 },
+          exotic:  { class: 'Elite',   grade: 'S', emoji: '🏎️', speed: 280, handling: 94, durability: 88, heat: 5, yearMin: 2020, yearMax: 2024 }
+        };
+        var td = tierPresets[crime.vehicleTier] || tierPresets.sedan;
+        var year = td.yearMin + Math.floor(Math.random() * (td.yearMax - td.yearMin + 1));
+
         // Create vehicle object
         const vehicle = {
           id: `${crime.vehicleTier}_${Date.now()}`,
           tier: crime.vehicleTier,
           name: this.generateVehicleName(crime.vehicleTier),
           storedAt: Date.now(),
-          sellValue: this.calculateVehicleSellValue(crime)
+          sellValue: this.calculateVehicleSellValue(crime),
+          class: td.class,
+          grade: td.grade,
+          emoji: td.emoji,
+          year: year,
+          mods: 0,
+          heat: td.heat,
+          stats: { speed: td.speed, handling: td.handling, durability: td.durability }
         };
-        
+
         garage.vehicles.push(vehicle);
         console.log(`Vehicle stored: ${vehicle.name} (worth $${vehicle.sellValue})`);
-        
+
         return true;
       },
       
@@ -21444,12 +21461,17 @@ function ensureLandmarkProperties() {
       
       getGarageStatus() {
         const garage = GameState.player.garage;
+        var cooldownMs = 120000;
+        var elapsed = garage.lastSale ? Date.now() - garage.lastSale : cooldownMs;
+        var canSell = elapsed >= cooldownMs;
         return {
           vehicles: garage.vehicles,
           count: garage.vehicles.length,
           capacity: garage.capacity,
           totalValue: garage.vehicles.reduce((sum, v) => sum + v.sellValue, 0),
-          canSell: !garage.lastSale || Date.now() - garage.lastSale >= 120000
+          canSell: canSell,
+          cooldownRemaining: canSell ? 0 : Math.ceil((cooldownMs - elapsed) / 1000),
+          cooldownProgress: canSell ? 100 : Math.floor((elapsed / cooldownMs) * 100)
         };
       }
     };
@@ -29623,82 +29645,174 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
           console.error('Garage container not found!');
           return;
         }
-        
+
         const garageStatus = CrimesSystem.getGarageStatus();
         const vehicles = garageStatus.vehicles;
-        
-        if (vehicles.length === 0) {
-          container.innerHTML = `
-            <div style="text-align: center; padding: 40px 20px; color: #888;">
-              <div style="font-size: 48px; margin-bottom: 16px;">🚗</div>
-              <div style="font-size: 16px; margin-bottom: 8px;">No Vehicles in Garage</div>
-              <div style="font-size: 13px;">Steal vehicles from Grand Theft Auto crimes</div>
-            </div>
-          `;
-          return;
+        const canSell = garageStatus.canSell;
+        const cooldownRemaining = garageStatus.cooldownRemaining;
+        const cooldownProgress = garageStatus.cooldownProgress;
+
+        // Fallback stat lookup for vehicles stored before this update
+        var tierDefaults = {
+          junker:  { class: 'Rust',    grade: 'D', emoji: '🚙', speed: 80,  handling: 45, durability: 40, heat: 1 },
+          sedan:   { class: 'Street',  grade: 'B', emoji: '🚗', speed: 160, handling: 72, durability: 65, heat: 3 },
+          luxury:  { class: 'Premium', grade: 'A', emoji: '🚘', speed: 210, handling: 82, durability: 80, heat: 4 },
+          exotic:  { class: 'Elite',   grade: 'S', emoji: '🏎️', speed: 280, handling: 94, durability: 88, heat: 5 }
+        };
+
+        function getVehicleData(vehicle) {
+          var def = tierDefaults[vehicle.tier] || tierDefaults.sedan;
+          return {
+            class:     vehicle.class  || def.class,
+            grade:     vehicle.grade  || def.grade,
+            emoji:     vehicle.emoji  || def.emoji,
+            year:      vehicle.year   || '—',
+            mods:      vehicle.mods   !== undefined ? vehicle.mods : 0,
+            heat:      vehicle.heat   || def.heat,
+            stats:     vehicle.stats  || { speed: def.speed, handling: def.handling, durability: def.durability }
+          };
         }
-        
-        // Render vehicle cards
-        const vehicleCards = vehicles.map(vehicle => `
-          <div style="background: #2a2a2a; padding: 14px; border-radius: 6px; margin-bottom: 12px; border: 2px solid #3a3a3a;">
-            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
-              <div>
-                <div style="font-weight: 600; font-size: 15px; margin-bottom: 4px;">🚗 ${vehicle.name}</div>
-                <div style="font-size: 11px; color: #888;">
-                  ${vehicle.make} ${vehicle.model}
-                </div>
-              </div>
-              <div style="text-align: right;">
-                <div style="color: #00ff00; font-weight: 600; font-size: 14px;">
-                  $${vehicle.sellValue.toLocaleString()}
-                </div>
-                <div style="font-size: 10px; color: #888;">Sell Value</div>
-              </div>
-            </div>
-            
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 12px; margin-bottom: 10px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 4px;">
-              <div>⭐ Class: <strong>${vehicle.class}</strong></div>
-              <div>📅 Year: <strong>${vehicle.year}</strong></div>
-            </div>
-            
-            <button class="choice-btn" 
-              onclick="sellVehicle('${vehicle.id}')" 
-              ${!garageStatus.canSell ? 'disabled' : ''}
-              style="width: 100%; padding: 8px; font-size: 12px; background: ${garageStatus.canSell ? '#2d7a2d' : '#3a3a3a'};">
-              ${garageStatus.canSell ? `💰 Sell for $${vehicle.sellValue.toLocaleString()}` : '⏱️ Cooldown (2 min)'}
-            </button>
-          </div>
-        `).join('');
-        
-        container.innerHTML = `
-          <div style="margin-bottom: 16px;">
-            <div style="background: rgba(74, 144, 226, 0.1); padding: 14px; border-radius: 6px; border-left: 3px solid #4a90e2;">
-              <div style="font-size: 13px; color: #aaa; margin-bottom: 8px;">🚗 Garage Status</div>
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 14px;">
-                <div>
-                  Vehicles: <strong>${garageStatus.count}/${garageStatus.capacity}</strong>
-                </div>
-                <div>
-                  Total Value: <strong style="color: #00ff00;">$${garageStatus.totalValue.toLocaleString()}</strong>
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: #ddd;">
-            🚗 Your Vehicles (${vehicles.length})
-          </div>
-          
-          ${vehicleCards}
-          
-          <div style="background: rgba(255, 215, 0, 0.05); padding: 12px; border-radius: 4px; font-size: 12px; color: #999; border-left: 3px solid #ffd700;">
-            <strong>💡 Tips:</strong><br>
-            • Steal vehicles from <strong>Grand Theft Auto</strong> crimes<br>
-            • Garage capacity: ${garageStatus.capacity} vehicles<br>
-            • Sell cooldown: 2 minutes between sales<br>
-            • Higher class vehicles = more money
-          </div>
-        `;
+
+        function heatStars(n) {
+          return '★'.repeat(n) + '☆'.repeat(5 - n);
+        }
+        function heatLabel(n) {
+          return { 1: 'Low', 2: 'Low', 3: 'Medium', 4: 'High', 5: 'Extreme' }[n] || 'Unknown';
+        }
+        function heatChipClass(n) {
+          if (n <= 2) return 'gu-ok';
+          if (n === 3) return 'gu-warn';
+          return 'gu-danger-chip';
+        }
+        function speedPct(s) { return Math.min(100, Math.round((s / 300) * 100)); }
+
+        // Build one card string per vehicle
+        var vehicleCardsHTML = vehicles.map(function(vehicle) {
+          var d = getVehicleData(vehicle);
+          var heatIc = d.heat >= 4 ? '🚨' : '✅';
+
+          var cooldownHTML = !canSell ? (
+            '<div class="gu-cooldown">' +
+              '<div class="gu-cooldown-row">' +
+                '<div class="gu-cooldown-label">⏱ Sale Cooldown</div>' +
+                '<div class="gu-cooldown-time">' + cooldownRemaining + 's remaining</div>' +
+              '</div>' +
+              '<div class="gu-cooldown-track">' +
+                '<div class="gu-cooldown-fill" style="width:' + cooldownProgress + '%"></div>' +
+                '<div class="gu-cooldown-glint"></div>' +
+              '</div>' +
+            '</div>'
+          ) : '';
+
+          var sellLabel = canSell ? 'Sell $' + vehicle.sellValue.toLocaleString() : '⏱ ' + cooldownRemaining + 's';
+          var sellDisabled = canSell ? '' : 'disabled';
+
+          return (
+            '<article class="gu-vehicle-card">' +
+              '<div class="gu-card-glow"></div>' +
+              '<div class="gu-vehicle-top">' +
+                '<div class="gu-vehicle-id">' +
+                  '<div class="gu-veh-thumb">' +
+                    '<div class="gu-veh-thumb-shine"></div>' +
+                    '<span class="gu-veh-thumb-icon">' + d.emoji + '</span>' +
+                  '</div>' +
+                  '<div class="gu-veh-nameblock">' +
+                    '<div class="gu-veh-name">' + vehicle.name + '</div>' +
+                    '<div class="gu-veh-meta">' + d.class + ' Tier' +
+                      ' <span class="gu-tag gu-tag-tier">' + d.grade + '</span>' +
+                      ' &bull; Heat <span class="gu-tag gu-tag-heat">' + heatStars(d.heat) + '</span>' +
+                    '</div>' +
+                  '</div>' +
+                '</div>' +
+                '<div class="gu-vehicle-price">' +
+                  '<div class="gu-price gu-money">$' + vehicle.sellValue.toLocaleString() + '</div>' +
+                  '<div class="gu-price-sub">Sell Value</div>' +
+                '</div>' +
+              '</div>' +
+              '<div class="gu-vehicle-tags">' +
+                '<div class="gu-chip"><span class="gu-chip-ic">⭐</span> Class: <b>' + d.class + '</b></div>' +
+                '<div class="gu-chip"><span class="gu-chip-ic">📅</span> Year: <b>' + d.year + '</b></div>' +
+                '<div class="gu-chip"><span class="gu-chip-ic">🧩</span> Mods: <b>' + d.mods + '</b></div>' +
+                '<div class="gu-chip ' + heatChipClass(d.heat) + '"><span class="gu-chip-ic">' + heatIc + '</span> Heat: <b>' + heatLabel(d.heat) + '</b></div>' +
+              '</div>' +
+              '<div class="gu-vehicle-stats">' +
+                '<div class="gu-stat">' +
+                  '<div class="gu-stat-label">Top Speed</div>' +
+                  '<div class="gu-stat-value">' + d.stats.speed + ' <span>mph</span></div>' +
+                  '<div class="gu-stat-bar"><div class="gu-fill" style="width:' + speedPct(d.stats.speed) + '%"></div></div>' +
+                '</div>' +
+                '<div class="gu-stat">' +
+                  '<div class="gu-stat-label">Handling</div>' +
+                  '<div class="gu-stat-value">' + d.stats.handling + ' <span>%</span></div>' +
+                  '<div class="gu-stat-bar"><div class="gu-fill" style="width:' + d.stats.handling + '%"></div></div>' +
+                '</div>' +
+                '<div class="gu-stat">' +
+                  '<div class="gu-stat-label">Durability</div>' +
+                  '<div class="gu-stat-value">' + d.stats.durability + ' <span>%</span></div>' +
+                  '<div class="gu-stat-bar"><div class="gu-fill" style="width:' + d.stats.durability + '%"></div></div>' +
+                '</div>' +
+              '</div>' +
+              cooldownHTML +
+              '<div class="gu-vehicle-actions">' +
+                '<button class="gu-btn gu-primary" onclick="driveVehicle(\'' + vehicle.id + '\')">Drive</button>' +
+                '<button class="gu-btn" onclick="modifyVehicle(\'' + vehicle.id + '\')">Modify</button>' +
+                '<button class="gu-btn gu-danger" onclick="sellVehicle(\'' + vehicle.id + '\')" ' + sellDisabled + '>' + sellLabel + '</button>' +
+              '</div>' +
+            '</article>'
+          );
+        }).join('');
+
+        // Empty-slot card shown when garage is not full
+        var slotsLeft = garageStatus.capacity - vehicles.length;
+        var emptySlotHTML = slotsLeft > 0 ? (
+          '<article class="gu-empty-slot">' +
+            '<div class="gu-empty-icon">＋</div>' +
+            '<div class="gu-empty-title">Acquire New Vehicle</div>' +
+            '<div class="gu-empty-sub">Steal vehicles from <b>Grand Theft Auto</b> crimes<br>' +
+              'Garage capacity: ' + garageStatus.capacity + ' vehicle' + (garageStatus.capacity !== 1 ? 's' : '') + ' &bull; Sell cooldown: 2 min</div>' +
+          '</article>'
+        ) : '';
+
+        // Full empty-state (no vehicles at all)
+        var emptyStateHTML = (
+          '<article class="gu-empty-slot">' +
+            '<div class="gu-empty-icon">🚗</div>' +
+            '<div class="gu-empty-title">No Vehicles in Garage</div>' +
+            '<div class="gu-empty-sub">Complete <b>Grand Theft Auto</b> crimes to steal vehicles<br>and store them here</div>' +
+          '</article>'
+        );
+
+        container.innerHTML = (
+          '<div class="gu-garage">' +
+            '<div class="gu-garage-bg"></div>' +
+            '<header class="gu-garage-topbar">' +
+              '<div class="gu-topbar-left">' +
+                '<div class="gu-icon-pill">🚗</div>' +
+                '<div>' +
+                  '<div class="gu-title">Garage</div>' +
+                  '<div class="gu-subtitle">Heatline: Underworld &bull; Asset Bay</div>' +
+                '</div>' +
+              '</div>' +
+              '<div class="gu-topbar-right">' +
+                '<div class="gu-metric">' +
+                  '<div class="gu-metric-label">Slots</div>' +
+                  '<div class="gu-metric-value"><span class="gu-value-strong">' + garageStatus.count + '</span><span class="gu-value-soft">/' + garageStatus.capacity + '</span></div>' +
+                '</div>' +
+                '<div class="gu-metric">' +
+                  '<div class="gu-metric-label">Total Value</div>' +
+                  '<div class="gu-metric-value gu-money">$' + garageStatus.totalValue.toLocaleString() + '</div>' +
+                '</div>' +
+              '</div>' +
+            '</header>' +
+            '<main class="gu-garage-content">' +
+              '<div class="gu-section-head">' +
+                '<div class="gu-section-title"><span class="gu-section-icon">🚘</span> Your Vehicles <span class="gu-count">(' + vehicles.length + ')</span></div>' +
+              '</div>' +
+              (vehicles.length === 0 ? emptyStateHTML : vehicleCardsHTML) +
+              (vehicles.length > 0 ? emptySlotHTML : '') +
+            '</main>' +
+          '</div>'
+        );
       }
     };
     
@@ -29711,10 +29825,26 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
         ProfileTab.render();
         TurfTab.showTemporaryNotification(`💰 Sold vehicle for $${result.value.toLocaleString()}!`);
       } else {
-        alert(result.reason || 'Cannot sell this vehicle.');
+        TurfTab.showTemporaryNotification(result.reason || 'Cannot sell this vehicle.');
       }
     };
-    
+
+    // Global function — drive a stored vehicle (placeholder; integrates with active crime system)
+    window.driveVehicle = function(vehicleId) {
+      const garage = GameState.player.garage;
+      const vehicle = garage.vehicles.find(function(v) { return v.id === vehicleId; });
+      if (!vehicle) return;
+      TurfTab.showTemporaryNotification('🚗 ' + vehicle.name + ' is ready — use it on your next job!');
+    };
+
+    // Global function — modify a vehicle (placeholder; can hook into upgrade system)
+    window.modifyVehicle = function(vehicleId) {
+      const garage = GameState.player.garage;
+      const vehicle = garage.vehicles.find(function(v) { return v.id === vehicleId; });
+      if (!vehicle) return;
+      TurfTab.showTemporaryNotification('🔧 Modification bay coming soon for ' + vehicle.name + '!');
+    };
+
     // Global functions for inmate management
     window.toggleInmateWorkMode = function(inmateId) {
       InmateSystem.toggleInmateMode(inmateId);
