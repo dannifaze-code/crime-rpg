@@ -6085,9 +6085,62 @@ try {
 
       console.log('📊 [TurfDefense] Session ended - Wave:', finalWave, 'Score:', finalScore, 'Kills:', enemiesKilled);
 
-      // TODO: Award rewards based on performance
-      // TODO: Show end screen with stats
-      // TODO: Return to normal UI
+      // Persist raid results to GangTab war log and award performance rewards
+      (function saveTurfDefenseResult() {
+        const reasonLabels = {
+          victory:        '🏆 RAID VICTORY',
+          base_destroyed: '💥 Base Destroyed',
+          player_down:    '☠️ Player Down',
+          manual:         '🚪 Retreated',
+          user_close:     '🚪 Retreated',
+          failed:         '❌ Raid Failed'
+        };
+        const label = reasonLabels[reason] || '🛡️ Turf Defense';
+        const wavesText = reason === 'victory' ? 'All 5 waves' : `Wave ${finalWave}`;
+        const logMsg = `${label} — ${wavesText} | ${enemiesKilled} kills | Score: ${finalScore}`;
+
+        // Push to shared war log
+        try {
+          if (typeof GangTab !== 'undefined' && typeof GangTab.logWarEvent === 'function') {
+            GangTab.logWarEvent(logMsg);
+          } else {
+            GameState.gangWarLog.push({ message: logMsg, timestamp: Date.now() });
+            if (GameState.gangWarLog.length > 50) GameState.gangWarLog = GameState.gangWarLog.slice(-50);
+          }
+        } catch(e) {}
+
+        // Award performance bonuses on non-trivial runs
+        if (enemiesKilled > 0) {
+          const cashBonus = Math.floor(enemiesKilled * 150 + finalScore * 0.5);
+          const xpBonus  = Math.floor(enemiesKilled * 10 + (reason === 'victory' ? 200 : 0));
+          try {
+            if (typeof SecureEconomy !== 'undefined') {
+              SecureEconomy.award({ cashDelta: cashBonus, baseXp: xpBonus, reason: 'turf_defense' });
+            } else {
+              GameState.player.cash += cashBonus;
+              GameState.player.xp   += xpBonus;
+            }
+          } catch(e) {}
+
+          // Gang health bonus on victory
+          if (reason === 'victory' && GameState.gang) {
+            GameState.gang.health = Math.min(100, GameState.gang.health + 5);
+          }
+
+          // Brief toast summarising the result
+          try {
+            const toast = document.createElement('div');
+            toast.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#1a2030;border:1px solid #4a9eff;color:#e0e0e0;padding:10px 20px;border-radius:8px;z-index:99999;font-size:13px;text-align:center;pointer-events:none;';
+            toast.innerHTML = `<b style="color:#fdd663;">${label}</b><br>Wave ${finalWave} &nbsp;|&nbsp; ${enemiesKilled} kills &nbsp;|&nbsp; <span style="color:#81c995;">+$${cashBonus.toLocaleString()}</span> &nbsp;|&nbsp; <span style="color:#8ab4f8;">+${xpBonus} XP</span>`;
+            document.body.appendChild(toast);
+            setTimeout(() => { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 5000);
+          } catch(e) {}
+        }
+
+        // Persist store + news ticker
+        try { Storage.save(); } catch(e) {}
+        try { if (typeof CityNewsTicker !== 'undefined') CityNewsTicker.update(); } catch(e) {}
+      })();
     }
 
     /**
@@ -21107,6 +21160,26 @@ function ensureLandmarkProperties() {
         // 7. Property network bonus
         successChance += this.getPropertyNetworkBonus(crime);
 
+        // 8. Inmate crew bonus — working inmates contribute effective stat points
+        if (typeof InmateSystem !== 'undefined') {
+          const inmateStats = InmateSystem.getWorkingInmatesStats();
+          const totalInmateStats = inmateStats.power + inmateStats.stealth +
+                                   inmateStats.strength + inmateStats.intelligence;
+          if (totalInmateStats > 0) {
+            // Each combined stat point = 0.1% bonus, capped at +15%
+            successChance += Math.min(0.15, totalInmateStats * 0.001);
+          }
+        }
+
+        // 9. Active gang war penalty — fighting on multiple fronts is distracting
+        if (GameState.gangRelations) {
+          const activeWars = Object.values(GameState.gangRelations)
+            .filter(r => r.status === 'war').length;
+          if (activeWars > 0) {
+            successChance -= activeWars * 0.05; // -5% per active war (up to -25%)
+          }
+        }
+
         // Clamp between 5% and 95%
         return Math.max(0.05, Math.min(0.95, successChance));
       },
@@ -21364,6 +21437,18 @@ function ensureLandmarkProperties() {
           if (outcomeData.gangHealthLoss) {
             GameState.gang.health = Math.max(0, GameState.gang.health - outcomeData.gangHealthLoss);
           }
+          // Inmate crew cut: working inmates earn a share of successful crime proceeds
+          if ((outcome.tier === 'success' || outcome.tier === 'critical_success') &&
+              typeof InmateSystem !== 'undefined') {
+            const workingCount = (GameState.inmates.recruited || []).filter(i => i.mode === 'working').length;
+            if (workingCount > 0) {
+              // Each working inmate gets 2% of cash reward, deposited to gang vault
+              const crewCut = Math.floor(cashReward * 0.02 * workingCount);
+              if (crewCut > 0 && GameState.gang.vault !== undefined) {
+                GameState.gang.vault += crewCut;
+              }
+            }
+          }
           if (outcomeData.gangHeatGain) {
             const relations = Object.keys(GameState.gangRelations);
             if (relations.length > 0) {
@@ -21385,6 +21470,30 @@ function ensureLandmarkProperties() {
         // Sync to leaderboard after significant changes
         Storage.updateLeaderboard();
         
+        // Market loot drop: successful crimes can deposit tradeable items
+        let marketLootItem = null;
+        if (outcome.tier === 'success' || outcome.tier === 'critical_success') {
+          const MARKET_LOOT_TABLE = {
+            street:     { itemId: 'neuro_stim',  chance: 0.15 },
+            theft:      { itemId: 'data_chip',   chance: 0.20 },
+            organized:  { itemId: 'plasma_cell', chance: 0.25 }
+          };
+          const lootEntry = MARKET_LOOT_TABLE[crime.category];
+          if (lootEntry && Math.random() < lootEntry.chance) {
+            GameState.marketInventory[lootEntry.itemId] = (GameState.marketInventory[lootEntry.itemId] || 0) + 1;
+            // Keep MarketSystem in sync if it is running
+            try {
+              if (typeof MarketSystem !== 'undefined' && MarketSystem.inventory) {
+                MarketSystem.inventory[lootEntry.itemId] = GameState.marketInventory[lootEntry.itemId];
+              }
+            } catch(e) {}
+            marketLootItem = lootEntry.itemId;
+          }
+        }
+
+        // Push to news ticker on any crime result
+        try { if (typeof CityNewsTicker !== 'undefined') CityNewsTicker.update(); } catch(e) {}
+
         // Return result summary
         return {
           crimeId: crime.id,
@@ -21401,7 +21510,8 @@ function ensureLandmarkProperties() {
             heat: heatGain,
             injured: injured
           },
-          vehicleStored: vehicleStored
+          vehicleStored: vehicleStored,
+          marketLootItem: marketLootItem
         };
       },
       
@@ -29026,6 +29136,13 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
                 </div>
               ` : ''}
               
+              ${result.marketLootItem ? `
+                <div style="margin: 12px 0; padding: 12px; background: rgba(255, 153, 0, 0.1); border-left: 3px solid #ff9900; border-radius: 4px;">
+                  <div style="font-size: 12px; font-weight: 600; margin-bottom: 4px; color: #ff9900;">LOOT ACQUIRED</div>
+                  <div style="font-size: 13px; color: #e0e0e0;">📦 ${result.marketLootItem.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase())} added to your Market inventory</div>
+                </div>
+              ` : ''}
+
               ${result.vehicleStored ? `
                 <div style="margin: 12px 0; padding: 12px; background: rgba(129, 201, 149, 0.1); border-left: 3px solid #81c995; border-radius: 4px;">
                   <div style="font-size: 13px; color: #81c995;">🚗 Vehicle stored in your garage!</div>
@@ -30648,11 +30765,14 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
           message: message,
           timestamp: Date.now()
         });
-        
+
         // Keep only last 50 events
         if (GameState.gangWarLog.length > 50) {
           GameState.gangWarLog = GameState.gangWarLog.slice(-50);
         }
+
+        // Refresh news ticker immediately
+        try { if (typeof CityNewsTicker !== 'undefined') CityNewsTicker.update(); } catch(e) {}
       },
       
       triggerGangDefeat(defeatingGang) {
@@ -30913,6 +31033,111 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       }
     }
     
+    // ========================================
+    // CITY NEWS TICKER
+    // ========================================
+    const CityNewsTicker = {
+      _el: null,
+      _inner: null,
+      _styleInjected: false,
+      _updateInterval: null,
+
+      init() {
+        if (this._el) return; // Already mounted
+        this._injectStyles();
+
+        const ticker = document.createElement('div');
+        ticker.id = 'city-news-ticker';
+        const inner = document.createElement('div');
+        inner.id = 'city-news-ticker-inner';
+        ticker.appendChild(inner);
+        document.body.appendChild(ticker);
+
+        this._el = ticker;
+        this._inner = inner;
+        this.update();
+
+        // Refresh every 30 seconds
+        this._updateInterval = setInterval(() => this.update(), 30000);
+      },
+
+      // Pull entries from gangWarLog + heatLog and re-render the scrolling strip
+      update() {
+        if (!this._inner) return;
+
+        const warEvents  = (GameState.gangWarLog  || []).slice(-15);
+        const heatEvents = (GameState.heatLog     || []).slice(-10);
+
+        // Merge and sort newest first
+        const combined = warEvents.concat(heatEvents).sort((a, b) => b.timestamp - a.timestamp);
+
+        if (combined.length === 0) {
+          this._el.style.display = 'none';
+          return;
+        }
+        this._el.style.display = 'block';
+
+        const formatted = combined.map(e => {
+          const ago = this._relativeTime(e.timestamp);
+          const text = e.message || '';
+          return `<span class="ticker-item">${text} <span class="ticker-time">${ago}</span></span>`;
+        }).join('<span class="ticker-sep">  ●  </span>');
+
+        this._inner.innerHTML = formatted + '<span class="ticker-sep">  ●  </span>';
+      },
+
+      _relativeTime(ts) {
+        const diffMs  = Date.now() - ts;
+        const diffMin = Math.floor(diffMs / 60000);
+        if (diffMin < 1)  return 'just now';
+        if (diffMin < 60) return `${diffMin}m ago`;
+        const diffH = Math.floor(diffMin / 60);
+        if (diffH  < 24) return `${diffH}h ago`;
+        return `${Math.floor(diffH / 24)}d ago`;
+      },
+
+      _injectStyles() {
+        if (this._styleInjected) return;
+        this._styleInjected = true;
+        const style = document.createElement('style');
+        style.textContent = `
+          #city-news-ticker {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 28px;
+            background: rgba(10, 14, 24, 0.92);
+            border-top: 1px solid #2a3550;
+            z-index: 9990;
+            overflow: hidden;
+            display: none;
+          }
+          #city-news-ticker-inner {
+            display: inline-flex;
+            align-items: center;
+            height: 100%;
+            white-space: nowrap;
+            animation: ticker-scroll 60s linear infinite;
+            font-size: 11px;
+            color: #c8d0e0;
+            padding-left: 100%;
+          }
+          #city-news-ticker-inner:hover { animation-play-state: paused; }
+          .ticker-item { padding: 0 6px; }
+          .ticker-time { color: #6a7a98; font-size: 10px; }
+          .ticker-sep  { color: #3a4a68; }
+          @keyframes ticker-scroll {
+            from { transform: translateX(0); }
+            to   { transform: translateX(-50%); }
+          }
+        `;
+        document.head.appendChild(style);
+      }
+    };
+
+    window.CityNewsTicker = CityNewsTicker;
+
     function initializeGame() {
       console.log('=== [DEBUG] initializeGame() called ===');
 
@@ -31188,6 +31413,7 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       TurfTab.init();
       SafeHouseTab.init();
       GangTab.init();
+      CityNewsTicker.init();
       
       console.log('[DEBUG] Rendering active tab...');
       // Render active tab
