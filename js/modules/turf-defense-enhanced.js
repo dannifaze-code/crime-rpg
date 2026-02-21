@@ -155,6 +155,13 @@ function createTypedEnemy(id, spawnPos, typeName) {
     attackRange: typeConfig.attackRange,
     isRanged: typeConfig.isRanged || false,
     buildingDamageMultiplier: typeConfig.buildingDamageMultiplier || 1.0,
+    // Assign sprite ID at creation time
+    _spriteId: (function() {
+      try {
+        const ids = (typeof ENEMY_SPRITE_IDS !== 'undefined') ? ENEMY_SPRITE_IDS : [];
+        return ids.length > 0 ? ids[Math.floor(Math.random() * ids.length)] : null;
+      } catch (e) { return null; }
+    })(),
     // Shooter-specific: last ranged shot time
     lastRangedShotTime: 0,
     rangedProjectile: null
@@ -621,8 +628,8 @@ const PlaceableDefenses = {
       const bh = d.config.height / 2 + 15; // Extra range for slowdown
       if (enemyX >= d.x - bw && enemyX <= d.x + bw &&
           enemyY >= d.y - bh && enemyY <= d.y + bh) {
-        // Enemy inside barricade zone - take damage over time from barricade
-        d.hp -= 0.1; // Barricade degrades when enemies walk through
+        // Enemy inside barricade zone - take damage over time from barricade (frame-rate independent)
+        d.hp -= 6 * (1/60); // ~6 HP per second, normalized to dt
         return d.config.slowFactor;
       }
     }
@@ -1370,10 +1377,6 @@ function drawEnhancedEnemy(ctx, enemy) {
   // Try 3D sprite first
   let drew3D = false;
   if (window.Enemy3DRenderer && Enemy3DRenderer._spriteCacheReady) {
-    if (!enemy._spriteId) {
-      const ids = (typeof ENEMY_SPRITE_IDS !== 'undefined') ? ENEMY_SPRITE_IDS : [];
-      enemy._spriteId = ids.length > 0 ? ids[Math.floor(Math.random() * ids.length)] : null;
-    }
     const sprite = enemy._spriteId ? Enemy3DRenderer.getCachedSprite(enemy._spriteId) : Enemy3DRenderer.getRandomCachedSprite();
     if (sprite && sprite.complete) {
       const drawSize = r * 3;
@@ -1530,13 +1533,11 @@ function drawEnhancedHUD(ctx, defense, width, height) {
   // Wave composition preview (when preparing/shopping)
   if (defense.waveState === 'preparing' || defense.waveState === 'shopping') {
     const nextWave = defense.wave + 1;
-    if (nextWave <= 8) {
-      const comp = getWaveComposition(nextWave);
-      ctx.font = '12px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = '#FFD700';
-      ctx.fillText(`Next Wave: ${comp.map(c => `${c.count}x ${c.type}`).join(' | ')}`, width / 2, height / 2 - 30);
-    }
+    const comp = getWaveComposition(nextWave);
+    ctx.font = '12px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#FFD700';
+    ctx.fillText(`Next Wave: ${comp.map(c => `${c.count}x ${c.type}`).join(' | ')}`, width / 2, height / 2 - 30);
   }
 
   // Shop state message
