@@ -5949,9 +5949,28 @@ function scheduleTurfDefenseSpriteScaleMatch() {
       try { if (typeof PlaceableDefenses !== 'undefined') PlaceableDefenses.reset(); } catch (e) {}
       try { if (typeof TurfAbilities !== 'undefined') TurfAbilities.reset(); } catch (e) {}
 
+      // Reset new enhanced systems (Features 6-18)
+      try { if (typeof MapHazards !== 'undefined') MapHazards.reset(); } catch (e) {}
+      try { if (typeof DestructibleEnv !== 'undefined') DestructibleEnv.reset(); } catch (e) {}
+      try { if (typeof KillFeed !== 'undefined') KillFeed.reset(); } catch (e) {}
+      try { if (typeof DamageIndicator !== 'undefined') DamageIndicator.reset(); } catch (e) {}
+      try { if (typeof PauseMenu !== 'undefined') PauseMenu.close(); } catch (e) {}
+      try { if (typeof ScreenShake !== 'undefined') ScreenShake.reset(); } catch (e) {}
+
+      // Apply building investment bonuses (Feature 15)
+      try { if (typeof BuildingInvestment !== 'undefined') BuildingInvestment.applyUpgradeBonuses(structures); } catch (e) {}
+
+      // Apply heat difficulty scaling (Feature 12)
+      try { if (typeof HeatIntegration !== 'undefined') HeatIntegration.applyHeatToStructures && HeatIntegration.applyHeatToStructures(structures); } catch (e) {}
+
+      // Spawn destructible barriers (Feature 7)
+      try { if (typeof DestructibleEnv !== 'undefined') DestructibleEnv.spawnBarriers(GameState.turfDefense); } catch (e) {}
+
       // Initialize player position at center of map
       GameState.turfDefense.playerX = canvasWidth / 2;
       GameState.turfDefense.playerY = canvasHeight / 2;
+      GameState.turfDefense.canvasWidth = canvasWidth;
+      GameState.turfDefense.canvasHeight = canvasHeight;
 
       // Camera: follow player + zoom-in intro (world scale stays the same; camera brings us closer)
       GameState.turfDefense.camera = {
@@ -6038,7 +6057,31 @@ function scheduleTurfDefenseSpriteScaleMatch() {
 
       const finalScore = GameState.turfDefense.totalScore;
       const finalWave = GameState.turfDefense.wave;
-      const enemiesKilled = GameState.turfDefense.enemiesKilled;      // Stop DOM camera + restore map pan/zoom
+      const enemiesKilled = GameState.turfDefense.enemiesKilled;
+
+      // Apply gang reputation gains (Feature 14)
+      try {
+        if (typeof GangReputation !== 'undefined' && reason === 'victory') {
+          const aliveBuildings = (GameState.turfDefense.structures || []).filter(s => s.hp > 0).length;
+          const repPoints = GangReputation.calculateRepGain(finalWave, enemiesKilled, aliveBuildings);
+          GangReputation.applyRepGain(repPoints);
+          console.log(`🏆 [TurfDefense] Gang reputation gained: ${repPoints}`);
+        }
+      } catch (e) { console.warn('[TurfDefense] Gang reputation error:', e); }
+
+      // Apply heat-scaled rewards (Feature 12)
+      try {
+        if (typeof HeatIntegration !== 'undefined' && finalScore > 0) {
+          const scaledScore = HeatIntegration.applyHeatToRewards(finalScore);
+          GameState.turfDefense.totalScore = scaledScore;
+          console.log(`💰 [TurfDefense] Heat-scaled score: ${finalScore} → ${scaledScore}`);
+        }
+      } catch (e) {}
+
+      // Mark tutorial complete (Feature 16)
+      try { if (typeof TutorialSystem !== 'undefined') TutorialSystem.complete(); } catch (e) {}
+
+      // Stop DOM camera + restore map pan/zoom
       try { TurfDefenseRenderer.stopDomCamera(); } catch (e) {}
 
 
@@ -6816,6 +6859,10 @@ function updateTurfDefense(dt) {
                   const sprayScoreVal = (enemy.typeConfig && enemy.typeConfig.scoreValue) || 100;
                   defense.totalScore += sprayScoreVal;
                   try { if (typeof TurfShop !== 'undefined') TurfShop.awardCash(Math.round(sprayScoreVal * 0.5)); } catch (e) {}
+
+                  // Kill feed entry (Feature 8)
+                  try { if (typeof KillFeed !== 'undefined') KillFeed.addKill(enemy.typeConfig ? enemy.typeConfig.name : 'Enemy', 'Spray'); } catch (e) {}
+
                   console.log(`💀 [Enemy ${enemy.id}] Killed by spray! Total kills: ${defense.enemiesKilled}`);
                   spawnLoot(enemy.x, enemy.y);
 
@@ -6880,6 +6927,18 @@ function updateTurfDefense(dt) {
 
           // Update abilities (adrenaline expiry, explosions) - Feature 4
           try { if (typeof TurfAbilities !== 'undefined') TurfAbilities.update(dt); } catch (e) {}
+
+          // Update map hazards (Feature 6)
+          try { if (typeof MapHazards !== 'undefined') MapHazards.updateHazards(defense, dt); } catch (e) {}
+
+          // Update destructible environment (Feature 7)
+          try { if (typeof DestructibleEnv !== 'undefined') DestructibleEnv.update(defense, dt); } catch (e) {}
+
+          // Update damage direction indicators (Feature 10)
+          try { if (typeof DamageIndicator !== 'undefined') DamageIndicator.update(dt); } catch (e) {}
+
+          // Update screen shake (Feature 18)
+          try { if (typeof ScreenShake !== 'undefined') ScreenShake.update(dt); } catch (e) {}
 
           // Check wave completion (all enemies dead)
           // Safety: Ensure enemies array exists
@@ -7131,6 +7190,12 @@ function updateTurfDefense(dt) {
       // Render placed defenses (turrets, barricades) - Feature 3
       try { if (typeof PlaceableDefenses !== 'undefined') PlaceableDefenses.draw(ctx); } catch (e) {}
 
+      // Render map hazards (Feature 6)
+      try { if (typeof MapHazards !== 'undefined') MapHazards.drawHazards(ctx, defense); } catch (e) {}
+
+      // Render destructible environment (Feature 7)
+      try { if (typeof DestructibleEnv !== 'undefined') DestructibleEnv.drawBarriers(ctx); } catch (e) {}
+
       // Render player
       TurfDefenseRenderer.drawPlayer(ctx, defense);
 
@@ -7139,6 +7204,16 @@ function updateTurfDefense(dt) {
 
       // Render floating damage numbers
       TurfDefenseRenderer.drawDamageNumbers(ctx, defense);
+
+      // Render damage direction indicator (Feature 10)
+      try {
+        if (typeof DamageIndicator !== 'undefined') {
+          const cam = defense.camera || { x: defense.playerX, y: defense.playerY, zoom: 1 };
+          const screenCenterX = canvas.width / 2;
+          const screenCenterY = canvas.height / 2;
+          DamageIndicator.draw(ctx, screenCenterX, screenCenterY);
+        }
+      } catch (e) {}
 
       // Restore screen-space for HUD (so UI doesn't zoom with the camera)
       try { ctx.restore(); } catch (e) {}
@@ -7151,6 +7226,18 @@ function updateTurfDefense(dt) {
 
       // Render ability cooldown bar - Feature 4
       try { if (typeof TurfAbilities !== 'undefined') TurfAbilities.drawHUD(ctx, defense, canvas.width, canvas.height); } catch (e) {}
+
+      // Render kill feed (Feature 8)
+      try { if (typeof KillFeed !== 'undefined') KillFeed.draw(ctx, canvas.width, canvas.height); } catch (e) {}
+
+      // Render mini-map (Feature 9)
+      try { if (typeof MiniMap !== 'undefined') MiniMap.draw(ctx, defense, canvas.width, canvas.height); } catch (e) {}
+
+      // Render pause menu (Feature 11)
+      try { if (typeof PauseMenu !== 'undefined') PauseMenu.draw(ctx, defense, canvas.width, canvas.height); } catch (e) {}
+
+      // Render tutorial overlay (Feature 16)
+      try { if (typeof TutorialSystem !== 'undefined') TutorialSystem.draw(ctx, canvas.width, canvas.height); } catch (e) {}
 
       // DEBUG: Draw debug overlay (LAST - drawn on top)
       if (DEBUG_OVERLAY_ENABLED) {
@@ -7939,6 +8026,23 @@ function updateTurfDefense(dt) {
         defense.playerHP -= damage;
         enemy.lastAttackTime = now;
 
+        // Damage direction indicator (Feature 10)
+        try { if (typeof DamageIndicator !== 'undefined') DamageIndicator.addHit(defense.playerX, defense.playerY, enemy.x, enemy.y); } catch (e) {}
+
+        // Screen shake on player hit (Feature 18)
+        try { if (typeof ScreenShake !== 'undefined') ScreenShake.addShake(4, 0.2); } catch (e) {}
+
+        // Dumpster cover check (Feature 6)
+        try {
+          if (typeof MapHazards !== 'undefined') {
+            const coverReduction = MapHazards.getPlayerDamageReduction(defense.playerX, defense.playerY);
+            if (coverReduction > 0) {
+              const restored = Math.round(damage * coverReduction);
+              defense.playerHP += restored;
+            }
+          }
+        } catch (e) {}
+
         // Spawn damage number at player position
         const playerX = defense.playerX || TurfDefenseConfig.PLAYER_START_X;
         const playerY = defense.playerY || TurfDefenseConfig.PLAYER_START_Y;
@@ -8118,6 +8222,12 @@ function updateTurfDefense(dt) {
           const shootScoreVal = (hitEnemy.typeConfig && hitEnemy.typeConfig.scoreValue) || 100;
           defense.totalScore += shootScoreVal;
           try { if (typeof TurfShop !== 'undefined') TurfShop.awardCash(Math.round(shootScoreVal * 0.5)); } catch (e) {}
+
+          // Kill feed entry (Feature 8)
+          try { if (typeof KillFeed !== 'undefined') KillFeed.addKill(hitEnemy.typeConfig ? hitEnemy.typeConfig.name : 'Enemy', 'Gunshot'); } catch (e) {}
+
+          // Screen shake on kill (Feature 18)
+          try { if (typeof ScreenShake !== 'undefined') ScreenShake.addShake(2, 0.15); } catch (e) {}
 
           console.log(`💀 [Enemy ${hitEnemy.id}] Killed! Total kills: ${defense.enemiesKilled}`);
 
@@ -32532,9 +32642,27 @@ function getCameraShakeOffset(defense) {
     if (cs.t > 0) cs.t *= (cs.decay || 0.88);
     if (cs.t < 0.001) cs.t = 0;
 
-    if (cs.t <= 0 || !(cs.amp > 0)) return { x: 0, y: 0 };
+    if (cs.t <= 0 || !(cs.amp > 0)) {
+      // Also check ScreenShake system (Feature 18)
+      try {
+        if (typeof ScreenShake !== 'undefined') {
+          const ssOffset = ScreenShake.getOffset();
+          if (ssOffset.x !== 0 || ssOffset.y !== 0) return ssOffset;
+        }
+      } catch (e) {}
+      return { x: 0, y: 0 };
+    }
     const mag = cs.amp * cs.t;
-    return { x: (Math.random() * 2 - 1) * mag, y: (Math.random() * 2 - 1) * mag };
+    const baseShake = { x: (Math.random() * 2 - 1) * mag, y: (Math.random() * 2 - 1) * mag };
+    // Combine with ScreenShake system (Feature 18)
+    try {
+      if (typeof ScreenShake !== 'undefined') {
+        const ssOffset = ScreenShake.getOffset();
+        baseShake.x += ssOffset.x;
+        baseShake.y += ssOffset.y;
+      }
+    } catch (e) {}
+    return baseShake;
   } catch (e) {
     return { x: 0, y: 0 };
   }

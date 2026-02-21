@@ -455,6 +455,10 @@ const TurfShop = {
     defense.wave++;
     defense.waveState = 'active';
     defense.waveStartTime = Date.now();
+
+    // Spawn map hazards for new wave (Feature 6)
+    try { if (typeof MapHazards !== 'undefined') MapHazards.spawnHazards(defense); } catch (e) {}
+
     console.log('🌊 [TurfDefense] Starting wave', defense.wave, '(from shop)');
   },
 
@@ -1209,8 +1213,22 @@ function spawnEnhancedWaveEnemies() {
     }
   });
 
+  // Inject CIA agents at high heat (Feature 13)
+  try {
+    if (typeof CIACrossover !== 'undefined' && CIACrossover.shouldSpawnCIA()) {
+      CIACrossover.injectCIAEnemies(defense.enemies, wave);
+    }
+  } catch (e) {}
+
+  // Apply heat difficulty scaling (Feature 12)
+  try {
+    if (typeof HeatIntegration !== 'undefined') {
+      HeatIntegration.applyHeatToWave(defense.enemies);
+    }
+  } catch (e) {}
+
   defense.lastSpawnTime = Date.now();
-  console.log(`🌊 [Enhanced] Spawned ${spawnIdx} enemies total for wave ${wave}`);
+  console.log(`🌊 [Enhanced] Spawned ${defense.enemies.length} enemies total for wave ${wave}`);
 }
 
 /**
@@ -1695,6 +1713,8 @@ const MapHazards = {
               }
             });
             console.log('[MapHazards] Car exploded!');
+            // Screen shake on explosion (Feature 18)
+            try { if (typeof ScreenShake !== 'undefined') ScreenShake.addShake(8, 0.4); } catch (e) {}
           }
         }
       }
@@ -1805,6 +1825,10 @@ const MapHazards = {
         ctx.fillText('ALLEY', hazard.x, hazard.y + 4);
       }
     });
+  },
+
+  reset() {
+    this.activeHazards = [];
   }
 };
 
@@ -1903,6 +1927,10 @@ const DestructibleEnv = {
       ctx.fillStyle = hpRatio > 0.5 ? '#4CAF50' : (hpRatio > 0.25 ? '#FF9800' : '#F44336');
       ctx.fillRect(b.x - b.width / 2, b.y - b.height / 2 - 6, b.width * hpRatio, 4);
     });
+  },
+
+  reset() {
+    this.barriers = [];
   }
 };
 
@@ -1981,6 +2009,10 @@ const KillFeed = {
       }
       ctx.fillText(entry.text, feedX, y);
     });
+  },
+
+  reset() {
+    this.entries = [];
   }
 };
 
@@ -2120,6 +2152,10 @@ const DamageIndicator = {
 
       ctx.restore();
     });
+  },
+
+  reset() {
+    this.indicators = [];
   }
 };
 
@@ -2578,6 +2614,10 @@ const ScreenShake = {
     });
 
     return { x: totalX, y: totalY };
+  },
+
+  reset() {
+    this.shakes = [];
   }
 };
 
