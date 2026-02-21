@@ -2252,6 +2252,32 @@
       filter: brightness(0.85);
     }
 
+    /* Turf Defense small square button */
+    .turf-defense-btn-small {
+      display: inline-block;
+      width: 36px;
+      height: 36px;
+      margin: 4px 16px 0;
+      padding: 0;
+      border: 2px solid rgba(255, 152, 0, 0.7);
+      border-radius: 6px;
+      background: linear-gradient(135deg, rgba(40, 40, 40, 0.95), rgba(60, 30, 10, 0.95));
+      color: #FFD700;
+      font-size: 16px;
+      line-height: 32px;
+      text-align: center;
+      cursor: pointer;
+      z-index: 10;
+      box-shadow: 0 0 6px rgba(255, 152, 0, 0.4);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .turf-defense-btn-small:active {
+      transform: scale(0.92);
+      box-shadow: 0 0 10px rgba(255, 152, 0, 0.7);
+    }
+
     /* Popover Menu - positioned via JS relative to turf tab */
     .turf-popover-menu {
       position: absolute;
