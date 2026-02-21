@@ -1228,7 +1228,7 @@ function spawnEnhancedWaveEnemies() {
   } catch (e) {}
 
   defense.lastSpawnTime = Date.now();
-  console.log(`🌊 [Enhanced] Spawned ${defense.enemies.length} enemies total for wave ${wave}`);
+  console.log(`🌊 [Enhanced] Wave ${wave} ready: ${defense.enemies.length} total active enemies`);
 }
 
 /**
@@ -1851,11 +1851,12 @@ const DestructibleEnv = {
 
     for (let i = 0; i < count; i++) {
       const isVertical = Math.random() > 0.5;
+      const randomSize = 40 + Math.random() * 40;
       const barrier = {
         x: 80 + Math.random() * (canvasW - 160),
         y: 80 + Math.random() * (canvasH - 160),
-        width: isVertical ? 10 : (40 + Math.random() * 40),
-        height: isVertical ? (40 + Math.random() * 40) : 10,
+        width: isVertical ? 10 : randomSize,
+        height: isVertical ? randomSize : 10,
         hp: 100 + Math.floor(Math.random() * 101), // 100-200
         maxHp: 0,
         destroyed: false,
@@ -2288,7 +2289,7 @@ const HeatIntegration = {
 
     enemies.forEach(e => {
       e.hp = Math.round(e.hp * mult);
-      e.maxHp = Math.round((e.maxHp || e.hp) * mult);
+      e.maxHP = Math.round((e.maxHP || e.hp) * mult);
       e.damage = Math.round(e.damage * mult);
     });
 
@@ -2342,18 +2343,28 @@ const CIACrossover = {
   },
 
   /**
-   * Inject CIA agents into enemy spawn list
+   * Inject CIA agents into the actual enemies array
    */
   injectCIAEnemies(enemies, wave) {
     if (!this.shouldSpawnCIA()) return enemies;
     const count = this.getCIACount(wave);
     if (count <= 0) return enemies;
 
+    const canvasW = (GameState.map && GameState.map.width || 30) * 30;
+    const canvasH = (GameState.map && GameState.map.height || 30) * 30;
+
     for (let i = 0; i < count; i++) {
-      enemies.push({ type: 'ciaAgent', count: 1 });
+      const angle = Math.random() * Math.PI * 2;
+      const radius = Math.min(canvasW, canvasH) / 2 - 70;
+      const spawnPos = {
+        x: canvasW / 2 + Math.cos(angle) * radius,
+        y: canvasH / 2 + Math.sin(angle) * radius
+      };
+      const ciaEnemy = createTypedEnemy(`cia_${wave}_${i}`, spawnPos, 'ciaAgent');
+      enemies.push(ciaEnemy);
     }
 
-    console.log(`[CIACrossover] Injecting ${count} CIA agents into wave ${wave}`);
+    console.log(`[CIACrossover] Injected ${count} CIA agents into wave ${wave}`);
     return enemies;
   }
 };
@@ -2654,4 +2665,10 @@ window.TutorialSystem = TutorialSystem;
 window.AutoAim = AutoAim;
 window.ScreenShake = ScreenShake;
 
-console.log('✅ [TurfDefense Enhanced] Module loaded - Enemy Types, Shop, Defenses, Abilities, Weather, Map Hazards, Destructible Env, Kill Feed, Mini-Map, Damage Indicator, Pause Menu, Heat Integration, CIA Crossover, Gang Reputation, Building Investment, Tutorial, Auto-Aim, Screen Shake');
+const _enhancedFeatures = [
+  'Enemy Types', 'Shop', 'Defenses', 'Abilities', 'Weather',
+  'Map Hazards', 'Destructible Env', 'Kill Feed', 'Mini-Map',
+  'Damage Indicator', 'Pause Menu', 'Heat Integration', 'CIA Crossover',
+  'Gang Reputation', 'Building Investment', 'Tutorial', 'Auto-Aim', 'Screen Shake'
+];
+console.log('✅ [TurfDefense Enhanced] Module loaded:', _enhancedFeatures.join(', '));
