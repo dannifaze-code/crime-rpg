@@ -5934,6 +5934,21 @@ function scheduleTurfDefenseSpriteScaleMatch() {
       GameState.turfDefense.lastShootTime = 0;
       GameState.turfDefense.lastSprayTime = 0;
 
+      // Enhanced feature state initialization
+      GameState.turfDefense.defenses = [];           // Feature 3: Placed turrets/barricades
+      GameState.turfDefense.placingDefense = null;    // Feature 3: Current placement mode
+      GameState.turfDefense.explosions = [];          // Feature 4: Active explosions
+      GameState.turfDefense.adrenalineActive = false; // Feature 4: Adrenaline rush state
+      GameState.turfDefense.adrenalineEnd = 0;        // Feature 4: Adrenaline end time
+      GameState.turfDefense.damageMultiplier = 1.0;   // Feature 2: Shop damage boost
+      GameState.turfDefense.speedMultiplier = 1.0;    // Feature 2: Shop speed boost
+      GameState.turfDefense._mousePos = null;         // Feature 3: Mouse position for placement preview
+
+      // Reset enhanced systems
+      try { if (typeof TurfShop !== 'undefined') TurfShop.reset(); } catch (e) {}
+      try { if (typeof PlaceableDefenses !== 'undefined') PlaceableDefenses.reset(); } catch (e) {}
+      try { if (typeof TurfAbilities !== 'undefined') TurfAbilities.reset(); } catch (e) {}
+
       // Initialize player position at center of map
       GameState.turfDefense.playerX = canvasWidth / 2;
       GameState.turfDefense.playerY = canvasHeight / 2;
@@ -6066,6 +6081,11 @@ try {
       GameState.turfDefense.enemies = [];
       GameState.turfDefense.lootDrops = [];
       GameState.turfDefense.vfx = null;
+
+      // Cleanup enhanced systems
+      GameState.turfDefense.defenses = [];
+      GameState.turfDefense.explosions = [];
+      try { if (typeof TurfShop !== 'undefined') TurfShop.close(); } catch (e) {}
 
       // Clear structures and cleanup building refs
       if (GameState.turfDefense.structures) {
@@ -6604,8 +6624,12 @@ function updateTurfDefense(dt) {
           if (!defense.playerX) defense.playerX = canvasWidth / 2;
           if (!defense.playerY) defense.playerY = canvasHeight / 2;
 
-          defense.playerX += movement.x * TurfDefenseConfig.PLAYER_SPEED * dt;
-          defense.playerY += movement.y * TurfDefenseConfig.PLAYER_SPEED * dt;
+          // Apply speed multipliers from shop upgrades (Feature 2) and abilities (Feature 4)
+          const shopSpeedMult = defense.speedMultiplier || 1.0;
+          const abilitySpeedMult = (typeof TurfAbilities !== 'undefined') ? TurfAbilities.getSpeedMultiplier() : 1.0;
+          const totalSpeedMult = shopSpeedMult * abilitySpeedMult;
+          defense.playerX += movement.x * TurfDefenseConfig.PLAYER_SPEED * totalSpeedMult * dt;
+          defense.playerY += movement.y * TurfDefenseConfig.PLAYER_SPEED * totalSpeedMult * dt;
 
           // Clamp player to canvas bounds
           defense.playerX = Math.max(20, Math.min(canvasWidth - 20, defense.playerX));
@@ -6722,10 +6746,17 @@ function updateTurfDefense(dt) {
           }
 
           // Handle player shooting input (continuous)
-          if (defense.input.shooting && now - defense.lastShootTime >= TurfDefenseConfig.PLAYER_SHOOT_FIRE_RATE) {
+          // Apply fire rate multiplier from adrenaline (Feature 4)
+          const fireRateMult = (typeof TurfAbilities !== 'undefined') ? TurfAbilities.getFireRateMultiplier() : 1.0;
+          const effectiveFireRate = TurfDefenseConfig.PLAYER_SHOOT_FIRE_RATE * fireRateMult;
+          // Apply weather visibility modifier to shoot range (Feature 5)
+          const weatherVis = (typeof getTurfWeatherModifiers === 'function') ? getTurfWeatherModifiers().playerVisibility : 1.0;
+          const effectiveShootRange = TurfDefenseConfig.PLAYER_SHOOT_RANGE * weatherVis;
+
+          if (defense.input.shooting && now - defense.lastShootTime >= effectiveFireRate) {
             // Find nearest enemy and shoot
             let nearestEnemy = null;
-            let nearestDist = TurfDefenseConfig.PLAYER_SHOOT_RANGE;
+            let nearestDist = effectiveShootRange;
 
             defense.enemies.forEach(enemy => {
               if (enemy.state === 'dead') return;
@@ -6747,7 +6778,8 @@ function updateTurfDefense(dt) {
           }
 
           // Handle player spraying input (continuous)
-          if (defense.input.spraying && now - defense.lastSprayTime >= TurfDefenseConfig.PLAYER_SPRAY_FIRE_RATE) {
+          const effectiveSprayRate = TurfDefenseConfig.PLAYER_SPRAY_FIRE_RATE * fireRateMult;
+          if (defense.input.spraying && now - defense.lastSprayTime >= effectiveSprayRate) {
             // Spray damages all enemies in range (area damage)
             let hitCount = 0;
 
@@ -6762,7 +6794,10 @@ function updateTurfDefense(dt) {
               if (dist < TurfDefenseConfig.PLAYER_SHOOT_RANGE * 0.7) {
                 const turfSprayWeapon = (typeof WeaponsSystem !== 'undefined') ? WeaponsSystem.getEquippedWeapon() : null;
                 const turfSprayMult = turfSprayWeapon ? turfSprayWeapon.stats.damage : 1.0;
-                const damage = Math.round(TurfDefenseConfig.PLAYER_SPRAY_DAMAGE * turfSprayMult);
+                // Apply shop damage boost (Feature 2) and weather modifier (Feature 5)
+                const sprayShopMult = (defense.damageMultiplier) || 1.0;
+                const sprayWeatherMult = (typeof getTurfWeatherModifiers === 'function') ? getTurfWeatherModifiers().playerDamage : 1.0;
+                const damage = Math.round(TurfDefenseConfig.PLAYER_SPRAY_DAMAGE * turfSprayMult * sprayShopMult * sprayWeatherMult);
                 enemy.hp -= damage;
 
                 // Spawn damage number
@@ -6778,7 +6813,9 @@ function updateTurfDefense(dt) {
                 if (enemy.hp <= 0) {
                   enemy.state = 'dead';
                   defense.enemiesKilled++;
-                  defense.totalScore += 100;
+                  const sprayScoreVal = (enemy.typeConfig && enemy.typeConfig.scoreValue) || 100;
+                  defense.totalScore += sprayScoreVal;
+                  try { if (typeof TurfShop !== 'undefined') TurfShop.awardCash(Math.round(sprayScoreVal * 0.5)); } catch (e) {}
                   console.log(`💀 [Enemy ${enemy.id}] Killed by spray! Total kills: ${defense.enemiesKilled}`);
                   spawnLoot(enemy.x, enemy.y);
 
@@ -6837,6 +6874,12 @@ function updateTurfDefense(dt) {
 
           // Update loot pickups
           updateLootPickups(dt);
+
+          // Update placeable defenses (turret AI, barricade damage) - Feature 3
+          try { if (typeof PlaceableDefenses !== 'undefined') PlaceableDefenses.update(dt); } catch (e) {}
+
+          // Update abilities (adrenaline expiry, explosions) - Feature 4
+          try { if (typeof TurfAbilities !== 'undefined') TurfAbilities.update(dt); } catch (e) {}
 
           // Check wave completion (all enemies dead)
           // Safety: Ensure enemies array exists
@@ -6913,30 +6956,57 @@ function updateTurfDefense(dt) {
             return;
           }
 
-          // Schedule next wave exactly once
+          // Open shop between waves (Feature 2) - replaces auto-advance
           if (!defense._nextWaveScheduled) {
             defense._nextWaveScheduled = true;
 
-            // Small breather between waves
+            // Brief delay then open shop
             setTimeout(() => {
               if (!defense.active || defense.waveState !== 'complete') return;
-
-              defense.wave++;
-              defense.waveState = 'active';
-              defense.waveStartTime = Date.now();
-              console.log('🌊 [TurfDefense] Starting wave', defense.wave);
-
-              // Spawn immediately so the action doesn't pause
-              try { spawnWaveEnemies(); } catch (e) {}
-
-              // Tiny safety unlock for scheduler (kept for stability)
-              setTimeout(() => {
-                if (!defense.active) return;
-                // Allow future schedules
-                defense._nextWaveScheduled = false;
-              }, 150);
-            }, 2000);
+              defense.waveState = 'shopping';
+              try { if (typeof TurfShop !== 'undefined') TurfShop.open(); } catch (e) {}
+            }, 1500);
           }
+          break;
+
+        case 'shopping':
+          // Shop phase - player can move and buy upgrades, waiting for them to continue
+          try {
+            const mapWidth = (GameState.map && GameState.map.width) || 30;
+            const mapHeight = (GameState.map && GameState.map.height) || 30;
+            const tileSize = 30;
+            const canvasWidth = mapWidth * tileSize;
+            const canvasHeight = mapHeight * tileSize;
+
+            const rawMove = TouchControls.getMovement();
+            const dead = 0.18;
+            let mx = rawMove.x;
+            let my = rawMove.y;
+            if (Math.abs(mx) < dead) mx = 0;
+            if (Math.abs(my) < dead) my = 0;
+            const mlen = Math.hypot(mx, my);
+            if (mlen > 1) { mx /= mlen; my /= mlen; }
+            const movement = { x: mx, y: my };
+
+            if (!defense.playerX) defense.playerX = canvasWidth / 2;
+            if (!defense.playerY) defense.playerY = canvasHeight / 2;
+
+            defense.playerX += movement.x * TurfDefenseConfig.PLAYER_SPEED * dt;
+            defense.playerY += movement.y * TurfDefenseConfig.PLAYER_SPEED * dt;
+            defense.playerX = Math.max(20, Math.min(canvasWidth - 20, defense.playerX));
+            defense.playerY = Math.max(20, Math.min(canvasHeight - 20, defense.playerY));
+
+            // Handle defense placement clicks
+            if (defense.placingDefense && defense._pendingPlacement) {
+              try {
+                if (typeof PlaceableDefenses !== 'undefined') {
+                  PlaceableDefenses.placeDefense(defense.placingDefense, defense._pendingPlacement.x, defense._pendingPlacement.y);
+                }
+              } catch (e) {}
+              defense.placingDefense = null;
+              defense._pendingPlacement = null;
+            }
+          } catch (e) {}
           break;
 
         case 'failed':
@@ -7058,8 +7128,14 @@ function updateTurfDefense(dt) {
       // Render loot drops
       TurfDefenseRenderer.drawLoot(ctx, defense);
 
+      // Render placed defenses (turrets, barricades) - Feature 3
+      try { if (typeof PlaceableDefenses !== 'undefined') PlaceableDefenses.draw(ctx); } catch (e) {}
+
       // Render player
       TurfDefenseRenderer.drawPlayer(ctx, defense);
+
+      // Render explosion effects - Feature 4
+      try { if (typeof TurfAbilities !== 'undefined') TurfAbilities.drawExplosions(ctx); } catch (e) {}
 
       // Render floating damage numbers
       TurfDefenseRenderer.drawDamageNumbers(ctx, defense);
@@ -7069,6 +7145,12 @@ function updateTurfDefense(dt) {
 
       // Render HUD
       TurfDefenseRenderer.drawHUD(ctx, defense, canvas.width, canvas.height);
+
+      // Render enhanced HUD (weather, defense cash, wave preview) - Feature 5
+      try { if (typeof drawEnhancedHUD === 'function') drawEnhancedHUD(ctx, defense, canvas.width, canvas.height); } catch (e) {}
+
+      // Render ability cooldown bar - Feature 4
+      try { if (typeof TurfAbilities !== 'undefined') TurfAbilities.drawHUD(ctx, defense, canvas.width, canvas.height); } catch (e) {}
 
       // DEBUG: Draw debug overlay (LAST - drawn on top)
       if (DEBUG_OVERLAY_ENABLED) {
@@ -7338,6 +7420,10 @@ function updateTurfDefense(dt) {
      * Spawn enemies for current wave
      */
     function spawnWaveEnemies() {
+      // Use enhanced spawning if available (enemy variety system)
+      if (typeof spawnEnhancedWaveEnemies === 'function') {
+        return spawnEnhancedWaveEnemies();
+      }
       const defense = GameState.turfDefense;
       const wave = defense.wave;
       const enemyCount = TurfDefenseConfig.WAVE_ENEMIES[wave] || 10;
@@ -7429,6 +7515,10 @@ function updateTurfDefense(dt) {
      * Update enemy AI and behavior
      */
     function updateEnemyAI(enemy, dt, defense) {
+      // Use enhanced AI if available (enemy variety + weather + barricades)
+      if (typeof updateEnhancedEnemyAI === 'function' && enemy.enemyType) {
+        return updateEnhancedEnemyAI(enemy, dt, defense);
+      }
       if (enemy.state === 'dead') return;
 
       const playerX = defense.playerX || (GameState.map ? (GameState.map.width * 15) : 450);
@@ -8002,7 +8092,10 @@ function updateTurfDefense(dt) {
         // Base damage scaled by equipped weapon's damage stat
         const turfShootWeapon = (typeof WeaponsSystem !== 'undefined') ? WeaponsSystem.getEquippedWeapon() : null;
         const turfShootMult = turfShootWeapon ? turfShootWeapon.stats.damage : 1.0;
-        const damage = Math.round(TurfDefenseConfig.PLAYER_SHOOT_DAMAGE * turfShootMult);
+        // Apply shop damage boost (Feature 2) and weather modifier (Feature 5)
+        const shopDmgMult = (GameState.turfDefense && GameState.turfDefense.damageMultiplier) || 1.0;
+        const weatherDmgMult = (typeof getTurfWeatherModifiers === 'function') ? getTurfWeatherModifiers().playerDamage : 1.0;
+        const damage = Math.round(TurfDefenseConfig.PLAYER_SHOOT_DAMAGE * turfShootMult * shopDmgMult * weatherDmgMult);
 
         // Deal damage
         hitEnemy.hp -= damage;
@@ -8022,7 +8115,9 @@ function updateTurfDefense(dt) {
         if (hitEnemy.hp <= 0) {
           hitEnemy.state = 'dead';
           defense.enemiesKilled++;
-          defense.totalScore += 100;
+          const shootScoreVal = (hitEnemy.typeConfig && hitEnemy.typeConfig.scoreValue) || 100;
+          defense.totalScore += shootScoreVal;
+          try { if (typeof TurfShop !== 'undefined') TurfShop.awardCash(Math.round(shootScoreVal * 0.5)); } catch (e) {}
 
           console.log(`💀 [Enemy ${hitEnemy.id}] Killed! Total kills: ${defense.enemiesKilled}`);
 
@@ -8163,14 +8258,41 @@ function updateTurfDefense(dt) {
           tdParent.appendChild(this.canvas);
           this.ctx = this.canvas.getContext('2d');
 
-          // Add click handler for desktop shooting
+          // Add click handler for desktop shooting and defense placement
           this.canvas.addEventListener('click', (e) => {
             const rect = this.canvas.getBoundingClientRect();
             const x = (e.clientX - rect.left) * (canvasWidth / rect.width);
             const y = (e.clientY - rect.top) * (canvasHeight / rect.height);
 
+            // Check if we're placing a defense (Feature 3)
+            const defense = GameState.turfDefense;
+            if (defense && defense.placingDefense) {
+              try {
+                if (typeof PlaceableDefenses !== 'undefined') {
+                  PlaceableDefenses.placeDefense(defense.placingDefense, x, y);
+                }
+              } catch (err) {}
+              defense.placingDefense = null;
+              // Remove placement message
+              const msg = document.getElementById('turf-placement-msg');
+              if (msg && msg.parentNode) msg.parentNode.removeChild(msg);
+              return;
+            }
+
             console.log(`🖱️ [Canvas] Click at (${x.toFixed(0)}, ${y.toFixed(0)})`);
             playerShootAtPosition(x, y);
+          });
+
+          // Track mouse position for placement preview (Feature 3)
+          this.canvas.addEventListener('mousemove', (e) => {
+            const defense = GameState.turfDefense;
+            if (defense && defense.placingDefense) {
+              const rect = this.canvas.getBoundingClientRect();
+              defense._mousePos = {
+                x: (e.clientX - rect.left) * (canvasWidth / rect.width),
+                y: (e.clientY - rect.top) * (canvasHeight / rect.height)
+              };
+            }
           });
 
           console.log(`🎨 [TurfDefenseRenderer] Canvas initialized (${canvasWidth}x${canvasHeight})`);
@@ -8423,6 +8545,10 @@ function updateTurfDefense(dt) {
        * Draw enemies (placeholder circles)
        */
       drawEnemy(ctx, enemy) {
+        // Use enhanced drawing if available (type-specific visuals)
+        if (typeof drawEnhancedEnemy === 'function' && enemy.enemyType) {
+          return drawEnhancedEnemy(ctx, enemy);
+        }
         if (enemy.state === 'dead') return;
 
         // Use visualHP for smooth animation
