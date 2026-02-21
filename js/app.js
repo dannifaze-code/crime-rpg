@@ -31036,54 +31036,129 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
     // ========================================
     // CITY NEWS TICKER
     // ========================================
+    // ========================================
+    // CITY NEWS  →  Spinning Newspaper Modal
+    // ========================================
+    // Spins into the centre of the screen every 30 minutes of gameplay.
+    // Filled from gangWarLog + heatLog. Easily dismissed.
     const CityNewsTicker = {
-      _el: null,
-      _inner: null,
+      _overlay: null,
       _styleInjected: false,
-      _updateInterval: null,
+      _checkInterval: null,
+      _lastShownAt: 0,       // ms timestamp of most recent show
+      _hasNewContent: false, // flagged whenever new log events arrive
+      SHOW_INTERVAL_MS: 30 * 60 * 1000, // 30 minutes
 
       init() {
-        if (this._el) return; // Already mounted
         this._injectStyles();
-
-        const ticker = document.createElement('div');
-        ticker.id = 'city-news-ticker';
-        const inner = document.createElement('div');
-        inner.id = 'city-news-ticker-inner';
-        ticker.appendChild(inner);
-        document.body.appendChild(ticker);
-
-        this._el = ticker;
-        this._inner = inner;
-        this.update();
-
-        // Refresh every 30 seconds
-        this._updateInterval = setInterval(() => this.update(), 30000);
+        // Start clock — first edition appears 30 min after game start, not immediately
+        this._lastShownAt = Date.now();
+        // Check every 60 s whether it is time to show the paper
+        this._checkInterval = setInterval(() => this._maybeShow(), 60000);
       },
 
-      // Pull entries from gangWarLog + heatLog and re-render the scrolling strip
+      // Called after crime resolution, war events, etc.
+      // Flags new content; actual display is time-gated to 30 min.
       update() {
-        if (!this._inner) return;
+        const hasWar  = (GameState.gangWarLog || []).length > 0;
+        const hasHeat = (GameState.heatLog    || []).length > 0;
+        if (hasWar || hasHeat) this._hasNewContent = true;
+        this._maybeShow();
+      },
 
-        const warEvents  = (GameState.gangWarLog  || []).slice(-15);
-        const heatEvents = (GameState.heatLog     || []).slice(-10);
+      _maybeShow() {
+        if (!this._hasNewContent) return;
+        if (this._overlay) return; // already on screen
+        if (Date.now() - this._lastShownAt < this.SHOW_INTERVAL_MS) return;
+        this.show();
+      },
 
-        // Merge and sort newest first
-        const combined = warEvents.concat(heatEvents).sort((a, b) => b.timestamp - a.timestamp);
+      show() {
+        if (this._overlay) return;
 
-        if (combined.length === 0) {
-          this._el.style.display = 'none';
-          return;
+        const warEvents  = (GameState.gangWarLog || []).slice(-8);
+        const heatEvents = (GameState.heatLog    || []).slice(-5);
+        const combined   = warEvents.concat(heatEvents)
+                             .sort((a, b) => b.timestamp - a.timestamp)
+                             .slice(0, 6);
+        if (combined.length === 0) return;
+
+        this._lastShownAt   = Date.now();
+        this._hasNewContent = false;
+
+        // Formatted date for masthead
+        const now  = new Date();
+        const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+        const MONS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        const dateStr = `${DAYS[now.getDay()]}, ${MONS[now.getMonth()]} ${now.getDate()} ${now.getFullYear()}`;
+        const vol     = Math.max(1, Math.floor((Date.now() - 1704067200000) / 86400000));
+
+        // Split events into two columns
+        const half  = Math.ceil(combined.length / 2);
+        const leftS = combined.slice(0, half);
+        const rightS = combined.slice(half);
+
+        const storyBlock = (arr) => arr.map((e, i) => `
+          ${i > 0 ? '<hr class="np-story-rule"/>' : ''}
+          <div class="np-story">
+            <div class="np-story-headline">${e.message || ''}</div>
+            <div class="np-story-time">${this._relativeTime(e.timestamp)}</div>
+          </div>`).join('');
+
+        // Build overlay
+        const overlay = document.createElement('div');
+        overlay.id = 'np-overlay';
+        overlay.innerHTML = `
+          <div id="np-paper">
+            <button id="np-close" title="Close">✕ CLOSE</button>
+
+            <div class="np-masthead">
+              <div class="np-extra-badge">EXTRA! EXTRA!</div>
+              <div class="np-title">HEATLINE: UNDERWORLD</div>
+              <div class="np-sub">City Intelligence Report &nbsp;·&nbsp; Late Edition</div>
+              <div class="np-meta">
+                <span>${dateStr}</span>
+                <span>Vol. ${vol}</span>
+                <span>PRICE: YOUR FREEDOM</span>
+              </div>
+            </div>
+
+            <div class="np-rule-thick"></div>
+            <div class="np-kicker">— BREAKING INTELLIGENCE FROM THE STREETS —</div>
+            <div class="np-rule-thin"></div>
+
+            <div class="np-columns">
+              <div class="np-col">${storyBlock(leftS)}</div>
+              ${rightS.length ? `<div class="np-col-divider"></div><div class="np-col">${storyBlock(rightS)}</div>` : ''}
+            </div>
+
+            <div class="np-rule-thin"></div>
+            <div class="np-footer">All stories unverified &nbsp;·&nbsp; Sources anonymous &nbsp;·&nbsp; Read at own risk</div>
+          </div>`;
+
+        document.body.appendChild(overlay);
+        this._overlay = overlay;
+
+        // Dismiss on close button or clicking backdrop
+        overlay.querySelector('#np-close').addEventListener('click', () => this.dismiss());
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) this.dismiss(); });
+      },
+
+      dismiss() {
+        if (!this._overlay) return;
+        const paper = this._overlay.querySelector('#np-paper');
+        const doRemove = () => {
+          if (this._overlay && this._overlay.parentNode) {
+            this._overlay.parentNode.removeChild(this._overlay);
+          }
+          this._overlay = null;
+        };
+        if (paper) {
+          paper.style.animation = 'np-spin-out 0.4s cubic-bezier(0.55,0,1,0.45) forwards';
+          setTimeout(doRemove, 420);
+        } else {
+          doRemove();
         }
-        this._el.style.display = 'block';
-
-        const formatted = combined.map(e => {
-          const ago = this._relativeTime(e.timestamp);
-          const text = e.message || '';
-          return `<span class="ticker-item">${text} <span class="ticker-time">${ago}</span></span>`;
-        }).join('<span class="ticker-sep">  ●  </span>');
-
-        this._inner.innerHTML = formatted + '<span class="ticker-sep">  ●  </span>';
       },
 
       _relativeTime(ts) {
@@ -31099,40 +31174,165 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       _injectStyles() {
         if (this._styleInjected) return;
         this._styleInjected = true;
-        const style = document.createElement('style');
-        style.textContent = `
-          #city-news-ticker {
+        const s = document.createElement('style');
+        s.textContent = `
+          /* Newspaper backdrop */
+          #np-overlay {
             position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            height: 28px;
-            background: rgba(10, 14, 24, 0.92);
-            border-top: 1px solid #2a3550;
-            z-index: 9990;
-            overflow: hidden;
-            display: none;
-          }
-          #city-news-ticker-inner {
-            display: inline-flex;
+            inset: 0;
+            background: rgba(0,0,0,0.65);
+            z-index: 9995;
+            display: flex;
             align-items: center;
-            height: 100%;
-            white-space: nowrap;
-            animation: ticker-scroll 60s linear infinite;
-            font-size: 11px;
-            color: #c8d0e0;
-            padding-left: 100%;
+            justify-content: center;
+            animation: np-backdrop-in 0.35s ease forwards;
           }
-          #city-news-ticker-inner:hover { animation-play-state: paused; }
-          .ticker-item { padding: 0 6px; }
-          .ticker-time { color: #6a7a98; font-size: 10px; }
-          .ticker-sep  { color: #3a4a68; }
-          @keyframes ticker-scroll {
-            from { transform: translateX(0); }
-            to   { transform: translateX(-50%); }
+          @keyframes np-backdrop-in {
+            from { background: rgba(0,0,0,0); }
+            to   { background: rgba(0,0,0,0.65); }
+          }
+
+          /* Newspaper card */
+          #np-paper {
+            position: relative;
+            width: min(390px, 93vw);
+            max-height: 86vh;
+            overflow-y: auto;
+            background: #f3ecca;
+            background-image:
+              repeating-linear-gradient(0deg,
+                transparent, transparent 23px,
+                rgba(0,0,0,0.045) 23px, rgba(0,0,0,0.045) 24px);
+            border: 3px double #1a1208;
+            border-radius: 3px;
+            box-shadow: 0 28px 90px rgba(0,0,0,0.88),
+                        inset 0 0 50px rgba(0,0,0,0.07);
+            padding: 18px 22px 14px;
+            font-family: 'Georgia', 'Times New Roman', serif;
+            color: #1a1208;
+            animation: np-spin-in 0.78s cubic-bezier(0.175,0.885,0.32,1.275) forwards;
+            transform-origin: center center;
+          }
+          @keyframes np-spin-in {
+            from { transform: rotate(-540deg) scale(0.06); opacity: 0; }
+            to   { transform: rotate(0deg)   scale(1);    opacity: 1; }
+          }
+          @keyframes np-spin-out {
+            from { transform: rotate(0deg)   scale(1);    opacity: 1; }
+            to   { transform: rotate(360deg) scale(0.05); opacity: 0; }
+          }
+
+          /* Close button */
+          #np-close {
+            position: absolute;
+            top: 8px; right: 10px;
+            background: none;
+            border: 1px solid #1a1208;
+            border-radius: 2px;
+            color: #1a1208;
+            font-size: 9px;
+            font-family: sans-serif;
+            font-weight: 700;
+            letter-spacing: 1px;
+            padding: 2px 7px;
+            cursor: pointer;
+            opacity: 0.65;
+          }
+          #np-close:hover { opacity: 1; background: #1a1208; color: #f3ecca; }
+
+          /* Masthead */
+          .np-masthead { text-align: center; margin-bottom: 5px; }
+          .np-extra-badge {
+            display: inline-block;
+            background: #b03020;
+            color: #f3ecca;
+            font-size: 9px;
+            font-weight: 700;
+            font-family: sans-serif;
+            letter-spacing: 2.5px;
+            text-transform: uppercase;
+            padding: 2px 10px;
+            border-radius: 2px;
+            margin-bottom: 5px;
+          }
+          .np-title {
+            font-size: 28px;
+            font-weight: 900;
+            letter-spacing: -0.5px;
+            line-height: 1;
+            text-transform: uppercase;
+            font-style: italic;
+          }
+          .np-sub {
+            font-size: 9.5px;
+            letter-spacing: 1.8px;
+            text-transform: uppercase;
+            color: #5a4a2a;
+            margin-top: 3px;
+          }
+          .np-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 8.5px;
+            color: #6a5a3a;
+            margin-top: 5px;
+            letter-spacing: 0.3px;
+          }
+
+          /* Dividers / kicker */
+          .np-rule-thick { border: none; border-top: 3px solid #1a1208; margin: 5px 0; }
+          .np-rule-thin  { border: none; border-top: 1px solid #1a1208; margin: 5px 0; }
+          .np-kicker {
+            text-align: center;
+            font-size: 9px;
+            letter-spacing: 2px;
+            color: #5a4a2a;
+            text-transform: uppercase;
+            margin: 3px 0;
+          }
+
+          /* Two-column layout */
+          .np-columns {
+            display: flex;
+            gap: 0;
+            align-items: flex-start;
+            margin: 8px 0 6px;
+          }
+          .np-col { flex: 1; min-width: 0; }
+          .np-col-divider {
+            width: 1px;
+            background: #1a1208;
+            align-self: stretch;
+            margin: 0 10px;
+          }
+
+          /* Individual story */
+          .np-story { padding: 4px 0; }
+          .np-story-headline {
+            font-size: 11.5px;
+            font-weight: 700;
+            line-height: 1.35;
+            text-transform: uppercase;
+            letter-spacing: 0.15px;
+          }
+          .np-story-time {
+            font-size: 8.5px;
+            color: #7a6a4a;
+            font-style: italic;
+            margin-top: 2px;
+          }
+          .np-story-rule { border: none; border-top: 1px dashed #c8b87a; margin: 5px 0; }
+
+          /* Footer */
+          .np-footer {
+            font-size: 7.5px;
+            text-align: center;
+            color: #8a7a5a;
+            font-style: italic;
+            letter-spacing: 0.5px;
           }
         `;
-        document.head.appendChild(style);
+        document.head.appendChild(s);
       }
     };
 
