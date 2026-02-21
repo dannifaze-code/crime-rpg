@@ -6707,7 +6707,9 @@ function updateTurfDefense(dt) {
 
               // Spray has shorter range than shooting
               if (dist < TurfDefenseConfig.PLAYER_SHOOT_RANGE * 0.7) {
-                const damage = TurfDefenseConfig.PLAYER_SPRAY_DAMAGE;
+                const turfSprayWeapon = (typeof WeaponsSystem !== 'undefined') ? WeaponsSystem.getEquippedWeapon() : null;
+                const turfSprayMult = turfSprayWeapon ? turfSprayWeapon.stats.damage : 1.0;
+                const damage = Math.round(TurfDefenseConfig.PLAYER_SPRAY_DAMAGE * turfSprayMult);
                 enemy.hp -= damage;
 
                 // Spawn damage number
@@ -7944,7 +7946,10 @@ function updateTurfDefense(dt) {
       });
 
       if (hitEnemy) {
-        const damage = 25; // Damage per shot
+        // Base damage scaled by equipped weapon's damage stat
+        const turfShootWeapon = (typeof WeaponsSystem !== 'undefined') ? WeaponsSystem.getEquippedWeapon() : null;
+        const turfShootMult = turfShootWeapon ? turfShootWeapon.stats.damage : 1.0;
+        const damage = Math.round(TurfDefenseConfig.PLAYER_SHOOT_DAMAGE * turfShootMult);
 
         // Deal damage
         hitEnemy.hp -= damage;
@@ -18960,7 +18965,16 @@ function ensureLandmarkProperties() {
         const suspicion = GameState.player.suspicion || 0;
         const suspicionPenalty = (suspicion / 100) * 0.15; // Up to -15%
         successChance -= suspicionPenalty;
-        
+
+        // 7. Global heat / police activity modifier
+        const policeActivity = (GameState.cityState && GameState.cityState.policeActivity) || 'low';
+        const heatActivityMultiplier = { low: 1.00, medium: 0.90, high: 0.75, extreme: 0.55 }[policeActivity] || 1.0;
+        successChance *= heatActivityMultiplier;
+
+        // 8. Weather modifier
+        const weatherMods = this.getWeatherModifiers();
+        successChance *= weatherMods.crimeSuccess;
+
         // Clamp
         return Math.max(0.05, Math.min(0.95, successChance));
       },
@@ -18984,43 +18998,82 @@ function ensureLandmarkProperties() {
           heatGain *= densityMultiplier;
         }
         
-        // 3. Detection chance (random)
-        if (Math.random() < biomeModifiers.detectionChance) {
+        // 3. Detection chance (random) — scaled by weather visibility
+        const heatWeatherMods = this.getWeatherModifiers();
+        const detectionChance = biomeModifiers.detectionChance * heatWeatherMods.detection;
+        if (Math.random() < detectionChance) {
           heatGain *= 1.5; // +50% if detected
           console.log('🚨 DETECTED! Heat increased');
         }
-        
+
+        // 4. Weather heat modifier (rain reduces evidence, heat amplifies it)
+        heatGain *= heatWeatherMods.heatGain;
+
         return heatGain;
       },
-      
+
       // Calculate reward with biome modifiers
       calculateReward(baseReward, position) {
         let reward = baseReward;
-        
+
         // 1. Biome modifier
         const biomeModifiers = this.getBiomeModifiersAt(position.x, position.y);
         reward *= biomeModifiers.rewardMultiplier;
-        
+
         // 2. Building density (from Phase 7.5)
         const zoneReward = ZoneAnalytics.getRewardModifier(position.x, position.y);
         reward *= zoneReward;
-        
+
         return Math.floor(reward);
       },
-      
+
       // Get police response time in milliseconds
       getPoliceResponseTime(position) {
         const biomeModifiers = this.getBiomeModifiersAt(position.x, position.y);
-        
+
         const responseTimes = {
           fast: { min: 20000, max: 30000 },        // 20-30s
           medium: { min: 40000, max: 60000 },      // 40-60s
           slow: { min: 60000, max: 90000 },        // 60-90s
           very_slow: { min: 90000, max: 120000 }   // 90-120s
         };
-        
+
         const timeRange = responseTimes[biomeModifiers.policeResponse] || responseTimes.medium;
-        return timeRange.min + Math.random() * (timeRange.max - timeRange.min);
+        const baseTime = timeRange.min + Math.random() * (timeRange.max - timeRange.min);
+
+        // Weather slows cop response (fog/storm = slower, heat = faster/more aggressive)
+        const weatherMods = this.getWeatherModifiers();
+        // policeSpeed < 1 means cops are slower → longer response time
+        return baseTime / Math.max(0.4, weatherMods.policeSpeed);
+      },
+
+      // Read current weather and return gameplay modifier set
+      getWeatherModifiers() {
+        let weatherType = 'clear';
+        try {
+          if (typeof WeatherOverlay !== 'undefined' &&
+              WeatherOverlay.weatherManager &&
+              WeatherOverlay.weatherManager.activeWeatherType) {
+            weatherType = WeatherOverlay.weatherManager.activeWeatherType;
+          } else if (GameState.weather && GameState.weather.currentType) {
+            weatherType = GameState.weather.currentType;
+          }
+        } catch(e) {}
+
+        // crimeSuccess: multiplier on crime roll
+        // heatGain: multiplier on heat generated
+        // detection: multiplier on detection probability check
+        // policeSpeed: cop movement speed factor (< 1 = slower cops = longer response)
+        const WEATHER_MODS = {
+          clear:  { crimeSuccess: 1.00, heatGain: 1.00, detection: 1.00, policeSpeed: 1.00 },
+          fog:    { crimeSuccess: 1.10, heatGain: 0.80, detection: 0.65, policeSpeed: 0.85 },
+          rain:   { crimeSuccess: 1.05, heatGain: 0.90, detection: 0.80, policeSpeed: 0.90 },
+          storm:  { crimeSuccess: 1.08, heatGain: 1.10, detection: 0.70, policeSpeed: 0.75 },
+          snow:   { crimeSuccess: 0.90, heatGain: 0.85, detection: 0.90, policeSpeed: 0.80 },
+          heat:   { crimeSuccess: 0.95, heatGain: 1.30, detection: 1.10, policeSpeed: 1.10 }
+        };
+
+        return WEATHER_MODS[weatherType] || WEATHER_MODS.clear;
       }
     };
 
@@ -21035,9 +21088,25 @@ function ensureLandmarkProperties() {
         const areaPenalty = (areaRisk / 100) * 0.15; // Up to -15% in hot zones
         successChance -= areaPenalty;
         
-        // 6. Equipment bonuses (future expansion)
-        // successChance += this.getEquipmentBonus(crimeId);
-        
+        // 6. Equipped weapon bonuses
+        const equippedWeaponForCrime = WeaponsSystem.getEquippedWeapon();
+        if (equippedWeaponForCrime) {
+          const ws = equippedWeaponForCrime.stats;
+          // Stealth-based crimes (street / theft) are hurt by loud weapons
+          if (crime.category === 'theft' || crime.category === 'street') {
+            successChance -= ws.stealthPenalty * 0.25;
+          }
+          // Violent / organized crimes benefit from firepower
+          if (crime.category === 'organized' || (crime.statModifiers && crime.statModifiers.strength)) {
+            successChance += (ws.damage - 1.0) * 0.06;
+          }
+          // Speed helps every crime (better escape chance)
+          successChance += ws.speedModifier * 0.05;
+        }
+
+        // 7. Property network bonus
+        successChance += this.getPropertyNetworkBonus(crime);
+
         // Clamp between 5% and 95%
         return Math.max(0.05, Math.min(0.95, successChance));
       },
@@ -21194,12 +21263,17 @@ function ensureLandmarkProperties() {
           outcomeData.cashMultiplier
         );
         
-        const xpReward = this.calculateReward(
-          crime.rewards.xp.min, 
-          crime.rewards.xp.max, 
+        let xpReward = this.calculateReward(
+          crime.rewards.xp.min,
+          crime.rewards.xp.max,
           outcomeData.xpMultiplier
         );
-        
+        // Apply equipped weapon's XP multiplier
+        const weaponForXP = WeaponsSystem.getEquippedWeapon();
+        if (weaponForXP && weaponForXP.stats.xpMultiplier !== 1.0) {
+          xpReward = Math.round(xpReward * weaponForXP.stats.xpMultiplier);
+        }
+
         let repReward = Math.floor(
           this.calculateReward(
             crime.rewards.reputation.min, 
@@ -21346,6 +21420,50 @@ function ensureLandmarkProperties() {
         return intensityMap[outcomeTier] || 30;
       },
       
+      // Property network bonus: owned buildings boost related crime categories
+      getPropertyNetworkBonus(crime) {
+        if (!Array.isArray(GameState.propertyBuildings)) return 0;
+        const ownedTypes = GameState.propertyBuildings
+          .filter(b => b.owned)
+          .map(b => (b.type || b.typeId || b.id || '').toLowerCase());
+
+        let bonus = 0;
+
+        // Chop Shop → vehicle theft operations
+        if ((ownedTypes.includes('chopshop') || ownedTypes.includes('chop_shop')) &&
+            (crime.category === 'theft' || crime.id === 'carTheft' || (crime.id && crime.id.startsWith('steal')))) {
+          bonus += 0.15;
+        }
+
+        // Docks → smuggling / organized ops
+        if (ownedTypes.includes('docks') && crime.category === 'organized') {
+          bonus += 0.12;
+        }
+
+        // Gun Shop → armed / violent crimes
+        if (ownedTypes.includes('gunshop') &&
+            (crime.id === 'mugging' || crime.id === 'dealerRobbery' || crime.id === 'armoryHeist')) {
+          bonus += 0.10;
+        }
+
+        // Nightclub → street crimes (social cover, easy mark access)
+        if (ownedTypes.includes('nightclub') && crime.category === 'street') {
+          bonus += 0.10;
+        }
+
+        // Warehouse → organized crime logistics
+        if (ownedTypes.includes('warehouse') && crime.category === 'organized') {
+          bonus += 0.08;
+        }
+
+        // Gang HQ → small all-round bonus when gang is active
+        if (ownedTypes.includes('ganghq') && GameState.gang) {
+          bonus += 0.06;
+        }
+
+        return Math.min(bonus, 0.30); // Hard cap at +30%
+      },
+
       getCrimesByCategory(categoryId) {
         return Object.values(CrimesDatabase.crimes).filter(
           crime => crime.category === categoryId
@@ -27389,16 +27507,57 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       updatePoliceActivity() {
         const heat = GameState.player.globalHeat;
         let newActivity;
-        
+
         if (heat < 25) newActivity = 'low';
         else if (heat < 50) newActivity = 'medium';
         else if (heat < 75) newActivity = 'high';
         else newActivity = 'extreme';
-        
+
         if (GameState.cityState.policeActivity !== newActivity) {
           GameState.cityState.policeActivity = newActivity;
           console.log(`Police activity: ${newActivity}`);
+          this.dispatchHeatStateChange(newActivity);
         }
+      },
+
+      // Broadcast heat-state changes to connected systems
+      dispatchHeatStateChange(newActivity) {
+        // 1. CopCarSystem: scale patrol cruise speed with heat
+        try {
+          if (typeof CopCarSystem !== 'undefined' && CopCarSystem.isPatrolling) {
+            const speedMap = { low: 6.2, medium: 8.5, high: 11.0, extreme: 14.0 };
+            CopCarSystem.cruiseSpeed = speedMap[newActivity] || 6.2;
+            console.log(`[HeatState] Cop patrol speed → ${CopCarSystem.cruiseSpeed} (${newActivity})`);
+          }
+        } catch(e) {}
+
+        // 2. WeatherManager: extreme heat forces a storm overlay
+        try {
+          if (typeof WeatherOverlay !== 'undefined' && WeatherOverlay.weatherManager) {
+            const wm = WeatherOverlay.weatherManager;
+            if (newActivity === 'extreme' && wm.activeWeatherType !== 'storm') {
+              wm.setWeather('storm', 0.85, 'heat-state');
+              console.log('[HeatState] Weather forced → storm (extreme heat)');
+            } else if (newActivity !== 'extreme' && wm._heatStateOverride) {
+              // Revert to the cycle when heat drops below extreme
+              wm._heatStateOverride = false;
+              wm.startCycle();
+            }
+            // Tag the override so we can clear it cleanly
+            wm._heatStateOverride = (newActivity === 'extreme');
+          }
+        } catch(e) {}
+
+        // 3. CIAIntervention: force re-evaluation at high / extreme heat
+        try {
+          if (typeof CIAIntervention !== 'undefined' &&
+              (newActivity === 'high' || newActivity === 'extreme')) {
+            CIAIntervention.maybeAutoStage();
+          }
+        } catch(e) {}
+
+        // 4. BiomeModifierCalculator reads policeActivity directly from GameState.cityState
+        // No additional call needed – it will pick up the new value on next crime roll.
       },
       
       renderGlobalHeatDisplay() {
