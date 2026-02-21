@@ -1922,7 +1922,7 @@ const KillFeed = {
    */
   addKill(enemyName, weapon) {
     this.entries.push({
-      text: `☠ ${enemyName} killed ${weapon ? 'with ' + weapon : ''}`,
+      text: `☠ ${enemyName} eliminated${weapon ? ' with ' + weapon : ''}`,
       type: 'kill',
       time: Date.now(),
       alpha: 1.0
