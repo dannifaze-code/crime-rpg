@@ -5424,11 +5424,11 @@ window.ciaDebug = () => {
       let mainBase = null;
 
       buildings.forEach((building, index) => {
-        // Convert tile coordinates to pixel coordinates (center of footprint)
-        const x = (building.x + building.footprint.width / 2) * tileSize;
-        const y = (building.y + building.footprint.height / 2) * tileSize;
+        // Building x/y are percentage-based (0-100), convert to canvas pixels
         const w = building.footprint.width * tileSize;
         const h = building.footprint.height * tileSize;
+        const x = (building.x / 100) * canvasWidth;
+        const y = (building.y / 100) * canvasHeight;
 
         // Validate building is within map bounds
         const nearEdge = x < edgeBuffer || x > (canvasWidth - edgeBuffer) ||
@@ -5438,7 +5438,7 @@ window.ciaDebug = () => {
         }
 
         console.log(`🏗️ [Building ${index}] ${building.name} (${building.typeId})`);
-        console.log(`   Tile coords: (${building.x}, ${building.y}), Footprint: ${building.footprint.width}x${building.footprint.height}`);
+        console.log(`   Pct coords: (${building.x}%, ${building.y}%), Footprint: ${building.footprint.width}x${building.footprint.height}`);
         console.log(`   Pixel coords: (${x}, ${y}), Size: ${w}x${h} ${nearEdge ? '[NEAR EDGE]' : '[SAFE]'}`);
 
         // Determine if this is the main base (safehouse = critical)
