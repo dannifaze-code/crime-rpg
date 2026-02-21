@@ -5978,7 +5978,7 @@ function scheduleTurfDefenseSpriteScaleMatch() {
         y: GameState.turfDefense.playerY,
         zoom: 1,
         startZoom: 1,
-        targetZoom: 1.45, // "map feels larger" zoom
+        targetZoom: 1, // match regular turf map zoom
         introStart: (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(),
         introDurationMs: 520,
         followLerp: 10 // higher = snappier follow
@@ -6577,7 +6577,7 @@ function updateTurfDefense(dt) {
                   y: defense.playerY,
                   zoom: 1,
                   startZoom: 1,
-                  targetZoom: 1.45,
+                  targetZoom: 1,
                   introStart: (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(),
                   introDurationMs: 520,
                   followLerp: 10
@@ -6599,7 +6599,7 @@ function updateTurfDefense(dt) {
                 if (t > 1) t = 1;
                 const easeOutCubic = 1 - Math.pow(1 - t, 3);
                 const z0 = (typeof cam.startZoom === 'number') ? cam.startZoom : 1;
-                const z1 = (typeof cam.targetZoom === 'number') ? cam.targetZoom : 1.45;
+                const z1 = (typeof cam.targetZoom === 'number') ? cam.targetZoom : 1;
                 cam.zoom = z0 + (z1 - z0) * easeOutCubic;
               }
             } catch (e) {}
@@ -7148,7 +7148,7 @@ function updateTurfDefense(dt) {
         y: defense.playerY || 0,
         zoom: 1,
         startZoom: 1,
-        targetZoom: 1.45,
+        targetZoom: 1,
         introStart: (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(),
         introDurationMs: 520,
         followLerp: 10
