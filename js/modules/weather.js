@@ -46,18 +46,13 @@ const WeatherOverlay = {
         let useWidth = rect.width || this.container.clientWidth || this.container.offsetWidth;
         let useHeight = rect.height || this.container.clientHeight || this.container.offsetHeight;
 
-        // If still zero, use fallback dimensions but set up observer for resize
+        // If still zero, use fallback dimensions but set up observer for resize.
+        // This is expected on first load (tab may still be settling layout).
         if (useWidth === 0 || useHeight === 0) {
-          console.warn('[WeatherOverlay] Container has zero dimensions - using fallback');
-          console.warn('[WeatherOverlay] Rect:', rect);
-
-          // Use fallback dimensions to allow initialization
           useWidth = TURF_MAP_WIDTH;
           useHeight = TURF_MAP_HEIGHT;
 
-          // Set up a ResizeObserver to resize when container gets valid dimensions
           if (!this._pendingInitObserver && typeof ResizeObserver !== 'undefined') {
-            console.log('[WeatherOverlay] Setting up ResizeObserver to detect valid dimensions...');
             this._pendingInitObserver = new ResizeObserver((entries) => {
               for (const entry of entries) {
                 const { width, height } = entry.contentRect;

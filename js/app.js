@@ -22731,85 +22731,84 @@ function ensureLandmarkProperties() {
         
         // Special handling for turf tab - ensure weather overlay is ready AFTER DOM update
         if (tabId === 'turf') {
-          console.log('[TabSystem] Preparing turf tab weather overlay...');
 
-          // Function to initialize weather overlay when container is ready
+          // Kick off CopCar3D and WeatherOverlay immediately — both have their own
+          // fallback/ResizeObserver paths and must NOT wait for the getBoundingClientRect
+          // gate below (which can return 0×0 while layout is still settling on mobile).
+          try {
+            if (typeof WeatherOverlay !== 'undefined') {
+              if (!WeatherOverlay.isInitialized) {
+                WeatherOverlay.init();
+              }
+            }
+          } catch (e) {}
+          try {
+            if (typeof CopCar3D !== 'undefined' && CopCar3D) {
+              if (!CopCar3D.isInitialized) {
+                CopCar3D.init(); // starts _waitForDimensions() internally if needed
+              } else {
+                CopCar3D.show();
+              }
+            }
+          } catch (e) {}
+
+          // Function to wait for valid layout dimensions before doing zoom/render work
           const initializeWeatherWhenReady = () => {
             const container = document.getElementById('city-map');
             const mapBackground = document.getElementById('map-background');
-            if (!container) {
-              console.error('[TabSystem] Container not found!');
-              return;
-            }
+            if (!container) return;
 
+            // Accept either CSS-rendered dimensions OR JS-set map-world dimensions as valid
             const rect = container.getBoundingClientRect();
-            console.log('[TabSystem] Container dimensions:', rect.width, 'x', rect.height);
+            const mapWorld = document.getElementById('map-world');
+            const w = rect.width || container.offsetWidth || (mapWorld && mapWorld.offsetWidth) || 0;
+            const h = rect.height || container.offsetHeight || (mapWorld && mapWorld.offsetHeight) || 0;
 
-            // Check if container has valid dimensions and is visible
-            if (rect.width > 0 && rect.height > 0) {
-              console.log('[TabSystem] ✅ Container is visible and has dimensions');
-
-              // CRITICAL FIX: Ensure map background is explicitly visible
+            if (w > 0 && h > 0) {
               if (mapBackground) {
                 mapBackground.style.opacity = '1';
                 mapBackground.style.visibility = 'visible';
                 mapBackground.style.display = 'block';
-                console.log('[TabSystem] ✅ Map background visibility ensured');
               }
 
-              // Clean up any existing invalid canvas first
+              // Clean up any 0×0 canvas left from a failed prior init
               if (WeatherOverlay.canvas && WeatherOverlay.canvas.parentNode) {
-                const canvasWidth = WeatherOverlay.canvas.width;
-                const canvasHeight = WeatherOverlay.canvas.height;
-                if (canvasWidth === 0 || canvasHeight === 0) {
-                  console.log('[TabSystem] Removing invalid canvas (0x0 dimensions)');
+                if (WeatherOverlay.canvas.width === 0 || WeatherOverlay.canvas.height === 0) {
                   WeatherOverlay.canvas.parentNode.removeChild(WeatherOverlay.canvas);
                   WeatherOverlay.isInitialized = false;
                 }
               }
 
-              // Initialize WeatherOverlay (will auto-detect if already valid)
               if (!WeatherOverlay.isInitialized) {
-                console.log('[TabSystem] Initializing WeatherOverlay with valid dimensions');
                 WeatherOverlay.init();
               } else {
-                console.log('[TabSystem] WeatherOverlay already initialized - forcing render');
                 WeatherOverlay.render();
               }
 
-
-
-              // Ensure 3D cop car overlay is visible after #city-map is visible
+              // CopCar3D: if it initialized while waiting (via its own ResizeObserver),
+              // just show it. If still uninitialized, retry now with valid dimensions.
               try {
                 if (typeof CopCar3D !== 'undefined' && CopCar3D) {
-                  if (typeof CopCar3D.show === 'function') {
-                    console.log('[TabSystem] Showing CopCar3D overlay...');
+                  if (CopCar3D.isInitialized) {
                     CopCar3D.show();
-                  } else if (typeof CopCar3D.init === 'function') {
+                  } else {
                     CopCar3D.init();
                   }
                 }
-              } catch (e) {
-                console.warn('[TabSystem] CopCar3D show error:', e);
-              }
+              } catch (e) {}
 
-              // Render the tab content
+              // Render tab content and zoom controls (require valid layout dimensions)
               this.renderActiveTab(tabId);
 
-              // Re-initialize zoom controls after turf tab DOM is ready
               setTimeout(() => {
                 if (typeof TurfTab !== 'undefined' && typeof TurfTab.initZoomControls === 'function') {
                   TurfTab.initZoomControls();
                 }
-
-                // Recalculate zoom bounds now that viewport has real dimensions
                 if (typeof TurfTab !== 'undefined' && typeof TurfTab.ensureWorldSize === 'function') {
                   var prevMinZoom = TurfTab.minZoom;
                   TurfTab.worldSizeReady = false;
                   TurfTab.ensureWorldSize();
-                  // If minZoom changed (real dimensions now available), fit map to viewport
                   if (TurfTab.minZoom !== prevMinZoom || !TurfTab._viewportZoomApplied) {
-                    // Start 20% zoomed in from min (Clash-of-Clans "player must zoom in" feel)
                     TurfTab.currentZoom = TurfTab.minZoom * 1.20;
                     TurfTab.panX = 0;
                     TurfTab.panY = 0;
@@ -22819,47 +22818,29 @@ function ensureLandmarkProperties() {
                   TurfTab.clampPan();
                   TurfTab.applyMapTransform();
                 }
-                console.log('[TabSystem] ✅ Zoom controls re-initialized for turf tab');
 
-                // CRITICAL FIX: Force a final repaint to ensure everything is visible
                 setTimeout(() => {
-                  console.log('[TabSystem] 🔍 Running final visibility check...');
-
-                  // Check if map background is actually visible
                   const bgStyle = window.getComputedStyle(mapBackground || container);
                   const bgImage = bgStyle.backgroundImage;
-
                   if (bgImage === 'none' || !bgImage) {
-                    console.warn('[TabSystem] ⚠️ Map background not loaded, forcing repaint...');
                     if (container) container.style.display = 'none';
-                    setTimeout(() => {
-                      if (container) container.style.display = '';
-                      console.log('[TabSystem] ✅ Map repainted');
-                    }, 10);
-                  } else {
-                    console.log('[TabSystem] ✅ Map background confirmed visible');
+                    setTimeout(() => { if (container) container.style.display = ''; }, 10);
                   }
-
-                  // Force weather overlay render
                   if (WeatherOverlay && WeatherOverlay.renderer && WeatherOverlay.scene && WeatherOverlay.camera) {
                     WeatherOverlay.render();
-                    console.log('[TabSystem] ✅ Weather overlay final render complete');
                   }
                 }, 150);
               }, 100);
             } else {
-              console.warn('[TabSystem] ⚠️ Container not ready yet (dimensions:', rect.width, 'x', rect.height, '), retrying...');
-              // Retry after a short delay
+              // Dimensions not ready yet — retry shortly
               setTimeout(initializeWeatherWhenReady, 50);
             }
           };
 
-          // Wait for DOM to settle, then check if container is ready
+          // Wait two animation frames + 10ms for the newly-active tab to commit layout
           requestAnimationFrame(() => {
             requestAnimationFrame(() => {
-              setTimeout(() => {
-                initializeWeatherWhenReady();
-              }, 10);
+              setTimeout(() => { initializeWeatherWhenReady(); }, 10);
             });
           });
 
@@ -31918,10 +31899,15 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
               BuildingScaleSystem._applyAllScales();
             }
 
-            // Initialize CopCar3D if available (needs valid map dimensions)
-            if (typeof CopCar3D !== 'undefined' && typeof CopCar3D.init === 'function') {
-              if (!CopCar3D.isInitialized) {
-                CopCar3D.init();
+            // Initialize CopCar3D only when turf tab is already active.
+            // If the turf tab is hidden (display:none), offsetWidth is 0 and CopCar3D
+            // would burn through its 720-frame retry budget on a hidden container.
+            // TabSystem.switchTab('turf') handles the init when the user opens the map.
+            if (GameState.ui.activeTab === 'turf') {
+              if (typeof CopCar3D !== 'undefined' && typeof CopCar3D.init === 'function') {
+                if (!CopCar3D.isInitialized) {
+                  CopCar3D.init();
+                }
               }
             }
           }
