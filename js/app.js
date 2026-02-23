@@ -16868,35 +16868,38 @@ function ensureLandmarkProperties() {
 
         const btnBase = 'padding:4px 10px;font-size:11px;background:rgba(0,0,0,0.7);border-radius:4px;cursor:pointer;font-family:monospace;';
 
-        const btn = document.createElement('button');
-        btn.id = 'cop-node-debug-btn';
-        btn.textContent = 'Show Nodes';
-        btn.style.cssText = btnBase + 'color:#0f0;border:1px solid #0f0;';
-        btn.addEventListener('click', () => this.toggle());
-        container.appendChild(btn);
+        // Show Nodes and Edit Nodes buttons (admin only - dannifaze@gmail.com)
+        if (BuildingMoveSystem.isAdmin()) {
+          const btn = document.createElement('button');
+          btn.id = 'cop-node-debug-btn';
+          btn.textContent = 'Show Nodes';
+          btn.style.cssText = btnBase + 'color:#0f0;border:1px solid #0f0;';
+          btn.addEventListener('click', () => this.toggle());
+          container.appendChild(btn);
 
-        // Edit Nodes button
-        const editBtn = document.createElement('button');
-        editBtn.id = 'cop-node-edit-btn';
-        editBtn.textContent = 'Edit Nodes';
-        editBtn.style.cssText = btnBase + 'color:#ff0;border:1px solid #ff0;';
-        editBtn.addEventListener('click', () => {
-          if (!this.visible) {
-            this.toggle(); // Show nodes first
-          }
-          if (this.editMode) {
-            this._disableEdit();
-            editBtn.textContent = 'Edit Nodes';
-            editBtn.style.color = '#ff0';
-            editBtn.style.borderColor = '#ff0';
-          } else {
-            this._enableEdit();
-            editBtn.textContent = 'Editing...';
-            editBtn.style.color = '#f60';
-            editBtn.style.borderColor = '#f60';
-          }
-        });
-        container.appendChild(editBtn);
+          // Edit Nodes button
+          const editBtn = document.createElement('button');
+          editBtn.id = 'cop-node-edit-btn';
+          editBtn.textContent = 'Edit Nodes';
+          editBtn.style.cssText = btnBase + 'color:#ff0;border:1px solid #ff0;';
+          editBtn.addEventListener('click', () => {
+            if (!this.visible) {
+              this.toggle(); // Show nodes first
+            }
+            if (this.editMode) {
+              this._disableEdit();
+              editBtn.textContent = 'Edit Nodes';
+              editBtn.style.color = '#ff0';
+              editBtn.style.borderColor = '#ff0';
+            } else {
+              this._enableEdit();
+              editBtn.textContent = 'Editing...';
+              editBtn.style.color = '#f60';
+              editBtn.style.borderColor = '#f60';
+            }
+          });
+          container.appendChild(editBtn);
+        }
 
         // Move Buildings button (admin only - dannifaze@gmail.com)
         if (BuildingMoveSystem.isAdmin()) {
@@ -31833,9 +31836,13 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       // Initialize cop car patrol on map (uses its own 53-node patrol graph)
       CopCarSystem.init();
 
-      // Inject cop car node debug overlay button and auto-show
+      // Inject cop car node debug overlay button and auto-show (admin only)
       CopNodeDebug.injectButton();
-      CopNodeDebug.toggle(); // Start visible so nodes are shown immediately
+      if (BuildingMoveSystem.isAdmin()) {
+        CopNodeDebug.toggle(); // Start visible so nodes are shown immediately
+        // Initialize Eruda dev console for admin only
+        if (typeof eruda !== 'undefined') eruda.init();
+      }
 
       console.log('[DEBUG] Skipping roads and buildings (using static map)...');
       // DISABLED: Roads and buildings generation not needed for static 2D map
