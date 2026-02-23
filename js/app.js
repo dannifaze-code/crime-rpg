@@ -31680,10 +31680,12 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
         }
 
         // Final authoritative render with correct Firebase positions/scales
-        renderPropertyBuildings();
+        // renderIcons() clears #map-icons entirely — it MUST run before renderPropertyBuildings()
+        // otherwise it wipes the property buildings that were just added.
         if (typeof TurfTab !== 'undefined' && TurfTab.renderIcons) {
           TurfTab.renderIcons();
         }
+        renderPropertyBuildings();
         // Apply scales now that buildings are in the DOM with correct positions
         if (typeof BuildingScaleSystem !== 'undefined' && BuildingScaleSystem._scales) {
           BuildingScaleSystem._applyAllScales();
@@ -31703,10 +31705,11 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
           TurfTab.worldSizeReady = false;
           TurfTab.ensureWorldSize();
         }
-        renderPropertyBuildings();
+        // renderIcons() clears #map-icons entirely — must run before renderPropertyBuildings()
         if (typeof TurfTab !== 'undefined' && TurfTab.renderIcons) {
           TurfTab.renderIcons();
         }
+        renderPropertyBuildings();
       });
       
       // ===== NUCLEAR OPTION: FORCE POSITION UPDATE AFTER INIT =====
@@ -31944,10 +31947,11 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
             }
 
             // Safety-net: re-render property buildings and icons
-            renderPropertyBuildings();
+            // renderIcons() clears #map-icons entirely — must run before renderPropertyBuildings()
             if (typeof TurfTab !== 'undefined' && TurfTab.renderIcons) {
               TurfTab.renderIcons();
             }
+            renderPropertyBuildings();
             if (typeof BuildingScaleSystem !== 'undefined' && BuildingScaleSystem._scales) {
               BuildingScaleSystem._applyAllScales();
             }
