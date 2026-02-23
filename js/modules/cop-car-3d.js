@@ -170,7 +170,7 @@ const CopCar3D = {
     stopSnapSpeed: 0.03,
 
     shadowsEnabled: true,
-    maxPixelRatio: 4,
+    maxPixelRatio: 2, // Cap at 2x — budget Android phones with 3-4x DPR would quadruple GPU work
 
     wheels: {
       enabled: true,
@@ -271,11 +271,6 @@ const CopCar3D = {
       this._ensureLayer();
 
       this.copCarElement = document.getElementById('cop-car');
-      if (!this.copCarElement) {
-        console.warn('[CopCar3D] #cop-car not found (marker missing)');
-      } else {
-        this._prepareMarkerElement();
-      }
 
       const dims = this._getWorldBaseSize();
       const w = dims.w;
@@ -285,6 +280,14 @@ const CopCar3D = {
         this._waitForDimensions();
         this._initPromise = null;
         return false;
+      }
+
+      // Only hide the emoji marker AFTER we know the 3D scene will actually initialize.
+      // If we hide it before the dimension check and init fails, the cop car disappears entirely.
+      if (this.copCarElement) {
+        this._prepareMarkerElement();
+      } else {
+        console.warn('[CopCar3D] #cop-car not found (marker missing)');
       }
 
       await this._initScene(w, h);
@@ -549,7 +552,7 @@ const CopCar3D = {
     // RAF polling fallback
     if (!this._pendingInitRAF) {
       let frames = 0;
-      const maxFrames = 240; // ~4s at 60fps
+      const maxFrames = 720; // ~12s at 60fps / ~24s at 30fps — outlasts the 10s Firebase loading timeout
       const poll = () => {
         this._pendingInitRAF = requestAnimationFrame(poll);
         frames++;

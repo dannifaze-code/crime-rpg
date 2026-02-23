@@ -1475,6 +1475,16 @@ Then tighten the rules later.`);
 
             this.showLoadingScreen('ready');
             setTimeout(() => this.hideLoadingScreen(), 400);
+            // After loading screen fades out, re-trigger turf init with valid DOM dimensions.
+            // Buildings and the 3D cop car need a proper layout pass once the UI is fully visible.
+            setTimeout(() => {
+              if (typeof TabSystem !== 'undefined' && typeof GameState !== 'undefined' &&
+                  GameState.ui && GameState.ui.activeTab === 'turf') {
+                TabSystem.switchTab('turf');
+              } else if (typeof renderPropertyBuildings === 'function') {
+                renderPropertyBuildings();
+              }
+            }, 750);
           }
         } catch (error) {
           console.error('[GoogleAuth] Failed to create cloud profile:', error);
@@ -1583,6 +1593,16 @@ Then tighten the rules later.`);
               // Show ready and dismiss loading screen
               this.showLoadingScreen('ready');
               setTimeout(() => this.hideLoadingScreen(), 400);
+              // After loading screen fades out, re-trigger turf init with valid DOM dimensions.
+              // Buildings and the 3D cop car need a proper layout pass once the UI is fully visible.
+              setTimeout(() => {
+                if (typeof TabSystem !== 'undefined' && typeof GameState !== 'undefined' &&
+                    GameState.ui && GameState.ui.activeTab === 'turf') {
+                  TabSystem.switchTab('turf');
+                } else if (typeof renderPropertyBuildings === 'function') {
+                  renderPropertyBuildings();
+                }
+              }, 750);
             })();
           }
         } catch (error) {
@@ -28737,35 +28757,16 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       },
       
       render() {
-        console.log("TurfTab.render() called");
-        console.log("Map icons to render:", GameState.mapIcons.length);
-        console.log("Icon states:", GameState.mapIcons.map(i => `${i.type}:${i.state}`).join(', '));
-        console.log("Player status:", GameState.playerStatus);
-        console.log("Free roam:", GameState.character.freeRoam);
-        console.log("Character position:", GameState.character.position);
-        console.log("Jailed:", GameState.player.jail.isJailed);
-        console.log("Heat:", GameState.player.heat);
-        console.log("Fatigue:", GameState.player.fatigue.level.toFixed(1), `(${FatigueSystem.getFatigueLevel()})`);
-        console.log("Consecutive actions:", GameState.player.fatigue.consecutiveActions);
-        console.log("Map hotspots:", (GameState.mapMemory && Array.isArray(GameState.mapMemory.hotspots)) ? GameState.mapMemory.hotspots.length : 0);
-        console.log("RNG Memory - Events:", (GameState.player && GameState.player.rngMemory && Array.isArray(GameState.player.rngMemory.eventOutcomes)) ? GameState.player.rngMemory.eventOutcomes.length : 0, "recent outcomes");
-        console.log("RNG Memory - Raids:", (GameState.player && GameState.player.rngMemory && Array.isArray(GameState.player.rngMemory.raidOutcomes)) ? GameState.player.rngMemory.raidOutcomes.length : 0, "recent outcomes");
-        console.log("Map grid exists:", GameState.map.grid !== null);
-        console.log("Buildings count:", GameState.map.buildings ? GameState.map.buildings.length : 0);
-        
         // CRITICAL FIX: Ensure map container and background are visible
         const mapContainer = document.getElementById('city-map');
         const mapBackground = document.getElementById('map-background');
 
         if (mapContainer) {
-          // Force container visibility
           mapContainer.style.opacity = '1';
           mapContainer.style.visibility = 'visible';
-          console.log('[TurfTab] ✅ Map container visibility ensured');
         }
 
         if (mapBackground) {
-          // Force background visibility
           mapBackground.style.visibility = 'visible';
           mapBackground.style.display = 'block';
 
@@ -28774,30 +28775,20 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
             var currentBgImg = getComputedStyle(mapBackground).backgroundImage;
             DayNightCycle.applyMapImage(!currentBgImg || currentBgImg === 'none');
           }
-          console.log('[TurfTab] ✅ Map background visibility ensured');
         }
 
-        // CRITICAL FIX: Re-initialize WeatherOverlay if not active (fixes black screen on tab switch)
+        // Re-initialize WeatherOverlay if not active (fixes black screen on tab switch)
         if (!WeatherOverlay.isInitialized || !WeatherOverlay.renderer) {
-          console.log('[TurfTab] 🔧 WeatherOverlay not initialized - initializing now...');
-          const initSuccess = WeatherOverlay.init();
-          if (initSuccess) {
-            console.log('[TurfTab] ✅ WeatherOverlay initialized successfully');
-          } else {
-            console.log('[TurfTab] ⚠️ WeatherOverlay initialization deferred (waiting for valid dimensions)');
-          }
+          WeatherOverlay.init();
         }
 
         // Re-initialize Turf Defense button if not initialized (fixes button not working after DOM rebuilds)
         if (!this.turfDefenseButtonInitialized) {
-          console.log('[TurfTab] 🔧 Turf Defense button not initialized - initializing now...');
           this.initTurfDefenseButton();
         }
 
-        // PHASE 7.4D: Render procedural map tiles
         // Reset render flag if SVG is missing (handles tab switching issues)
         if (mapContainer && !mapContainer.querySelector('#unified-biome-layer')) {
-          console.log("🗺️ SVG missing - resetting render flag");
           ProceduralMapRenderer.rendered = false;
         }
         
@@ -31858,16 +31849,15 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       GangTab.init();
       CityNewsTicker.init();
       
-      console.log('[DEBUG] Rendering active tab...');
       // Render active tab
       const activeTab = GameState.ui.activeTab;
       TabSystem.renderActiveTab(activeTab);
 
-      // CRITICAL FIX: Schedule delayed initialization for all systems that depend on DOM dimensions
-      // This handles cases where the DOM isn't fully rendered when init runs (common on first load)
-      const delayedTurfInit = (delay, reason) => {
+      // Schedule delayed initialization for systems that depend on DOM dimensions.
+      // Runs at 300ms and 800ms as safety nets for slower layout paints.
+      // The definitive re-init happens at 750ms after hideLoadingScreen() in the auth flow.
+      const delayedTurfInit = (delay) => {
         setTimeout(() => {
-          console.log(`[DEBUG] 🔍 Running delayed turf initialization (${reason})...`);
           const mapContainer = document.getElementById('city-map');
           const mapBackground = document.getElementById('map-background');
           const mapViewport = document.getElementById('map-viewport');
@@ -31895,46 +31885,35 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
 
             // Reset zoom to fit-to-viewport and pan to center on first load
             if (typeof TurfTab !== 'undefined') {
-              // Only reset if this looks like an initial load (zoom might be weird)
               if (!TurfTab._initialZoomApplied) {
                 TurfTab.panX = 0;
                 TurfTab.panY = 0;
                 TurfTab._initialZoomApplied = true;
               }
-
-              // Re-calculate world size now that elements have dimensions
               if (typeof TurfTab.ensureWorldSize === 'function') {
-                TurfTab.worldSizeReady = false; // Force recalculation
+                TurfTab.worldSizeReady = false;
                 TurfTab.ensureWorldSize();
                 TurfTab.currentZoom = TurfTab.minZoom;
-                console.log('[DEBUG] ✅ TurfTab.ensureWorldSize() called, zoom set to minZoom:', TurfTab.minZoom);
               }
-
-              // Apply the transform to ensure correct display
               if (typeof TurfTab.applyMapTransform === 'function') {
                 TurfTab.applyMapTransform();
-                console.log('[DEBUG] ✅ TurfTab.applyMapTransform() called');
               }
             }
 
             // Re-initialize WeatherOverlay if it failed due to zero dimensions
             if (typeof WeatherOverlay !== 'undefined') {
               if (!WeatherOverlay.renderer || !WeatherOverlay.scene) {
-                console.log('[DEBUG] Re-initializing WeatherOverlay...');
                 WeatherOverlay.init();
               } else {
                 WeatherOverlay.render();
               }
-              console.log('[DEBUG] ✅ WeatherOverlay handled');
             }
 
-            // Safety-net: re-render property buildings and icons in case they were
-            // missed during initial render (e.g., DOM wasn't ready or Firebase data arrived late)
+            // Safety-net: re-render property buildings and icons
             renderPropertyBuildings();
             if (typeof TurfTab !== 'undefined' && TurfTab.renderIcons) {
               TurfTab.renderIcons();
             }
-            // Apply scales after re-render
             if (typeof BuildingScaleSystem !== 'undefined' && BuildingScaleSystem._scales) {
               BuildingScaleSystem._applyAllScales();
             }
@@ -31943,69 +31922,21 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
             if (typeof CopCar3D !== 'undefined' && typeof CopCar3D.init === 'function') {
               if (!CopCar3D.isInitialized) {
                 CopCar3D.init();
-                console.log('[DEBUG] ✅ CopCar3D initialized');
               }
             }
-
-            console.log(`[DEBUG] ✅ Delayed turf initialization complete (${reason})`);
           }
         }, delay);
       };
 
-      // Always schedule delayed initialization regardless of active tab
-      // This ensures systems are ready when user switches to turf tab
-      delayedTurfInit(300, 'initial-300ms');
-      delayedTurfInit(800, 'followup-800ms'); // Second pass catches slower renders
+      // Safety-net passes (before the loading screen dismisses)
+      delayedTurfInit(300);
+      delayedTurfInit(800);
 
-      // Extra initialization if turf tab is already active
+      // Extra passes when turf tab is already active on load
       if (activeTab === 'turf') {
-        console.log('[DEBUG] Turf tab active on load - scheduling extra visibility checks...');
-        delayedTurfInit(100, 'turf-active-100ms');
-        delayedTurfInit(1500, 'turf-active-1500ms'); // Late pass for very slow renders
+        delayedTurfInit(100);
+        delayedTurfInit(1500);
       }
-
-      console.log('[DEBUG] Static map is now CSS background-image...');
-      // Static 2D map is now embedded directly in CSS as background-image
-      // No JavaScript initialization needed
-      
-      console.log("Crime RPG - Account System Active");
-      console.log("Account ID:", GameState.accountId);
-      console.log("Player Name:", GameState.player.name);
-      console.log("Game State:", GameState);
-      console.log("Player Status:", GameState.playerStatus);
-      console.log("Status Transition:", GameState.playerStatusTransition);
-      console.log("Player Suspicion:", GameState.player.suspicion);
-      console.log("Player Fatigue:", GameState.player.fatigue.level.toFixed(1), `(${FatigueSystem.getFatigueLevel()})`);
-      console.log("Fatigue Consecutive Actions:", GameState.player.fatigue.consecutiveActions);
-      console.log("Map Memory System Active");
-      console.log("Active Hotspots:", GameState.mapMemory.hotspots.length);
-      console.log("Interactive Buildings:", GameState.map.buildings ? GameState.map.buildings.length : 0);
-      console.log("Failure Continuation System Active");
-      console.log("Player History Events:", GameState.player.history.length);
-      console.log("Crimes System Active");
-      console.log("Available Crimes:", CrimesSystem.getAvailableCrimes().length);
-      console.log("Total Crimes Defined:", Object.keys(CrimesDatabase.crimes).length);
-      console.log("Crime Categories:", Object.keys(CrimesDatabase.categories).length);
-      console.log("CrimesTab render function exists:", typeof CrimesTab.render === 'function');
-      console.log("World Tick:", GameState.cityState.worldTick);
-      console.log("Risk Level:", GameState.cityState.riskLevel);
-      console.log("RNG Fairness System Active");
-      console.log("Event Outcomes Memory:", GameState.player.rngMemory.eventOutcomes.length);
-      console.log("Raid Outcomes Memory:", GameState.player.rngMemory.raidOutcomes.length);
-      console.log("Character Appearance:", GameState.character.appearance);
-      console.log("Equipped Wardrobe:", GameState.character.equippedWardrobe);
-      console.log("Free Roam Active:", GameState.character.freeRoam);
-      console.log("Player Cash:", GameState.player.cash);
-      console.log("Player XP:", GameState.player.xp);
-      console.log("Player Heat:", GameState.player.heat);
-      console.log("Global Heat:", GameState.player.globalHeat);
-      console.log("City State:", GameState.cityState);
-      console.log("Jail Status:", GameState.player.jail);
-      console.log("Gang:", GameState.gang);
-      console.log("Gang Relations:", GameState.gangRelations);
-      
-      console.log('=== PHASE D: Sign-In Flow - COMPLETE ===');
-      console.log('=== PHASE E: Multi-User Support - COMPLETE ===');
 
       // ========================================
       // GAME LOOP: Turf Defense Update
