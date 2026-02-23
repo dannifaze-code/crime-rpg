@@ -65,6 +65,7 @@ const CopCar3D = {
 
   // init/resize guards
   _initPromise: null,
+  _initFailed: false,   // set true when _initScene throws so the next init() call can retry
   _pendingInitObserver: null,
   _pendingInitRAF: null,
   _resizeObserver: null,
@@ -244,55 +245,74 @@ const CopCar3D = {
       return Promise.resolve(true);
     }
 
-    if (this._initPromise) return this._initPromise;
+    // If a previous init attempt left a stuck rejected promise, clear it so we can retry.
+    if (this._initPromise) {
+      // A settled (resolved) promise means init either succeeded or cleanly failed — return it.
+      // We detect a stuck rejected promise by checking the flag we set in the catch block below.
+      if (!this._initFailed) return this._initPromise;
+      // Previous init threw an unhandled error — reset and retry.
+      this._initPromise = null;
+      this._initFailed = false;
+    }
 
     this._initPromise = (async () => {
-      console.log('[CopCar3D] Initializing...');
+      try {
+        console.log('[CopCar3D] Initializing...');
 
-      if (typeof THREE === 'undefined') {
-        console.error('[CopCar3D] THREE.js not loaded');
+        if (typeof THREE === 'undefined') {
+          console.error('[CopCar3D] THREE.js not loaded');
+          this._initPromise = null;
+          return false;
+        }
+        if (!THREE.GLTFLoader) {
+          console.error('[CopCar3D] GLTFLoader not loaded');
+          this._initPromise = null;
+          return false;
+        }
+
+        this.container = document.getElementById('map-viewport') || document.getElementById('city-map');
+        this.mapWorldEl = document.getElementById('map-world');
+        if (!this.container) {
+          console.error('[CopCar3D] #map-viewport/#city-map not found');
+          this._initPromise = null;
+          return false;
+        }
+
+        this._ensureLayer();
+
+        this.copCarElement = document.getElementById('cop-car');
+
+        const dims = this._getWorldBaseSize();
+        const w = dims.w;
+        const h = dims.h;
+        if (!w || !h) {
+          console.warn('[CopCar3D] Map container has zero size - waiting for layout...');
+          this._waitForDimensions();
+          this._initPromise = null;
+          return false;
+        }
+
+        // Only hide the emoji marker AFTER we know the 3D scene will actually initialize.
+        // If we hide it before the dimension check and init fails, the cop car disappears entirely.
+        if (this.copCarElement) {
+          this._prepareMarkerElement();
+        } else {
+          console.warn('[CopCar3D] #cop-car not found (marker missing)');
+        }
+
+        await this._initScene(w, h);
         this._initPromise = null;
+        return true;
+      } catch (err) {
+        // An unexpected error in _initScene (e.g. WebGL context lost, missing THREE constant).
+        // Clear _initPromise and mark the failure so the next init() call can retry cleanly
+        // instead of returning this stuck rejected promise forever.
+        console.error('[CopCar3D] Init error — will retry on next tab open:', err);
+        this._initFailed = true;
+        this._initPromise = null;
+        this.isInitialized = false;
         return false;
       }
-      if (!THREE.GLTFLoader) {
-        console.error('[CopCar3D] GLTFLoader not loaded');
-        this._initPromise = null;
-        return false;
-      }
-
-      this.container = document.getElementById('map-viewport') || document.getElementById('city-map');
-      this.mapWorldEl = document.getElementById('map-world');
-      if (!this.container) {
-        console.error('[CopCar3D] #map-viewport/#city-map not found');
-        this._initPromise = null;
-        return false;
-      }
-
-      this._ensureLayer();
-
-      this.copCarElement = document.getElementById('cop-car');
-
-      const dims = this._getWorldBaseSize();
-      const w = dims.w;
-      const h = dims.h;
-      if (!w || !h) {
-        console.warn('[CopCar3D] Map container has zero size - waiting for layout...');
-        this._waitForDimensions();
-        this._initPromise = null;
-        return false;
-      }
-
-      // Only hide the emoji marker AFTER we know the 3D scene will actually initialize.
-      // If we hide it before the dimension check and init fails, the cop car disappears entirely.
-      if (this.copCarElement) {
-        this._prepareMarkerElement();
-      } else {
-        console.warn('[CopCar3D] #cop-car not found (marker missing)');
-      }
-
-      await this._initScene(w, h);
-      this._initPromise = null;
-      return true;
     })();
 
     return this._initPromise;
@@ -344,7 +364,12 @@ const CopCar3D = {
     // NOTE: offsetWidth/offsetHeight ignore CSS transforms, which is what we want.
     const world = this.mapWorldEl || document.getElementById('map-world');
     if (world) {
-      return { w: world.offsetWidth || 0, h: world.offsetHeight || 0 };
+      const w = world.offsetWidth || 0;
+      const h = world.offsetHeight || 0;
+      // #map-world has valid CSS dimensions — use them
+      if (w > 0 && h > 0) return { w, h };
+      // #map-world exists but is zero-sized (ensureWorldSize() hasn't run yet).
+      // Fall through to container so we can still initialize with valid viewport dims.
     }
     if (this.container) {
       return { w: this.container.offsetWidth || 0, h: this.container.offsetHeight || 0 };

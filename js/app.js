@@ -1478,12 +1478,28 @@ Then tighten the rules later.`);
             // After loading screen fades out, re-trigger turf init with valid DOM dimensions.
             // Buildings and the 3D cop car need a proper layout pass once the UI is fully visible.
             setTimeout(() => {
+              // Always ensure map world has its pixel dimensions before rendering buildings.
+              if (typeof TurfTab !== 'undefined' && typeof TurfTab.ensureWorldSize === 'function') {
+                TurfTab.worldSizeReady = false;
+                TurfTab.ensureWorldSize();
+              }
+              // Always re-render property buildings so they appear immediately on the turf tab,
+              // regardless of which tab is currently active.
+              if (typeof renderPropertyBuildings === 'function') {
+                renderPropertyBuildings();
+              }
+              // If on the turf tab, do a full re-init so CopCar3D and weather are also ready.
               if (typeof TabSystem !== 'undefined' && typeof GameState !== 'undefined' &&
                   GameState.ui && GameState.ui.activeTab === 'turf') {
                 TabSystem.switchTab('turf');
-              } else if (typeof renderPropertyBuildings === 'function') {
-                renderPropertyBuildings();
               }
+              // Retry CopCar3D init in case it failed earlier (e.g. zero-size container race).
+              setTimeout(() => {
+                if (typeof CopCar3D !== 'undefined' && !CopCar3D.isInitialized &&
+                    typeof CopCar3D.init === 'function') {
+                  CopCar3D.init();
+                }
+              }, 300);
             }, 750);
           }
         } catch (error) {
@@ -1596,12 +1612,28 @@ Then tighten the rules later.`);
               // After loading screen fades out, re-trigger turf init with valid DOM dimensions.
               // Buildings and the 3D cop car need a proper layout pass once the UI is fully visible.
               setTimeout(() => {
+                // Always ensure map world has its pixel dimensions before rendering buildings.
+                if (typeof TurfTab !== 'undefined' && typeof TurfTab.ensureWorldSize === 'function') {
+                  TurfTab.worldSizeReady = false;
+                  TurfTab.ensureWorldSize();
+                }
+                // Always re-render property buildings so they appear immediately on the turf tab,
+                // regardless of which tab is currently active.
+                if (typeof renderPropertyBuildings === 'function') {
+                  renderPropertyBuildings();
+                }
+                // If on the turf tab, do a full re-init so CopCar3D and weather are also ready.
                 if (typeof TabSystem !== 'undefined' && typeof GameState !== 'undefined' &&
                     GameState.ui && GameState.ui.activeTab === 'turf') {
                   TabSystem.switchTab('turf');
-                } else if (typeof renderPropertyBuildings === 'function') {
-                  renderPropertyBuildings();
                 }
+                // Retry CopCar3D init in case it failed earlier (e.g. zero-size container race).
+                setTimeout(() => {
+                  if (typeof CopCar3D !== 'undefined' && !CopCar3D.isInitialized &&
+                      typeof CopCar3D.init === 'function') {
+                    CopCar3D.init();
+                  }
+                }, 300);
               }, 750);
             })();
           }
@@ -22819,6 +22851,14 @@ function ensureLandmarkProperties() {
                   TurfTab.applyMapTransform();
                 }
 
+                // After ensureWorldSize() has given #map-world its pixel dimensions, retry
+                // CopCar3D init if it previously got zero-size dimensions.
+                try {
+                  if (typeof CopCar3D !== 'undefined' && CopCar3D && !CopCar3D.isInitialized) {
+                    CopCar3D.init();
+                  }
+                } catch (e) {}
+
                 setTimeout(() => {
                   const bgStyle = window.getComputedStyle(mapBackground || container);
                   const bgImage = bgStyle.backgroundImage;
@@ -31630,6 +31670,15 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       // Auth flows await this before dismissing the loading screen.
       window._turfDataReady = Promise.all(_turfFirebasePromises).then(() => {
         console.log('[initializeGame] All Firebase turf data loaded - performing final render...');
+
+        // Ensure #map-world has its pixel dimensions before rendering buildings.
+        // renderPropertyBuildings() places elements at left/top percentages inside #map-world;
+        // if #map-world is still 0×0 the buildings would be invisible until a CSS reflow.
+        if (typeof TurfTab !== 'undefined' && typeof TurfTab.ensureWorldSize === 'function') {
+          TurfTab.worldSizeReady = false;
+          TurfTab.ensureWorldSize();
+        }
+
         // Final authoritative render with correct Firebase positions/scales
         renderPropertyBuildings();
         if (typeof TurfTab !== 'undefined' && TurfTab.renderIcons) {
@@ -31639,7 +31688,7 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
         if (typeof BuildingScaleSystem !== 'undefined' && BuildingScaleSystem._scales) {
           BuildingScaleSystem._applyAllScales();
         }
-        // Initialize CopCar3D now that map data is fully loaded
+        // Initialize CopCar3D now that map data is fully loaded and world has valid dimensions
         if (typeof CopCar3D !== 'undefined' && typeof CopCar3D.init === 'function') {
           if (!CopCar3D.isInitialized) {
             CopCar3D.init();
@@ -31650,6 +31699,10 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       }).catch(err => {
         console.warn('[initializeGame] Some Firebase turf loads failed, rendering with defaults:', err);
         // Still render buildings even if some Firebase operations failed
+        if (typeof TurfTab !== 'undefined' && typeof TurfTab.ensureWorldSize === 'function') {
+          TurfTab.worldSizeReady = false;
+          TurfTab.ensureWorldSize();
+        }
         renderPropertyBuildings();
         if (typeof TurfTab !== 'undefined' && TurfTab.renderIcons) {
           TurfTab.renderIcons();
