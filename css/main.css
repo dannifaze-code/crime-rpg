@@ -7967,15 +7967,14 @@ body {
    Sound Settings Panel
    ============================================= */
 .settings-panel {
-  position: absolute;
-  top: calc(100% + 10px);
-  right: 0;
+  /* position / top / right are set inline via JS (fixed, viewport-relative)
+     so the panel always renders above every stacking context */
   width: 252px;
   background: rgba(8, 10, 18, 0.97);
   border: 1px solid rgba(0, 245, 255, 0.22);
   border-radius: 14px;
   padding: 16px 18px;
-  z-index: 9999;
+  z-index: 999999;
   box-shadow:
     0 10px 40px rgba(0, 0, 0, 0.7),
     0 0 20px rgba(0, 245, 255, 0.06),
