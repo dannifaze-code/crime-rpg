@@ -7929,3 +7929,198 @@ body {
   .gu-topbar-right     { gap: 8px; }
   .gu-metric           { min-width: 82px; }
 }
+
+/* =============================================
+   Settings Gear Button
+   ============================================= */
+#settings-btn {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#settings-btn .settings-gear-icon {
+  width: 26px;
+  height: 26px;
+  stroke: #8a92a8;
+  transition: stroke 0.2s ease, transform 0.35s ease;
+  display: block;
+}
+
+#settings-btn:hover .settings-gear-icon {
+  stroke: #00f5ff;
+  transform: rotate(60deg);
+}
+
+#settings-btn:active .settings-gear-icon {
+  transform: rotate(90deg) scale(0.9);
+}
+
+/* =============================================
+   Sound Settings Panel
+   ============================================= */
+.settings-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 252px;
+  background: rgba(8, 10, 18, 0.97);
+  border: 1px solid rgba(0, 245, 255, 0.22);
+  border-radius: 14px;
+  padding: 16px 18px;
+  z-index: 9999;
+  box-shadow:
+    0 10px 40px rgba(0, 0, 0, 0.7),
+    0 0 20px rgba(0, 245, 255, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  animation: settings-panel-in 0.18s ease;
+}
+
+@keyframes settings-panel-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)   scale(1);    }
+}
+
+.settings-panel-title {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: rgba(0, 245, 255, 0.65);
+  text-transform: uppercase;
+  margin-bottom: 14px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid rgba(0, 245, 255, 0.1);
+}
+
+.settings-section {
+  margin-bottom: 12px;
+}
+
+.settings-section:last-child {
+  margin-bottom: 0;
+}
+
+.settings-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 9px;
+}
+
+.settings-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #c4c9d8;
+  letter-spacing: 0.01em;
+}
+
+/* Toggle Switch */
+.settings-toggle-switch {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.settings-toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+
+.settings-toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: background 0.22s, border-color 0.22s;
+}
+
+.settings-toggle-slider::before {
+  content: '';
+  position: absolute;
+  width: 17px;
+  height: 17px;
+  left: 3px;
+  top: 3px;
+  background: #6a7080;
+  border-radius: 50%;
+  transition: transform 0.22s, background 0.22s, box-shadow 0.22s;
+}
+
+.settings-toggle-switch input:checked + .settings-toggle-slider {
+  background: rgba(0, 245, 255, 0.2);
+  border-color: rgba(0, 245, 255, 0.45);
+}
+
+.settings-toggle-switch input:checked + .settings-toggle-slider::before {
+  transform: translateX(20px);
+  background: #00f5ff;
+  box-shadow: 0 0 8px rgba(0, 245, 255, 0.55);
+}
+
+/* Volume Slider Row */
+.settings-volume-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-volume-icon {
+  font-size: 13px;
+  opacity: 0.55;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.settings-volume-slider {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 3px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.14);
+  outline: none;
+  cursor: pointer;
+}
+
+.settings-volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #00f5ff;
+  box-shadow: 0 0 5px rgba(0, 245, 255, 0.5);
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+
+.settings-volume-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+.settings-volume-slider::-moz-range-thumb {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #00f5ff;
+  box-shadow: 0 0 5px rgba(0, 245, 255, 0.5);
+  border: none;
+  cursor: pointer;
+}
+
+.settings-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.07);
+  margin: 12px 0;
+}

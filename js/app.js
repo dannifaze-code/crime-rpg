@@ -4576,6 +4576,41 @@ const CartoonSpriteGenerator = {
     console.log('==============================================');
 
     // ========================================
+    // SOUND SETTINGS
+    // ========================================
+    const SoundSettings = {
+      uiSoundEnabled: true,
+      uiSoundVolume: 0.7,
+      gameSoundEnabled: true,
+      gameSoundVolume: 0.7,
+
+      load() {
+        try {
+          const saved = localStorage.getItem('heatline_sound_settings');
+          if (saved) {
+            const data = JSON.parse(saved);
+            if (typeof data.uiSoundEnabled === 'boolean') this.uiSoundEnabled = data.uiSoundEnabled;
+            if (typeof data.uiSoundVolume === 'number') this.uiSoundVolume = Math.max(0, Math.min(1, data.uiSoundVolume));
+            if (typeof data.gameSoundEnabled === 'boolean') this.gameSoundEnabled = data.gameSoundEnabled;
+            if (typeof data.gameSoundVolume === 'number') this.gameSoundVolume = Math.max(0, Math.min(1, data.gameSoundVolume));
+          }
+        } catch (e) { console.warn('[SoundSettings] Failed to load:', e); }
+      },
+
+      save() {
+        try {
+          localStorage.setItem('heatline_sound_settings', JSON.stringify({
+            uiSoundEnabled: this.uiSoundEnabled,
+            uiSoundVolume: this.uiSoundVolume,
+            gameSoundEnabled: this.gameSoundEnabled,
+            gameSoundVolume: this.gameSoundVolume
+          }));
+        } catch (e) { console.warn('[SoundSettings] Failed to save:', e); }
+      }
+    };
+    SoundSettings.load();
+
+    // ========================================
     // CORE: Global State (FROZEN SHAPE)
     // ========================================
     const DEFAULT_STATE = {
@@ -18901,9 +18936,10 @@ function ensureLandmarkProperties() {
       // Pay bribe
       GameState.player.cash -= bribeCost;
       GameState.player.heat = 0;
-      
+      updateSirenByHeat(0);
+
       Storage.save();
-      
+
       closePoliceModal();
       TurfTab.showTemporaryNotification('👮 Police bribed! Heat cleared.');
       ProfileTab.render();
@@ -20226,6 +20262,7 @@ function ensureLandmarkProperties() {
       },
       
       showLevelUpNotification() {
+        playLevelUpSound();
         const notification = document.createElement('div');
         notification.className = 'level-up-notification';
         notification.innerHTML = `
@@ -22698,16 +22735,20 @@ function ensureLandmarkProperties() {
         const tabs = document.querySelectorAll('.tab');
         tabs.forEach(tab => {
           tab.addEventListener('click', () => {
-            // Initialize police siren on first user interaction (browser requirement)
+            // Initialize all audio on first user interaction (browser requirement)
             if (!this.sirenInitialized) {
               try {
-                initPoliceSiren();
+                initPoliceScannerAudio();
+                initUISoundAudio();
+                initLevelUpAudio();
                 this.sirenInitialized = true;
-                console.log('[AUDIO] Police siren initialized on user interaction');
-                // Update siren immediately with current heat
+                console.log('[AUDIO] All audio systems initialized on user interaction');
+                // Sync scanner with current heat immediately
                 updateSirenByHeat(GameState.player.heat);
+                // Global UI tap sound on every click
+                document.addEventListener('click', playUITapSound, { passive: true });
               } catch (error) {
-                console.error('[AUDIO] Failed to initialize police siren:', error);
+                console.error('[AUDIO] Failed to initialize audio:', error);
               }
             }
             this.switchTab(tab.dataset.tab);
@@ -23577,36 +23618,61 @@ function ensureLandmarkProperties() {
           chatBtn.className = 'profile-header-btn';
           chatBtn.title = 'Global Chat';
           chatBtn.innerHTML = '<img src="sprites/ui-new/PlayerProfile/globalchatbutton.png" alt="Chat">';
-          
+
           chatBtn.addEventListener('click', () => {
             ChatSystem.openChat();
           });
-          
+
+          // Settings button with gear SVG
+          const settingsBtn = document.createElement('button');
+          settingsBtn.id = 'settings-btn';
+          settingsBtn.className = 'profile-header-btn';
+          settingsBtn.title = 'Sound Settings';
+          settingsBtn.innerHTML = `
+            <svg class="settings-gear-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>`;
+
+          settingsBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            SettingsPanel.show(settingsBtn);
+          });
+
           // Logout button with PNG image
           const logoutBtn = document.createElement('button');
           logoutBtn.id = 'logout-btn';
           logoutBtn.className = 'profile-header-btn';
           logoutBtn.title = 'Logout';
           logoutBtn.innerHTML = '<img src="sprites/ui-new/PlayerProfile/loggoutbutton.png" alt="Logout">';
-          
+
           logoutBtn.addEventListener('click', async () => {
             await AuthManager.logout();
           });
-          
+
           buttonContainer.appendChild(chatBtn);
+          buttonContainer.appendChild(settingsBtn);
           buttonContainer.appendChild(logoutBtn);
           profileHeader.appendChild(buttonContainer);
         } else {
           // Buttons exist in HTML, just add event listeners
           const chatBtn = document.getElementById('global-chat-btn');
+          const settingsBtn = document.getElementById('settings-btn');
           const logoutBtn = document.getElementById('logout-btn');
-          
+
           if (chatBtn) {
             chatBtn.addEventListener('click', () => {
               ChatSystem.openChat();
             });
           }
-          
+
+          if (settingsBtn) {
+            settingsBtn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              SettingsPanel.show(settingsBtn);
+            });
+          }
+
           if (logoutBtn) {
             logoutBtn.addEventListener('click', async () => {
               await AuthManager.logout();
@@ -32043,79 +32109,278 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       console.log('==========================================');
     }
     
-    // Procedural Police Siren (Web Audio API)
-    let audioCtx;
-    let sirenOsc1, sirenOsc2, lfo, lfoGain, sirenGain, sirenFilter;
-    
-    function initPoliceSiren() {
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      sirenOsc1 = audioCtx.createOscillator();
-      sirenOsc2 = audioCtx.createOscillator();
-      lfo = audioCtx.createOscillator();
-      lfoGain = audioCtx.createGain();
-      sirenGain = audioCtx.createGain();
-      sirenFilter = audioCtx.createBiquadFilter();
-      sirenOsc1.type = 'sine';
-      sirenOsc2.type = 'sine';
-      lfo.type = 'sine';
-      sirenOsc1.frequency.value = 520;
-      sirenOsc2.frequency.value = 740;
-      lfo.frequency.value = 0.35; // slow siren sweep
-      lfoGain.gain.value = 120;
-      lfo.connect(lfoGain);
-      lfoGain.connect(sirenOsc1.frequency);
-      lfoGain.connect(sirenOsc2.frequency);
-      sirenFilter.type = 'lowpass';
-      sirenFilter.frequency.value = 800;
-      sirenGain.gain.value = 0;
-      sirenOsc1.connect(sirenFilter);
-      sirenOsc2.connect(sirenFilter);
-      sirenFilter.connect(sirenGain);
-      sirenGain.connect(audioCtx.destination);
-      sirenOsc1.start();
-      sirenOsc2.start();
-      lfo.start();
+    // =============================================
+    // Police Scanner Sound System
+    // Replaces the procedural siren with the real
+    // police radio chatter recording (4:12 total).
+    // Heat tier determines how much of the clip
+    // plays before pausing, then restarting.
+    // =============================================
+    let policeScannerAudio = null;
+    let policeScannerStopTimer = null;
+    let policeScannerRestartTimer = null;
+    let policeScannerCurrentTier = null;
+    const SCANNER_TOTAL_DURATION = 252; // 4 min 12 sec in seconds
+
+    function getHeatTier(heat) {
+      if (heat < 50) return null;
+      if (heat < 70) return 'low';
+      if (heat < 90) return 'medium';
+      if (heat < 100) return 'high';
+      return 'critical';
     }
-    
-    // Heat-Based Sound Control
+
+    function getScannerConfig(tier) {
+      // volume: base gain (multiplied by gameSoundVolume)
+      // playSeconds: how much of the 4:12 clip to play each cycle
+      // pauseSeconds: silence gap before restarting (0 = instant loop)
+      // loop: true means the browser loops the audio automatically (full file, heat 100)
+      switch (tier) {
+        case 'low':      return { volume: 0.28, playSeconds: 45,  pauseSeconds: 18, loop: false };
+        case 'medium':   return { volume: 0.45, playSeconds: 120, pauseSeconds: 10, loop: false };
+        case 'high':     return { volume: 0.62, playSeconds: 200, pauseSeconds: 5,  loop: false };
+        case 'critical': return { volume: 0.80, playSeconds: SCANNER_TOTAL_DURATION, pauseSeconds: 0, loop: true };
+        default:         return null;
+      }
+    }
+
+    function stopScannerTimers() {
+      if (policeScannerStopTimer)    { clearTimeout(policeScannerStopTimer);    policeScannerStopTimer    = null; }
+      if (policeScannerRestartTimer) { clearTimeout(policeScannerRestartTimer); policeScannerRestartTimer = null; }
+    }
+
+    function startScannerPlayback(tier) {
+      if (!policeScannerAudio) return;
+      const config = getScannerConfig(tier);
+      if (!config) return;
+
+      stopScannerTimers();
+      policeScannerAudio.loop = config.loop;
+      policeScannerAudio.currentTime = 0;
+      policeScannerAudio.volume = SoundSettings.gameSoundEnabled
+        ? config.volume * SoundSettings.gameSoundVolume
+        : 0;
+      policeScannerAudio.play().catch(() => {});
+
+      if (!config.loop) {
+        // Stop after playSeconds, then restart after pauseSeconds gap
+        policeScannerStopTimer = setTimeout(() => {
+          if (policeScannerAudio) policeScannerAudio.pause();
+          if (config.pauseSeconds > 0) {
+            policeScannerRestartTimer = setTimeout(() => {
+              const currentTier = getHeatTier(GameState.player.heat);
+              if (currentTier) startScannerPlayback(currentTier);
+            }, config.pauseSeconds * 1000);
+          }
+        }, config.playSeconds * 1000);
+      }
+    }
+
+    function initPoliceScannerAudio() {
+      policeScannerAudio = new Audio('soundeffects/Police Scanner Sound Effect  Police Radio Chatter.mp3');
+      policeScannerAudio.volume = 0;
+      policeScannerAudio.preload = 'auto';
+    }
+
+    // Heat-Based Sound Control (replaces old updateSirenByHeat)
     function updateSirenByHeat(heat) {
-      if (!audioCtx) return;
-      if (heat < 50) {
-        sirenGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.3);
+      if (!policeScannerAudio) return;
+
+      const newTier = getHeatTier(heat);
+
+      if (!newTier) {
+        // Heat below threshold – stop and reset
+        stopScannerTimers();
+        if (!policeScannerAudio.paused) {
+          policeScannerAudio.pause();
+          policeScannerAudio.currentTime = 0;
+        }
+        policeScannerCurrentTier = null;
         return;
       }
-      
-      // Tiered base volumes by heat level - reduced further for subtlety
-      let volume;
-      if (heat < 70) {
-        // Low heat (50-69): 0.15 for subtle background presence
-        volume = 0.15;
-      } else if (heat < 90) {
-        // Medium heat (70-89): 0.13 for noticeable but not intrusive
-        volume = 0.13;
-      } else if (heat < 100) {
-        // High heat (90-99): 0.12 for urgency without overwhelming
-        volume = 0.12;
-      } else {
-        // Critical/arrest (100): 0.12 maintained
-        volume = 0.12;
+
+      if (!SoundSettings.gameSoundEnabled) {
+        // Game sounds muted – silence but keep timers so tier is tracked
+        policeScannerAudio.volume = 0;
+        return;
       }
-      
-      sirenGain.gain.setTargetAtTime(volume, audioCtx.currentTime, 0.3);
-      
-      // Distance filter (far → near)
-      let filterFreq = 600 + heat * 20;
-      sirenFilter.frequency.setTargetAtTime(filterFreq, audioCtx.currentTime, 0.3);
-      
-      // Urgency
-      lfo.frequency.setTargetAtTime(0.25 + heat / 150, audioCtx.currentTime, 0.3);
-      
-      // PANIC MODE
-      if (heat >= 100) {
-        sirenGain.gain.setTargetAtTime(0.12, audioCtx.currentTime, 0.1);
-        lfo.frequency.setTargetAtTime(1.2, audioCtx.currentTime, 0.1);
+
+      if (newTier !== policeScannerCurrentTier) {
+        // Tier changed – restart from beginning with new config
+        policeScannerCurrentTier = newTier;
+        startScannerPlayback(newTier);
+      } else {
+        // Same tier – just sync volume in case settings changed
+        const config = getScannerConfig(newTier);
+        policeScannerAudio.volume = config.volume * SoundSettings.gameSoundVolume;
       }
     }
+
+    // =============================================
+    // UI Tap Sound System
+    // gameuialltapsound.mp3 plays on every screen tap
+    // =============================================
+    let uiTapAudio = null;
+
+    function initUISoundAudio() {
+      uiTapAudio = new Audio('soundeffects/gameuialltapsound.mp3');
+      uiTapAudio.preload = 'auto';
+      uiTapAudio.volume = SoundSettings.uiSoundVolume;
+    }
+
+    function playUITapSound() {
+      if (!uiTapAudio || !SoundSettings.uiSoundEnabled) return;
+      uiTapAudio.currentTime = 0;
+      uiTapAudio.volume = SoundSettings.uiSoundVolume;
+      uiTapAudio.play().catch(() => {});
+    }
+
+    // =============================================
+    // Level Up Sound System
+    // levelupsound.mp3 plays on the level-up notification
+    // =============================================
+    let levelUpAudio = null;
+
+    function initLevelUpAudio() {
+      levelUpAudio = new Audio('soundeffects/levelupsound.mp3');
+      levelUpAudio.preload = 'auto';
+      levelUpAudio.volume = SoundSettings.gameSoundVolume;
+    }
+
+    function playLevelUpSound() {
+      if (!levelUpAudio || !SoundSettings.gameSoundEnabled) return;
+      levelUpAudio.currentTime = 0;
+      levelUpAudio.volume = SoundSettings.gameSoundVolume;
+      levelUpAudio.play().catch(() => {});
+    }
+
+    // =============================================
+    // Settings Panel
+    // Gear icon dropdown with sound toggles/sliders
+    // =============================================
+    const SettingsPanel = {
+      panel: null,
+      _outsideClickHandler: null,
+
+      _buildHTML() {
+        return `
+          <div class="settings-panel-title">Sound Settings</div>
+          <div class="settings-section">
+            <div class="settings-toggle-row">
+              <span class="settings-label">UI Sound Effects</span>
+              <label class="settings-toggle-switch">
+                <input type="checkbox" id="ui-sound-toggle" ${SoundSettings.uiSoundEnabled ? 'checked' : ''}>
+                <span class="settings-toggle-slider"></span>
+              </label>
+            </div>
+            <div class="settings-volume-row">
+              <span class="settings-volume-icon">&#128264;</span>
+              <input type="range" class="settings-volume-slider" id="ui-sound-volume"
+                min="0" max="1" step="0.05" value="${SoundSettings.uiSoundVolume}">
+              <span class="settings-volume-icon">&#128266;</span>
+            </div>
+          </div>
+          <div class="settings-divider"></div>
+          <div class="settings-section">
+            <div class="settings-toggle-row">
+              <span class="settings-label">Game Sounds</span>
+              <label class="settings-toggle-switch">
+                <input type="checkbox" id="game-sound-toggle" ${SoundSettings.gameSoundEnabled ? 'checked' : ''}>
+                <span class="settings-toggle-slider"></span>
+              </label>
+            </div>
+            <div class="settings-volume-row">
+              <span class="settings-volume-icon">&#128264;</span>
+              <input type="range" class="settings-volume-slider" id="game-sound-volume"
+                min="0" max="1" step="0.05" value="${SoundSettings.gameSoundVolume}">
+              <span class="settings-volume-icon">&#128266;</span>
+            </div>
+          </div>
+        `;
+      },
+
+      show(anchorEl) {
+        if (this.panel) {
+          this.hide();
+          return;
+        }
+
+        const panel = document.createElement('div');
+        panel.id = 'sound-settings-panel';
+        panel.className = 'settings-panel';
+        panel.innerHTML = this._buildHTML();
+
+        // Anchor the panel to the profile-header-buttons container
+        const btnContainer = anchorEl.closest('.profile-header-buttons') || anchorEl.parentElement;
+        btnContainer.style.position = 'relative';
+        btnContainer.appendChild(panel);
+        this.panel = panel;
+
+        // UI sound toggle
+        const uiToggle = panel.querySelector('#ui-sound-toggle');
+        uiToggle.addEventListener('change', () => {
+          SoundSettings.uiSoundEnabled = uiToggle.checked;
+          SoundSettings.save();
+        });
+
+        // UI sound volume
+        const uiVolSlider = panel.querySelector('#ui-sound-volume');
+        uiVolSlider.addEventListener('input', () => {
+          SoundSettings.uiSoundVolume = parseFloat(uiVolSlider.value);
+          if (uiTapAudio) uiTapAudio.volume = SoundSettings.uiSoundVolume;
+          SoundSettings.save();
+        });
+
+        // Game sound toggle
+        const gameToggle = panel.querySelector('#game-sound-toggle');
+        gameToggle.addEventListener('change', () => {
+          SoundSettings.gameSoundEnabled = gameToggle.checked;
+          if (!SoundSettings.gameSoundEnabled && policeScannerAudio) {
+            policeScannerAudio.volume = 0;
+          } else if (SoundSettings.gameSoundEnabled) {
+            updateSirenByHeat(GameState.player.heat);
+          }
+          SoundSettings.save();
+        });
+
+        // Game sound volume
+        const gameVolSlider = panel.querySelector('#game-sound-volume');
+        gameVolSlider.addEventListener('input', () => {
+          SoundSettings.gameSoundVolume = parseFloat(gameVolSlider.value);
+          // Live-update scanner volume if playing
+          if (policeScannerAudio && !policeScannerAudio.paused && SoundSettings.gameSoundEnabled) {
+            const tier = getHeatTier(GameState.player.heat);
+            if (tier) {
+              const config = getScannerConfig(tier);
+              policeScannerAudio.volume = config.volume * SoundSettings.gameSoundVolume;
+            }
+          }
+          if (levelUpAudio) levelUpAudio.volume = SoundSettings.gameSoundVolume;
+          SoundSettings.save();
+        });
+
+        // Close when clicking outside the panel
+        setTimeout(() => {
+          this._outsideClickHandler = (e) => {
+            if (!panel.contains(e.target) && e.target.id !== 'settings-btn' && !e.target.closest('#settings-btn')) {
+              this.hide();
+            }
+          };
+          document.addEventListener('click', this._outsideClickHandler);
+        }, 0);
+      },
+
+      hide() {
+        if (this.panel) {
+          this.panel.remove();
+          this.panel = null;
+        }
+        if (this._outsideClickHandler) {
+          document.removeEventListener('click', this._outsideClickHandler);
+          this._outsideClickHandler = null;
+        }
+      }
+    };
     
     // Cleanup on page unload
     window.addEventListener('beforeunload', () => {
