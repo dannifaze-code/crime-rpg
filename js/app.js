@@ -32132,20 +32132,18 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
         case 'low':      return 1;
         case 'medium':   return 2;
         case 'high':     return 3;
-        case 'higher':   return 4;
-        case 'critical': return 5;
-        default:         return 0; // null / unknown
+        case 'critical': return 4;
+        default:         return 0; // null / silent
       }
     }
 
-    // Heat thresholds → tier names
-    // All heat levels now produce some scanner activity.
+    // Heat thresholds → tier names.  Below 50 = silent.
     function getHeatTier(heat) {
-      if (heat <  50) return 'low';      // subtle background chatter
-      if (heat <  70) return 'medium';   // more present
-      if (heat <  90) return 'high';     // clearly audible
-      if (heat < 100) return 'higher';   // urgent
-      return 'critical';                 // full loop
+      if (heat <  50) return null;      // silent
+      if (heat <  70) return 'low';
+      if (heat <  90) return 'medium';
+      if (heat < 100) return 'high';
+      return 'critical';
     }
 
     function getScannerConfig(tier) {
@@ -32154,11 +32152,10 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       // pauseSeconds: silence before next cycle  (0 = auto-loop)
       // loop:         true lets the browser handle looping natively
       switch (tier) {
-        case 'low':      return { volume: 0.22, playSeconds: 30,  pauseSeconds: 20, loop: false };
-        case 'medium':   return { volume: 0.38, playSeconds: 60,  pauseSeconds: 15, loop: false };
-        case 'high':     return { volume: 0.55, playSeconds: 140, pauseSeconds: 10, loop: false };
-        case 'higher':   return { volume: 0.70, playSeconds: 200, pauseSeconds: 5,  loop: false };
-        case 'critical': return { volume: 0.82, playSeconds: SCANNER_TOTAL_DURATION, pauseSeconds: 0, loop: true };
+        case 'low':      return { volume: 0.28, playSeconds: 45,  pauseSeconds: 18, loop: false };
+        case 'medium':   return { volume: 0.45, playSeconds: 120, pauseSeconds: 10, loop: false };
+        case 'high':     return { volume: 0.62, playSeconds: 200, pauseSeconds: 5,  loop: false };
+        case 'critical': return { volume: 0.80, playSeconds: SCANNER_TOTAL_DURATION, pauseSeconds: 0, loop: true };
         default:         return null;
       }
     }
@@ -32251,14 +32248,25 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
         return;
       }
 
+      if (!newTier) {
+        // Heat dropped below 50 – fade out then stop completely
+        if (policeScannerCurrentTier !== null && !policeScannerFading) {
+          fadeOutAndThen(3, () => {
+            stopScannerTimers();
+            policeScannerCurrentTier = null;
+          });
+        }
+        return;
+      }
+
       if (newTier !== policeScannerCurrentTier) {
         if (goingDown) {
-          // Heat falling – fade out over 3 s then start the lower tier
+          // Heat falling to a lower (but still active) tier – fade then restart
           fadeOutAndThen(3, () => {
-            // Re-read heat in case it changed further during the fade
+            // Re-read in case heat moved further during the fade
             const liveTier = getHeatTier(GameState.player.heat);
             policeScannerCurrentTier = liveTier;
-            startScannerPlayback(liveTier);
+            if (liveTier) startScannerPlayback(liveTier);
           });
         } else {
           // Heat rising – switch immediately (urgency)
@@ -32367,10 +32375,14 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
         panel.className = 'settings-panel';
         panel.innerHTML = this._buildHTML();
 
-        // Anchor the panel to the profile-header-buttons container
-        const btnContainer = anchorEl.closest('.profile-header-buttons') || anchorEl.parentElement;
-        btnContainer.style.position = 'relative';
-        btnContainer.appendChild(panel);
+        // Place in document.body so no parent stacking context can bury it.
+        // Use fixed positioning calculated from the button's screen rect.
+        const rect = anchorEl.getBoundingClientRect();
+        panel.style.position = 'fixed';
+        panel.style.top      = (rect.bottom + 8) + 'px';
+        panel.style.right    = (window.innerWidth - rect.right) + 'px';
+        panel.style.left     = 'auto';
+        document.body.appendChild(panel);
         this.panel = panel;
 
         // UI sound toggle
