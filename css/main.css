@@ -7943,15 +7943,19 @@ body {
 }
 
 #settings-btn .settings-gear-icon {
-  width: 26px;
-  height: 26px;
-  stroke: #8a92a8;
+  width: 38px;
+  height: 38px;
+  stroke: #a0a8bc;
+  stroke-width: 1.8;
+  fill: none;
+  overflow: visible;
   transition: stroke 0.2s ease, transform 0.35s ease;
   display: block;
 }
 
 #settings-btn:hover .settings-gear-icon {
   stroke: #00f5ff;
+  filter: drop-shadow(0 0 4px rgba(0, 245, 255, 0.5));
   transform: rotate(60deg);
 }
 

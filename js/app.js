@@ -23598,12 +23598,13 @@ function ensureLandmarkProperties() {
       },
       
       renderLogoutButton() {
-        // Check if button already exists
-        if (document.getElementById('logout-btn')) return;
-        
+        // Guard against double-initialization (called on every render)
+        if (this._buttonsInitialized) return;
+        this._buttonsInitialized = true;
+
         const profileHeader = document.querySelector('#profile-tab .page-header');
         if (!profileHeader) return;
-        
+
         // Check if buttons container already exists in HTML
         let buttonContainer = profileHeader.querySelector('.profile-header-buttons');
         
@@ -32115,31 +32116,49 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
     // police radio chatter recording (4:12 total).
     // Heat tier determines how much of the clip
     // plays before pausing, then restarting.
+    // Fades out smoothly when heat drops.
     // =============================================
-    let policeScannerAudio = null;
-    let policeScannerStopTimer = null;
+    let policeScannerAudio       = null;
+    let policeScannerStopTimer   = null;
     let policeScannerRestartTimer = null;
     let policeScannerCurrentTier = null;
+    let policeScannerFadeInterval = null;
+    let policeScannerFading      = false;
     const SCANNER_TOTAL_DURATION = 252; // 4 min 12 sec in seconds
 
+    // Numeric rank for each tier – used to detect upward vs downward heat changes
+    function getTierLevel(tier) {
+      switch (tier) {
+        case 'low':      return 1;
+        case 'medium':   return 2;
+        case 'high':     return 3;
+        case 'higher':   return 4;
+        case 'critical': return 5;
+        default:         return 0; // null / unknown
+      }
+    }
+
+    // Heat thresholds → tier names
+    // All heat levels now produce some scanner activity.
     function getHeatTier(heat) {
-      if (heat < 50) return null;
-      if (heat < 70) return 'low';
-      if (heat < 90) return 'medium';
-      if (heat < 100) return 'high';
-      return 'critical';
+      if (heat <  50) return 'low';      // subtle background chatter
+      if (heat <  70) return 'medium';   // more present
+      if (heat <  90) return 'high';     // clearly audible
+      if (heat < 100) return 'higher';   // urgent
+      return 'critical';                 // full loop
     }
 
     function getScannerConfig(tier) {
-      // volume: base gain (multiplied by gameSoundVolume)
-      // playSeconds: how much of the 4:12 clip to play each cycle
-      // pauseSeconds: silence gap before restarting (0 = instant loop)
-      // loop: true means the browser loops the audio automatically (full file, heat 100)
+      // volume:       base gain, multiplied by gameSoundVolume slider
+      // playSeconds:  how much of the 4:12 clip plays per cycle
+      // pauseSeconds: silence before next cycle  (0 = auto-loop)
+      // loop:         true lets the browser handle looping natively
       switch (tier) {
-        case 'low':      return { volume: 0.28, playSeconds: 45,  pauseSeconds: 18, loop: false };
-        case 'medium':   return { volume: 0.45, playSeconds: 120, pauseSeconds: 10, loop: false };
-        case 'high':     return { volume: 0.62, playSeconds: 200, pauseSeconds: 5,  loop: false };
-        case 'critical': return { volume: 0.80, playSeconds: SCANNER_TOTAL_DURATION, pauseSeconds: 0, loop: true };
+        case 'low':      return { volume: 0.22, playSeconds: 30,  pauseSeconds: 20, loop: false };
+        case 'medium':   return { volume: 0.38, playSeconds: 60,  pauseSeconds: 15, loop: false };
+        case 'high':     return { volume: 0.55, playSeconds: 140, pauseSeconds: 10, loop: false };
+        case 'higher':   return { volume: 0.70, playSeconds: 200, pauseSeconds: 5,  loop: false };
+        case 'critical': return { volume: 0.82, playSeconds: SCANNER_TOTAL_DURATION, pauseSeconds: 0, loop: true };
         default:         return null;
       }
     }
@@ -32149,11 +32168,44 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       if (policeScannerRestartTimer) { clearTimeout(policeScannerRestartTimer); policeScannerRestartTimer = null; }
     }
 
+    function clearScannerFade() {
+      if (policeScannerFadeInterval) { clearInterval(policeScannerFadeInterval); policeScannerFadeInterval = null; }
+      policeScannerFading = false;
+    }
+
+    // Smoothly fade the scanner out over `duration` seconds, then call `callback`.
+    function fadeOutAndThen(duration, callback) {
+      if (!policeScannerAudio || policeScannerAudio.paused) {
+        clearScannerFade();
+        if (callback) callback();
+        return;
+      }
+      clearScannerFade();
+      policeScannerFading = true;
+
+      const startVolume = policeScannerAudio.volume || 0.01;
+      const steps = 30;
+      const stepMs = (duration * 1000) / steps;
+      let step = 0;
+
+      policeScannerFadeInterval = setInterval(() => {
+        step++;
+        if (!policeScannerAudio) { clearScannerFade(); return; }
+        policeScannerAudio.volume = Math.max(0, startVolume * (1 - step / steps));
+        if (step >= steps) {
+          clearScannerFade();
+          if (policeScannerAudio && !policeScannerAudio.paused) policeScannerAudio.pause();
+          if (callback) callback();
+        }
+      }, stepMs);
+    }
+
     function startScannerPlayback(tier) {
       if (!policeScannerAudio) return;
       const config = getScannerConfig(tier);
       if (!config) return;
 
+      clearScannerFade();   // cancel any fade in progress
       stopScannerTimers();
       policeScannerAudio.loop = config.loop;
       policeScannerAudio.currentTime = 0;
@@ -32163,13 +32215,15 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       policeScannerAudio.play().catch(() => {});
 
       if (!config.loop) {
-        // Stop after playSeconds, then restart after pauseSeconds gap
+        // Stop after playSeconds, then after pauseSeconds restart using current heat
         policeScannerStopTimer = setTimeout(() => {
           if (policeScannerAudio) policeScannerAudio.pause();
           if (config.pauseSeconds > 0) {
             policeScannerRestartTimer = setTimeout(() => {
-              const currentTier = getHeatTier(GameState.player.heat);
-              if (currentTier) startScannerPlayback(currentTier);
+              if (!policeScannerFading) {
+                const liveTier = getHeatTier(GameState.player.heat);
+                startScannerPlayback(liveTier);
+              }
             }, config.pauseSeconds * 1000);
           }
         }, config.playSeconds * 1000);
@@ -32182,37 +32236,40 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       policeScannerAudio.preload = 'auto';
     }
 
-    // Heat-Based Sound Control (replaces old updateSirenByHeat)
+    // Heat-Based Sound Control – called everywhere heat changes
     function updateSirenByHeat(heat) {
       if (!policeScannerAudio) return;
 
-      const newTier = getHeatTier(heat);
-
-      if (!newTier) {
-        // Heat below threshold – stop and reset
-        stopScannerTimers();
-        if (!policeScannerAudio.paused) {
-          policeScannerAudio.pause();
-          policeScannerAudio.currentTime = 0;
-        }
-        policeScannerCurrentTier = null;
-        return;
-      }
+      const newTier      = getHeatTier(heat);
+      const currentLevel = getTierLevel(policeScannerCurrentTier);
+      const newLevel     = getTierLevel(newTier);
+      const goingDown    = newLevel < currentLevel;
 
       if (!SoundSettings.gameSoundEnabled) {
-        // Game sounds muted – silence but keep timers so tier is tracked
-        policeScannerAudio.volume = 0;
+        // Game sounds muted: silence immediately, keep tier tracked
+        if (policeScannerAudio) policeScannerAudio.volume = 0;
         return;
       }
 
       if (newTier !== policeScannerCurrentTier) {
-        // Tier changed – restart from beginning with new config
-        policeScannerCurrentTier = newTier;
-        startScannerPlayback(newTier);
-      } else {
-        // Same tier – just sync volume in case settings changed
+        if (goingDown) {
+          // Heat falling – fade out over 3 s then start the lower tier
+          fadeOutAndThen(3, () => {
+            // Re-read heat in case it changed further during the fade
+            const liveTier = getHeatTier(GameState.player.heat);
+            policeScannerCurrentTier = liveTier;
+            startScannerPlayback(liveTier);
+          });
+        } else {
+          // Heat rising – switch immediately (urgency)
+          clearScannerFade();
+          policeScannerCurrentTier = newTier;
+          startScannerPlayback(newTier);
+        }
+      } else if (!policeScannerFading) {
+        // Same tier – sync volume live (e.g. settings slider moved)
         const config = getScannerConfig(newTier);
-        policeScannerAudio.volume = config.volume * SoundSettings.gameSoundVolume;
+        if (config) policeScannerAudio.volume = config.volume * SoundSettings.gameSoundVolume;
       }
     }
 
@@ -32335,9 +32392,15 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
         const gameToggle = panel.querySelector('#game-sound-toggle');
         gameToggle.addEventListener('change', () => {
           SoundSettings.gameSoundEnabled = gameToggle.checked;
-          if (!SoundSettings.gameSoundEnabled && policeScannerAudio) {
-            policeScannerAudio.volume = 0;
-          } else if (SoundSettings.gameSoundEnabled) {
+          if (!SoundSettings.gameSoundEnabled) {
+            // Fade out the scanner gracefully on disable
+            fadeOutAndThen(1.5, () => {
+              stopScannerTimers();
+              policeScannerCurrentTier = null;
+            });
+          } else {
+            // Re-sync scanner to current heat on enable
+            policeScannerCurrentTier = null; // force tier re-entry
             updateSirenByHeat(GameState.player.heat);
           }
           SoundSettings.save();
