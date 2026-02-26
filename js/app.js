@@ -23832,6 +23832,7 @@ function ensureLandmarkProperties() {
       playerSpeed: 3,
       playerSize: 32,
       playerFacing: 'down',
+      playerRotDeg: 90, // degrees: 0=right, 90=down
       touchActive: false,
       touchStartX: 0,
       touchStartY: 0,
@@ -23909,6 +23910,7 @@ function ensureLandmarkProperties() {
 
         this.canvas = null;
         this.ctx = null;
+        this._spriteFrames = null;
         Storage.save();
         console.log('[SafehouseInterior] Player exited safehouse');
 
@@ -23933,7 +23935,12 @@ function ensureLandmarkProperties() {
             <span class="shi-title">Safe House</span>
             <button class="shi-exit-btn" id="shi-exit-btn">Leave</button>
           </div>
-          <canvas id="shi-canvas" class="shi-canvas"></canvas>
+          <div class="shi-canvas-wrapper" id="shi-canvas-wrapper">
+            <canvas id="shi-canvas" class="shi-canvas"></canvas>
+            <div id="shi-player-sprite" class="shi-player-sprite">
+              <div class="fr-rotator"><div class="fr-bob"><div class="fr-layer fr-feet"></div><div class="fr-layer fr-body"></div></div></div>
+            </div>
+          </div>
           <div class="shi-hint" id="shi-hint">Walk to the <span style="color:#4ade80">Command Center</span> to manage your gangsters</div>
         `;
 
@@ -23951,14 +23958,145 @@ function ensureLandmarkProperties() {
         this.scaleX = this.canvas.width / this.roomW;
         this.scaleY = this.canvas.height / this.roomH;
 
+        // Setup the DOM player sprite (same as free roam sprite)
+        this.setupPlayerSprite();
+
         // Exit button
         document.getElementById('shi-exit-btn').addEventListener('click', () => this.exit());
 
         // Canvas touch/click for command center interaction
-        this.canvas.addEventListener('click', (e) => this.handleCanvasClick(e));
+        const wrapper = document.getElementById('shi-canvas-wrapper');
+        if (wrapper) wrapper.addEventListener('click', (e) => this.handleCanvasClick(e));
 
         // Create joystick
         this.createJoystick(overlay);
+      },
+
+      // Copy sprite frame URLs from the existing free roam player or use embedded fallbacks
+      setupPlayerSprite() {
+        const spriteEl = document.getElementById('shi-player-sprite');
+        if (!spriteEl) return;
+
+        const feetEl = spriteEl.querySelector('.fr-feet');
+        const bodyEl = spriteEl.querySelector('.fr-body');
+
+        // Copy styles from existing freeRoamPlayer if it exists
+        const existingPlayer = document.getElementById('freeRoamPlayer');
+        if (existingPlayer) {
+          const existFeet = existingPlayer.querySelector('.fr-feet');
+          const existBody = existingPlayer.querySelector('.fr-body');
+          if (existFeet && feetEl) {
+            feetEl.style.backgroundImage = existFeet.style.backgroundImage;
+          }
+          if (existBody && bodyEl) {
+            bodyEl.style.backgroundImage = existBody.style.backgroundImage;
+          }
+        }
+
+        // Build frame lists for animation cycling (same paths as free roam)
+        this._spriteFrames = { feetIdle: [], feetWalk: [], bodyIdle: [], bodyMove: [] };
+        this._spriteFrameIdx = { feet: 0, body: 0 };
+        this._spriteFrameTs = { feet: 0, body: 0 };
+        this._spriteMoving = false;
+
+        // Determine current weapon for body frames
+        const weapon = (GameState.character && GameState.character.equippedWeapon) || 'handgun';
+        const weaponMap = {
+          pistol: 'handgun', handgun: 'handgun', shotgun: 'shotgun',
+          rifle: 'rifle', knife: 'knife'
+        };
+        const spriteWeapon = weaponMap[weapon] || 'handgun';
+
+        // Build frame URL lists
+        for (let i = 0; i < 20; i++) {
+          this._spriteFrames.bodyIdle.push(`sprites/Top_Down_Survivor/${spriteWeapon}/idle/survivor-idle_${spriteWeapon}_${i}.png`);
+          this._spriteFrames.bodyMove.push(`sprites/Top_Down_Survivor/${spriteWeapon}/move/survivor-move_${spriteWeapon}_${i}.png`);
+        }
+        this._spriteFrames.feetIdle.push('sprites/Top_Down_Survivor/feet/idle/survivor-idle_0.png');
+        for (let i = 0; i < 20; i++) {
+          this._spriteFrames.feetWalk.push(`sprites/Top_Down_Survivor/feet/walk/survivor-walk_${i}.png`);
+        }
+
+        // Preload frames
+        const preload = (url) => {
+          const img = new Image();
+          img.src = url;
+        };
+        this._spriteFrames.bodyIdle.forEach(preload);
+        this._spriteFrames.bodyMove.forEach(preload);
+        this._spriteFrames.feetWalk.forEach(preload);
+        this._spriteFrames.feetIdle.forEach(preload);
+
+        // Set initial frame
+        if (bodyEl && this._spriteFrames.bodyIdle.length > 0) {
+          bodyEl.style.backgroundImage = `url('${this._spriteFrames.bodyIdle[0]}')`;
+        }
+        if (feetEl && this._spriteFrames.feetIdle.length > 0) {
+          feetEl.style.backgroundImage = `url('${this._spriteFrames.feetIdle[0]}')`;
+        }
+
+        // Set initial position
+        this.updateSpritePosition();
+      },
+
+      // Position the DOM sprite over the canvas based on playerPos
+      updateSpritePosition() {
+        const spriteEl = document.getElementById('shi-player-sprite');
+        if (!spriteEl || !this.canvas) return;
+
+        // Convert room coords to pixel position relative to canvas wrapper
+        const px = this.playerPos.x * this.scaleX;
+        const py = this.playerPos.y * this.scaleY;
+
+        spriteEl.style.left = px + 'px';
+        spriteEl.style.top = py + 'px';
+
+        // Update rotation based on facing direction
+        const facingAngles = { right: 0, down: 90, left: 180, up: 270 };
+        const targetDeg = facingAngles[this.playerFacing] || 90;
+
+        // Smooth rotation
+        const diff = ((targetDeg - this.playerRotDeg + 540) % 360) - 180;
+        this.playerRotDeg += diff * 0.15;
+
+        const rotator = spriteEl.querySelector('.fr-rotator');
+        if (rotator) {
+          rotator.style.transform = `translate(-50%, -50%) rotate(${this.playerRotDeg.toFixed(1)}deg)`;
+        }
+      },
+
+      // Cycle sprite animation frames
+      updateSpriteFrames(isMoving) {
+        const spriteEl = document.getElementById('shi-player-sprite');
+        if (!spriteEl || !this._spriteFrames) return;
+
+        const feetEl = spriteEl.querySelector('.fr-feet');
+        const bodyEl = spriteEl.querySelector('.fr-body');
+        const now = Date.now();
+
+        // Toggle moving class for CSS bob animation
+        if (isMoving !== this._spriteMoving) {
+          this._spriteMoving = isMoving;
+          spriteEl.classList.toggle('moving', isMoving);
+        }
+
+        // Body frames
+        const bodyFrames = isMoving ? this._spriteFrames.bodyMove : this._spriteFrames.bodyIdle;
+        const bodyRate = isMoving ? 80 : 100; // ms per frame
+        if (bodyFrames.length > 0 && (now - this._spriteFrameTs.body > bodyRate)) {
+          this._spriteFrameIdx.body = (this._spriteFrameIdx.body + 1) % bodyFrames.length;
+          if (bodyEl) bodyEl.style.backgroundImage = `url('${bodyFrames[this._spriteFrameIdx.body]}')`;
+          this._spriteFrameTs.body = now;
+        }
+
+        // Feet frames
+        const feetFrames = isMoving ? this._spriteFrames.feetWalk : this._spriteFrames.feetIdle;
+        const feetRate = isMoving ? 60 : 200;
+        if (feetFrames.length > 0 && (now - this._spriteFrameTs.feet > feetRate)) {
+          this._spriteFrameIdx.feet = (this._spriteFrameIdx.feet + 1) % feetFrames.length;
+          if (feetEl) feetEl.style.backgroundImage = `url('${feetFrames[this._spriteFrameIdx.feet]}')`;
+          this._spriteFrameTs.feet = now;
+        }
       },
 
       createJoystick(container) {
@@ -24289,8 +24427,10 @@ function ensureLandmarkProperties() {
           ctx.restore();
         }
 
-        // Draw player sprite
-        this.renderPlayer(ctx, sx, sy);
+        // Update DOM player sprite position and animation (replaces canvas-drawn player)
+        const isMoving = Math.abs(this.touchDirX) > 0.1 || Math.abs(this.touchDirY) > 0.1;
+        this.updateSpritePosition();
+        this.updateSpriteFrames(isMoving);
 
         // Draw floating texts
         for (const ft of this.floatingTexts) {
@@ -24304,42 +24444,8 @@ function ensureLandmarkProperties() {
         }
       },
 
-      renderPlayer(ctx, sx, sy) {
-        const px = this.playerPos.x * sx;
-        const py = this.playerPos.y * sy;
-        const ps = this.playerSize * Math.min(sx, sy);
+      // renderPlayer removed - now using DOM sprite overlay (same as free roam sprite)
 
-        ctx.save();
-
-        // Shadow
-        ctx.fillStyle = 'rgba(0,0,0,0.3)';
-        ctx.beginPath();
-        ctx.ellipse(px, py + ps * 0.4, ps * 0.35, ps * 0.12, 0, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Body
-        ctx.fillStyle = '#4a6741';
-        ctx.beginPath();
-        ctx.ellipse(px, py, ps * 0.28, ps * 0.35, 0, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Head
-        ctx.fillStyle = '#d4a574';
-        ctx.beginPath();
-        ctx.arc(px, py - ps * 0.32, ps * 0.18, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Direction indicator (eyes)
-        ctx.fillStyle = '#222';
-        const eyeOff = { up: { x: 0, y: -2 }, down: { x: 0, y: 2 }, left: { x: -3, y: 0 }, right: { x: 3, y: 0 } };
-        const eo = eyeOff[this.playerFacing] || eyeOff.down;
-        ctx.beginPath();
-        ctx.arc(px + (eo.x - 3) * sx, py - ps * 0.32 + eo.y * sy, 2 * sx, 0, Math.PI * 2);
-        ctx.arc(px + (eo.x + 3) * sx, py - ps * 0.32 + eo.y * sy, 2 * sx, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.restore();
-      }
     };
 
 

@@ -8188,13 +8188,77 @@ body {
   transform: scale(0.96);
 }
 
-.shi-canvas {
-  display: block;
+.shi-canvas-wrapper {
+  position: relative;
   margin: 8px auto 0;
-  border-radius: 8px;
-  border: 1px solid #1a1a1a;
   max-width: 500px;
   width: calc(100% - 16px);
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #1a1a1a;
+}
+
+.shi-canvas {
+  display: block;
+  width: 100%;
+}
+
+/* Player sprite overlay inside safehouse interior */
+.shi-player-sprite {
+  position: absolute;
+  width: 48px;
+  height: 48px;
+  pointer-events: none;
+  z-index: 10;
+  transform: translate(-50%, -50%);
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.6));
+}
+
+.shi-player-sprite .fr-rotator {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 100%;
+  height: 100%;
+  transform-origin: 50% 50%;
+  transform: translate(-50%, -50%) rotate(90deg);
+}
+
+.shi-player-sprite .fr-bob {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.shi-player-sprite.moving .fr-bob {
+  animation: shi-sprite-bob 0.35s ease-in-out infinite;
+}
+
+@keyframes shi-sprite-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+
+.shi-player-sprite .fr-layer {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 100%;
+  height: 100%;
+  transform: translate(-50%, -50%);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+}
+
+.shi-player-sprite .fr-feet {
+  z-index: 1;
+}
+
+.shi-player-sprite .fr-body {
+  z-index: 2;
 }
 
 .shi-hint {
