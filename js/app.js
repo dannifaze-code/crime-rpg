@@ -4889,6 +4889,9 @@ const CartoonSpriteGenerator = {
       // Black Market inventory storage
       marketInventory: {},
 
+      // BUILDING TAKEOVER PROGRESS
+      buildingTakeover: {},  // { buildingId: { floor: 0-5, completed: bool } }
+
       // GANGSTER SYSTEM (Lay Low / Safehouse Interior)
       gangsters: {
         owned: [],          // Array of owned gangster objects
@@ -5102,6 +5105,11 @@ const CartoonSpriteGenerator = {
         }
         if (typeof GameState.character.freeRoam !== 'boolean') GameState.character.freeRoam = false;
         if (typeof GameState.character.isDead !== 'boolean') GameState.character.isDead = false;
+
+        // Building takeover progress
+        if (!GameState.buildingTakeover || typeof GameState.buildingTakeover !== 'object') {
+          GameState.buildingTakeover = {};
+        }
 
         // Gangster system
         if (!GameState.gangsters || typeof GameState.gangsters !== 'object') {
@@ -25108,6 +25116,727 @@ function ensureLandmarkProperties() {
     };
 
 
+    // ================================================
+    // FREE ROAM TOUCH CONTROLLER
+    // Invisible joystick for player-controlled sprite movement
+    // ================================================
+    const FreeRoamController = {
+      active: false,
+      dirX: 0,
+      dirY: 0,
+      moveSpeed: 0.12,  // percent per frame (map coords are 0-100%)
+      animFrame: null,
+      enterBtnEl: null,
+      nearestBuilding: null,
+      _touchId: null,
+      _touchStartX: 0,
+      _touchStartY: 0,
+      _joyBaseX: 0,
+      _joyBaseY: 0,
+      _maxJoyDist: 40,
+      _keyState: { up: false, down: false, left: false, right: false },
+
+      start() {
+        if (this.active) return;
+        this.active = true;
+        this.dirX = 0;
+        this.dirY = 0;
+
+        // Create invisible touch zone over left half of map viewport
+        this.createTouchZone();
+
+        // Create enter button on right side
+        this.createEnterButton();
+
+        // Start movement loop
+        this.startLoop();
+
+        // Keyboard support
+        this._onKeyDown = (e) => {
+          if (!this.active) return;
+          if (e.key === 'w' || e.key === 'ArrowUp') this._keyState.up = true;
+          if (e.key === 's' || e.key === 'ArrowDown') this._keyState.down = true;
+          if (e.key === 'a' || e.key === 'ArrowLeft') this._keyState.left = true;
+          if (e.key === 'd' || e.key === 'ArrowRight') this._keyState.right = true;
+          if (e.key === 'e' || e.key === 'Enter') this.tryEnterBuilding();
+          this.updateKeyDir();
+        };
+        this._onKeyUp = (e) => {
+          if (e.key === 'w' || e.key === 'ArrowUp') this._keyState.up = false;
+          if (e.key === 's' || e.key === 'ArrowDown') this._keyState.down = false;
+          if (e.key === 'a' || e.key === 'ArrowLeft') this._keyState.left = false;
+          if (e.key === 'd' || e.key === 'ArrowRight') this._keyState.right = false;
+          this.updateKeyDir();
+        };
+        document.addEventListener('keydown', this._onKeyDown);
+        document.addEventListener('keyup', this._onKeyUp);
+
+        console.log('[FreeRoamController] Started - touch controlled');
+      },
+
+      stop() {
+        if (!this.active) return;
+        this.active = false;
+        this.dirX = 0;
+        this.dirY = 0;
+
+        if (this.animFrame) {
+          cancelAnimationFrame(this.animFrame);
+          this.animFrame = null;
+        }
+
+        // Remove touch zone
+        const tz = document.getElementById('fr-touch-zone');
+        if (tz) tz.remove();
+
+        // Remove enter button
+        if (this.enterBtnEl) {
+          this.enterBtnEl.remove();
+          this.enterBtnEl = null;
+        }
+
+        // Remove keyboard listeners
+        if (this._onKeyDown) document.removeEventListener('keydown', this._onKeyDown);
+        if (this._onKeyUp) document.removeEventListener('keyup', this._onKeyUp);
+
+        this._keyState = { up: false, down: false, left: false, right: false };
+        console.log('[FreeRoamController] Stopped');
+      },
+
+      createTouchZone() {
+        const existing = document.getElementById('fr-touch-zone');
+        if (existing) existing.remove();
+
+        const zone = document.createElement('div');
+        zone.id = 'fr-touch-zone';
+        zone.className = 'fr-touch-zone';
+
+        const viewport = document.getElementById('map-viewport') || document.getElementById('city-map');
+        if (viewport) {
+          viewport.appendChild(zone);
+        } else {
+          document.body.appendChild(zone);
+        }
+
+        zone.addEventListener('touchstart', (e) => {
+          if (this._touchId !== null) return;
+          e.preventDefault();
+          e.stopPropagation();
+          const t = e.changedTouches[0];
+          this._touchId = t.identifier;
+          this._joyBaseX = t.clientX;
+          this._joyBaseY = t.clientY;
+        }, { passive: false });
+
+        zone.addEventListener('touchmove', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          for (let i = 0; i < e.changedTouches.length; i++) {
+            const t = e.changedTouches[i];
+            if (t.identifier === this._touchId) {
+              const dx = t.clientX - this._joyBaseX;
+              const dy = t.clientY - this._joyBaseY;
+              const dist = Math.sqrt(dx * dx + dy * dy);
+              if (dist > 5) { // dead zone
+                const clamp = Math.min(dist, this._maxJoyDist);
+                this.dirX = (dx / dist) * (clamp / this._maxJoyDist);
+                this.dirY = (dy / dist) * (clamp / this._maxJoyDist);
+              } else {
+                this.dirX = 0;
+                this.dirY = 0;
+              }
+            }
+          }
+        }, { passive: false });
+
+        const endTouch = (e) => {
+          for (let i = 0; i < e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === this._touchId) {
+              this._touchId = null;
+              this.dirX = 0;
+              this.dirY = 0;
+            }
+          }
+        };
+        zone.addEventListener('touchend', endTouch);
+        zone.addEventListener('touchcancel', endTouch);
+
+        // Mouse fallback
+        zone.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          this._joyBaseX = e.clientX;
+          this._joyBaseY = e.clientY;
+          this._mouseActive = true;
+        });
+        document.addEventListener('mousemove', (e) => {
+          if (!this._mouseActive) return;
+          const dx = e.clientX - this._joyBaseX;
+          const dy = e.clientY - this._joyBaseY;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist > 5) {
+            const clamp = Math.min(dist, this._maxJoyDist);
+            this.dirX = (dx / dist) * (clamp / this._maxJoyDist);
+            this.dirY = (dy / dist) * (clamp / this._maxJoyDist);
+          }
+        });
+        document.addEventListener('mouseup', () => {
+          this._mouseActive = false;
+          this.dirX = 0;
+          this.dirY = 0;
+        });
+      },
+
+      createEnterButton() {
+        if (this.enterBtnEl) this.enterBtnEl.remove();
+
+        const btn = document.createElement('button');
+        btn.id = 'fr-enter-btn';
+        btn.className = 'fr-enter-btn';
+        btn.innerHTML = '<span class="fr-enter-icon">🚪</span><span class="fr-enter-text">Enter</span>';
+        btn.style.display = 'none';
+
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.tryEnterBuilding();
+        });
+        btn.addEventListener('touchstart', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          this.tryEnterBuilding();
+        }, { passive: false });
+
+        const viewport = document.getElementById('map-viewport') || document.getElementById('city-map');
+        if (viewport) {
+          viewport.appendChild(btn);
+        }
+        this.enterBtnEl = btn;
+      },
+
+      updateKeyDir() {
+        let dx = 0, dy = 0;
+        if (this._keyState.left) dx -= 1;
+        if (this._keyState.right) dx += 1;
+        if (this._keyState.up) dy -= 1;
+        if (this._keyState.down) dy += 1;
+        const mag = Math.sqrt(dx * dx + dy * dy);
+        this.dirX = mag > 0 ? dx / mag : 0;
+        this.dirY = mag > 0 ? dy / mag : 0;
+      },
+
+      startLoop() {
+        const loop = () => {
+          if (!this.active) return;
+          this.updatePosition();
+          this.checkBuildingProximity();
+          this.animFrame = requestAnimationFrame(loop);
+        };
+        this.animFrame = requestAnimationFrame(loop);
+      },
+
+      updatePosition() {
+        if (Math.abs(this.dirX) < 0.05 && Math.abs(this.dirY) < 0.05) return;
+
+        const pos = GameState.character.position;
+        let nx = pos.x + this.dirX * this.moveSpeed;
+        let ny = pos.y + this.dirY * this.moveSpeed;
+
+        // Clamp to map bounds
+        nx = Math.max(2, Math.min(98, nx));
+        ny = Math.max(2, Math.min(98, ny));
+
+        GameState.character.position.x = nx;
+        GameState.character.position.y = ny;
+
+        // Update DOM sprite position
+        const playerEl = document.getElementById('freeRoamPlayer');
+        if (playerEl) {
+          playerEl.style.left = nx + '%';
+          playerEl.style.top = ny + '%';
+        }
+
+        // Update sprite facing and animation
+        if (typeof TurfTab !== 'undefined' && TurfTab.roamSprite) {
+          const sprite = TurfTab.roamSprite;
+          // Convert direction to degrees for sprite rotation
+          if (Math.abs(this.dirX) > 0.1 || Math.abs(this.dirY) > 0.1) {
+            const deg = Math.atan2(this.dirY, this.dirX) * 180 / Math.PI;
+            if (typeof sprite.setFacingFromVector === 'function') {
+              sprite.setFacingFromVector(this.dirX, this.dirY, 0.016);
+            } else if (playerEl) {
+              playerEl.style.setProperty('--fr-rot', deg.toFixed(1) + 'deg');
+            }
+            // Set moving state for walk animation
+            if (typeof sprite.setFrameMoving === 'function') {
+              sprite.setFrameMoving(true);
+            }
+            if (typeof sprite.updateFrames === 'function') {
+              sprite.updateFrames(performance.now(), true);
+            }
+          }
+        }
+      },
+
+      checkBuildingProximity() {
+        const pos = GameState.character.position;
+        let nearest = null;
+        let nearestDist = Infinity;
+
+        // Check property buildings
+        if (Array.isArray(GameState.propertyBuildings)) {
+          for (const b of GameState.propertyBuildings) {
+            // Skip safehouse - that's handled by Lay Low
+            if (b.type === 'safehouse' || b.id === 'safehouse') continue;
+
+            const dx = pos.x - b.x;
+            const dy = pos.y - b.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < nearestDist) {
+              nearestDist = dist;
+              nearest = b;
+            }
+          }
+        }
+
+        // Check landmarks (except safehouse)
+        if (GameState.fixedLandmarkPositions) {
+          for (const [key, lm] of Object.entries(GameState.fixedLandmarkPositions)) {
+            if (key === 'safeHouse') continue;
+            const dx = pos.x - lm.x;
+            const dy = pos.y - lm.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < nearestDist) {
+              nearestDist = dist;
+              nearest = { ...lm, id: key, name: key, type: key, isLandmark: true };
+            }
+          }
+        }
+
+        // Show/hide enter button based on proximity
+        const threshold = 6; // % distance threshold
+        const isOwned = nearest && nearest.owned;
+        const isLandmark = nearest && nearest.isLandmark;
+        const showBtn = nearest && nearestDist < threshold && !isOwned && !isLandmark;
+
+        if (showBtn) {
+          this.nearestBuilding = nearest;
+          if (this.enterBtnEl) {
+            this.enterBtnEl.style.display = 'flex';
+            // Show floor progress if partially taken over
+            const progress = GameState.buildingTakeover && GameState.buildingTakeover[nearest.id];
+            const floorLabel = progress && progress.floor > 0 ? ` (F${progress.floor + 1}/5)` : '';
+            const textEl = this.enterBtnEl.querySelector('.fr-enter-text');
+            if (textEl) textEl.textContent = nearest.name ? `Enter ${nearest.name.substring(0, 10)}${floorLabel}` : 'Enter';
+          }
+        } else {
+          this.nearestBuilding = null;
+          if (this.enterBtnEl) this.enterBtnEl.style.display = 'none';
+        }
+      },
+
+      tryEnterBuilding() {
+        if (!this.nearestBuilding) return;
+        const building = this.nearestBuilding;
+
+        // Skip if building is already purchased/owned
+        if (building.owned) {
+          if (typeof TurfTab !== 'undefined' && TurfTab.showTemporaryNotification) {
+            TurfTab.showTemporaryNotification(`You already own ${building.name}!`);
+          }
+          return;
+        }
+
+        // Skip landmarks (non-takeover)
+        if (building.isLandmark) {
+          if (typeof TurfTab !== 'undefined' && TurfTab.showTemporaryNotification) {
+            TurfTab.showTemporaryNotification(`Cannot enter ${building.name || building.id}`);
+          }
+          return;
+        }
+
+        console.log('[FreeRoamController] Entering building:', building.name || building.id);
+
+        // Pause free roam
+        GameState.character.freeRoam = false;
+        if (typeof TurfTab !== 'undefined') {
+          TurfTab.stopFreeRoam();
+          TurfTab.updateRoamButton();
+        }
+
+        // Launch building takeover
+        BuildingTakeover.enter(building);
+      }
+    };
+
+
+    // ================================================
+    // BUILDING TAKEOVER SYSTEM
+    // 5-floor progression with dialog + battle per floor
+    // ================================================
+    const BuildingTakeover = {
+      active: false,
+      building: null,
+      currentFloor: 0,
+      totalFloors: 5,
+      overlayEl: null,
+
+      // Sarcastic dialog lines per floor (generic + building-type specific)
+      FLOOR_DIALOGS: {
+        _generic: [
+          ["You really think you can walk in here and take over?", "This is MY turf, rookie.", "Turn around while you still can."],
+          ["You made it past the lobby... big deal.", "The boys upstairs are waiting for you.", "Hope you brought backup."],
+          ["Not bad for a street rat.", "But this floor? This is where dreams die.", "Let's see what you're really made of."],
+          ["I'm impressed you made it this far.", "But you're running out of luck.", "The boss won't be so forgiving."],
+          ["So you're the one causing all this trouble...", "Nobody takes what's mine.", "This ends NOW."]
+        ],
+        apartment: [
+          ["You think you can just evict me?", "I've been running this block for years.", "These halls belong to me."],
+          ["The tenants pay ME, not you.", "You'll need more than fists to take this floor.", "Come and try it."],
+          ["Every apartment on this floor is under my watch.", "You're trespassing on protected territory.", "Bad move."],
+          ["The residents answer to me.", "You think they'll just accept a new landlord?", "Prove yourself."],
+          ["I built this empire from the ground up.", "Every brick, every tenant, MINE.", "You want it? Come take it."]
+        ],
+        nightclub: [
+          ["VIP access? For you? Don't make me laugh.", "The bouncers work for me.", "This club runs on MY money."],
+          ["The dance floor's closed for you.", "We don't serve your kind here.", "Get lost before the music stops."],
+          ["The back rooms are off limits.", "Unless you want to end up in one.", "Permanently."],
+          ["This place brings in millions.", "You think I'll just hand it over?", "You've got nerve, I'll give you that."],
+          ["I AM this club.", "Every drink, every deal, every dollar.", "You're about to learn a lesson in respect."]
+        ],
+        factory: [
+          ["This production line never stops.", "And neither do my workers.", "You're interrupting business."],
+          ["The machinery here can be... dangerous.", "Accidents happen all the time.", "Especially to trespassers."],
+          ["The foremen on this floor don't take kindly to strangers.", "Every product is accounted for.", "Including the illegal ones."],
+          ["We run a tight operation here.", "No room for outsiders.", "The assembly line waits for no one."],
+          ["This factory is the backbone of the operation.", "You destroy this, you destroy everything.", "I won't let that happen."]
+        ],
+        casino: [
+          ["The house always wins, kid.", "And I AM the house.", "Care to place a bet on your life?"],
+          ["Every game in here is rigged in my favor.", "The odds are never in your favor.", "Roll the dice if you dare."],
+          ["The high rollers on this floor don't mess around.", "Money talks, and yours is too quiet.", "Fold while you can."],
+          ["The pit bosses answer only to me.", "Every chip, every card, every outcome.", "This is MY casino."],
+          ["Welcome to the VIP floor.", "Where the stakes are life and death.", "Let's play one final hand."]
+        ],
+        warehouse: [
+          ["You know what we store in here?", "Things that make people disappear.", "Still want in?"],
+          ["The loading dock is closed.", "Permanently. For you.", "These crates aren't your concern."],
+          ["Every shelf has a story.", "Most of them end badly.", "Yours will be no different."],
+          ["The inventory is carefully managed.", "One wrong move and it all goes boom.", "Watch your step."],
+          ["This is where the real business happens.", "Not some street corner operation.", "You're in the big leagues now."]
+        ]
+      },
+
+      // Enemy names per floor
+      FLOOR_ENEMIES: [
+        { name: 'Guard', icon: '🔒' },
+        { name: 'Enforcer', icon: '💪' },
+        { name: 'Lieutenant', icon: '⚔️' },
+        { name: 'Underboss', icon: '💀' },
+        { name: 'Boss', icon: '👑' }
+      ],
+
+      // Calculate floor difficulty based on building price and floor number
+      getFloorDifficulty(building, floor) {
+        const basePrice = building.price || 20000;
+        // Normalize price: $20k = easy (1.0), $600k = very hard (5.0)
+        const priceScale = Math.max(1, Math.min(5, basePrice / 120000));
+
+        // Floor scaling: 1.0x on floor 1, up to 2.5x on floor 5
+        const floorScale = 1 + (floor * 0.375);
+
+        // Boss floor gets extra 50% difficulty
+        const bossBonus = (floor === 4) ? 1.5 : 1.0;
+
+        return {
+          scale: priceScale * floorScale * bossBonus,
+          enemyLevel: Math.max(1, Math.floor(priceScale * floorScale * bossBonus * 3)),
+          enemyHP: Math.floor(80 + (priceScale * floorScale * bossBonus * 30)),
+          damage: Math.floor(10 + (priceScale * floorScale * bossBonus * 5))
+        };
+      },
+
+      enter(building) {
+        if (this.active) return;
+        this.active = true;
+        this.building = building;
+
+        // Check takeover progress from GameState
+        if (!GameState.buildingTakeover) GameState.buildingTakeover = {};
+        const progress = GameState.buildingTakeover[building.id] || { floor: 0, completed: false };
+        this.currentFloor = progress.floor;
+
+        if (progress.completed) {
+          // Building already taken over - show owned message
+          this.showAlreadyOwned();
+          return;
+        }
+
+        // Start floor sequence
+        this.showFloorDialog();
+      },
+
+      exit() {
+        this.active = false;
+        this.building = null;
+        if (this.overlayEl) {
+          this.overlayEl.remove();
+          this.overlayEl = null;
+        }
+
+        // Resume free roam
+        if (typeof TurfTab !== 'undefined') {
+          GameState.character.freeRoam = true;
+          TurfTab.startFreeRoam();
+          TurfTab.updateRoamButton();
+        }
+      },
+
+      showAlreadyOwned() {
+        this.createOverlay();
+        const body = this.overlayEl.querySelector('.bt-body');
+        if (body) {
+          body.innerHTML = `
+            <div class="bt-dialog-scene">
+              <div class="bt-building-name">${this.building.name}</div>
+              <div class="bt-owned-badge">OWNED</div>
+              <div class="bt-dialog-text">This property is under your control. All floors cleared.</div>
+              <button class="bt-action-btn" id="bt-leave-btn">Leave</button>
+            </div>
+          `;
+          body.querySelector('#bt-leave-btn').addEventListener('click', () => this.exit());
+        }
+      },
+
+      createOverlay() {
+        if (this.overlayEl) this.overlayEl.remove();
+
+        const el = document.createElement('div');
+        el.id = 'building-takeover-overlay';
+        el.className = 'building-takeover-overlay';
+        el.innerHTML = `
+          <div class="bt-header">
+            <span class="bt-title">${this.building.name || 'Building'}</span>
+            <div class="bt-floor-indicator">
+              ${[1,2,3,4,5].map(f => `<span class="bt-floor-dot ${f <= this.currentFloor ? 'cleared' : ''} ${f === this.currentFloor + 1 ? 'current' : ''}">${f}</span>`).join('')}
+            </div>
+            <button class="bt-exit-btn" id="bt-exit-btn">Retreat</button>
+          </div>
+          <div class="bt-body"></div>
+        `;
+
+        document.body.appendChild(el);
+        this.overlayEl = el;
+
+        el.querySelector('#bt-exit-btn').addEventListener('click', () => this.exit());
+      },
+
+      showFloorDialog() {
+        this.createOverlay();
+        const body = this.overlayEl.querySelector('.bt-body');
+        const floor = this.currentFloor;
+        const enemy = this.FLOOR_ENEMIES[floor];
+        const difficulty = this.getFloorDifficulty(this.building, floor);
+
+        // Get dialog lines (try building type, fallback to generic)
+        const bType = this.building.type || '_generic';
+        const dialogPool = this.FLOOR_DIALOGS[bType] || this.FLOOR_DIALOGS._generic;
+        const lines = dialogPool[floor] || this.FLOOR_DIALOGS._generic[floor];
+
+        const isBoss = floor === 4;
+
+        body.innerHTML = `
+          <div class="bt-dialog-scene">
+            <div class="bt-floor-label">Floor ${floor + 1} of 5 ${isBoss ? '- BOSS BATTLE' : ''}</div>
+            <div class="bt-enemy-portrait">
+              <span class="bt-enemy-icon">${enemy.icon}</span>
+              <span class="bt-enemy-name">${isBoss ? 'BOSS: ' : ''}${enemy.name}</span>
+              <span class="bt-enemy-level">Lv. ${difficulty.enemyLevel}</span>
+            </div>
+            <div class="bt-dialog-box" id="bt-dialog-box">
+              <div class="bt-dialog-text" id="bt-dialog-text"></div>
+            </div>
+            <div class="bt-dialog-actions" id="bt-dialog-actions" style="display:none;">
+              <button class="bt-action-btn bt-fight-btn" id="bt-fight-btn">Fight</button>
+              <button class="bt-action-btn bt-retreat-btn" id="bt-retreat-btn">Retreat</button>
+            </div>
+          </div>
+        `;
+
+        // Typewriter dialog
+        this.typewriterDialog(lines, () => {
+          // Show action buttons after dialog finishes
+          const actions = document.getElementById('bt-dialog-actions');
+          if (actions) actions.style.display = 'flex';
+
+          document.getElementById('bt-fight-btn').addEventListener('click', () => {
+            this.startFloorBattle();
+          });
+          document.getElementById('bt-retreat-btn').addEventListener('click', () => {
+            this.exit();
+          });
+        });
+      },
+
+      typewriterDialog(lines, onComplete) {
+        const textEl = document.getElementById('bt-dialog-text');
+        if (!textEl) { onComplete(); return; }
+
+        let lineIdx = 0;
+        let charIdx = 0;
+        let currentText = '';
+
+        const typeLine = () => {
+          if (lineIdx >= lines.length) {
+            onComplete();
+            return;
+          }
+
+          const line = lines[lineIdx];
+          if (charIdx < line.length) {
+            currentText += line[charIdx];
+            textEl.textContent = currentText;
+            charIdx++;
+            setTimeout(typeLine, 30);
+          } else {
+            // Line done, pause then next
+            lineIdx++;
+            charIdx = 0;
+            if (lineIdx < lines.length) {
+              currentText += '\n';
+              setTimeout(typeLine, 600);
+            } else {
+              onComplete();
+            }
+          }
+        };
+
+        typeLine();
+      },
+
+      startFloorBattle() {
+        const difficulty = this.getFloorDifficulty(this.building, this.currentFloor);
+        const enemy = this.FLOOR_ENEMIES[this.currentFloor];
+        const isBoss = this.currentFloor === 4;
+
+        // Hide the takeover overlay during battle
+        if (this.overlayEl) this.overlayEl.style.display = 'none';
+
+        // Configure and start the PokemonBattle system
+        if (window.PokemonBattle && typeof window.PokemonBattle.startBattle === 'function') {
+          // Override enemy stats for this floor
+          const battleApp = window.PokemonBattle;
+
+          // Store callback for when battle ends
+          window._buildingBattleCallback = (playerWon, playerLost) => {
+            window._buildingBattleCallback = null;
+            this.onBattleEnd(playerWon, playerLost);
+          };
+
+          // Start battle - the battle system will initialize with GameState stats
+          battleApp.startBattle();
+
+          // After battle initializes, override enemy stats
+          setTimeout(() => {
+            battleApp.opponentPokemon = isBoss ? `BOSS: ${enemy.name}` : enemy.name;
+            battleApp.opponentLevel = difficulty.enemyLevel;
+            battleApp.startOpponentHP = difficulty.enemyHP;
+            battleApp.opponentHP = difficulty.enemyHP;
+            battleApp.opponentFill = 100;
+            battleApp.battleText = isBoss ?
+              `The ${enemy.name} stands before you. This is the final floor!` :
+              `A ${enemy.name} blocks your path on Floor ${this.currentFloor + 1}!`;
+          }, 100);
+        } else {
+          // Fallback if battle system not available - auto-resolve
+          console.warn('[BuildingTakeover] PokemonBattle not found, auto-resolving...');
+          const won = Math.random() > (difficulty.scale * 0.1);
+          this.onBattleEnd(won, !won);
+        }
+      },
+
+      onBattleEnd(playerWon, playerLost) {
+        // Show overlay again
+        if (this.overlayEl) this.overlayEl.style.display = '';
+
+        if (playerWon) {
+          this.currentFloor++;
+
+          // Save progress
+          if (!GameState.buildingTakeover) GameState.buildingTakeover = {};
+          const completed = this.currentFloor >= this.totalFloors;
+          GameState.buildingTakeover[this.building.id] = {
+            floor: this.currentFloor,
+            completed: completed
+          };
+
+          if (completed) {
+            // Building taken over! Mark as owned
+            this.building.owned = true;
+            this.building.lastCollected = Date.now();
+            Storage.save();
+            this.showTakeoverComplete();
+          } else {
+            Storage.save();
+            // Update floor indicators
+            this.showFloorDialog();
+          }
+        } else {
+          // Player lost - kicked out but progress saved
+          if (!GameState.buildingTakeover) GameState.buildingTakeover = {};
+          GameState.buildingTakeover[this.building.id] = {
+            floor: this.currentFloor,
+            completed: false
+          };
+          Storage.save();
+          this.showDefeat();
+        }
+      },
+
+      showTakeoverComplete() {
+        const body = this.overlayEl.querySelector('.bt-body');
+        if (!body) return;
+
+        // Update floor dots
+        const dots = this.overlayEl.querySelectorAll('.bt-floor-dot');
+        dots.forEach(d => d.classList.add('cleared'));
+
+        body.innerHTML = `
+          <div class="bt-dialog-scene bt-victory">
+            <div class="bt-victory-icon">🏆</div>
+            <div class="bt-victory-title">TAKEOVER COMPLETE!</div>
+            <div class="bt-victory-text">You now own ${this.building.name}!</div>
+            <div class="bt-victory-text" style="color:#ffd700;">Income: $${(this.building.income || 0).toLocaleString()}/day</div>
+            <button class="bt-action-btn bt-victory-btn" id="bt-victory-leave">Claim & Leave</button>
+          </div>
+        `;
+
+        body.querySelector('#bt-victory-leave').addEventListener('click', () => {
+          // Re-render buildings to show owned state
+          if (typeof renderPropertyBuildings === 'function') renderPropertyBuildings();
+          if (typeof ProfileTab !== 'undefined' && ProfileTab.render) ProfileTab.render();
+          this.exit();
+        });
+      },
+
+      showDefeat() {
+        const body = this.overlayEl.querySelector('.bt-body');
+        if (!body) return;
+
+        body.innerHTML = `
+          <div class="bt-dialog-scene bt-defeat">
+            <div class="bt-defeat-icon">💀</div>
+            <div class="bt-defeat-title">DEFEATED</div>
+            <div class="bt-defeat-text">You've been thrown out of ${this.building.name}.</div>
+            <div class="bt-defeat-text" style="color:#888;">Progress saved at Floor ${this.currentFloor + 1}. Come back stronger.</div>
+            <button class="bt-action-btn bt-defeat-btn" id="bt-defeat-leave">Leave</button>
+          </div>
+        `;
+
+        body.querySelector('#bt-defeat-leave').addEventListener('click', () => this.exit());
+      }
+    };
+
+
     const TurfTab = {
       roamInterval: null,
       eventInterval: null,
@@ -26079,23 +26808,27 @@ function ensureLandmarkProperties() {
           GameState.totalFreeRoamTime = 0; // Accumulated time in ms
         }
 
-        // Move character every 2 seconds
+        // Pickup spawning (slower since player moves manually now)
         this.roamInterval = setInterval(() => {
-          this.moveCharacter();
           this.maybeSpawnPickup();
-        }, 2000);
+        }, 3000);
 
-        // Random events every 5-10 seconds
+        // Random events still trigger during player-controlled free roam
         this.scheduleNextEvent();
 
         // Start progressive heat gain
         this.startProgressiveHeatGain();
 
+        // Ensure sprite exists and show it
         this.ensureRoamSprite();
-        if (this.roamSprite) this.roamSprite.start();
-        console.log('Free roam started');
+        if (this.roamSprite) this.roamSprite.stop(); // Stop auto-movement
+
+        // Start touch-controlled movement
+        FreeRoamController.start();
+
+        console.log('Free roam started (touch-controlled)');
       },
-      
+
       stopFreeRoam() {
         // Accumulate free roam time
         if (GameState.freeRoamStartTime) {
@@ -26116,6 +26849,9 @@ function ensureLandmarkProperties() {
           clearInterval(this.progressiveHeatInterval);
           this.progressiveHeatInterval = null;
         }
+
+        // Stop touch controller
+        FreeRoamController.stop();
 
         if (this.roamSprite) this.roamSprite.stop();
         console.log('Free roam stopped');
@@ -28297,6 +29033,12 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
 
       applyBattleOutcome(playerWon, playerLost) {
         console.log('[Battle] Applying outcome - Won:', playerWon, 'Lost:', playerLost);
+
+        // Check if this is a building takeover battle
+        if (typeof window._buildingBattleCallback === 'function') {
+          window._buildingBattleCallback(playerWon, playerLost);
+          return; // Don't apply normal free roam outcome
+        }
 
         let cashChange = 0;
         let xpChange = 0;
