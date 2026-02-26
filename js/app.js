@@ -4887,7 +4887,22 @@ const CartoonSpriteGenerator = {
       },
 
       // Black Market inventory storage
-      marketInventory: {}
+      marketInventory: {},
+
+      // GANGSTER SYSTEM (Lay Low / Safehouse Interior)
+      gangsters: {
+        owned: [],          // Array of owned gangster objects
+        nextId: 1,          // Auto-increment ID for new gangsters
+        activeMissions: [],  // Missions in progress { gangsterId, type, startTime, duration, rewards }
+        completedMissions: [] // Missions finished, awaiting collection
+      },
+
+      // Safehouse Interior state
+      safehouseInterior: {
+        active: false,        // Is player currently inside safehouse interior
+        playerPos: { x: 200, y: 280 },  // Player position inside interior
+        commandCenterOpen: false
+      }
 
     };
 
@@ -5087,6 +5102,20 @@ const CartoonSpriteGenerator = {
         }
         if (typeof GameState.character.freeRoam !== 'boolean') GameState.character.freeRoam = false;
         if (typeof GameState.character.isDead !== 'boolean') GameState.character.isDead = false;
+
+        // Gangster system
+        if (!GameState.gangsters || typeof GameState.gangsters !== 'object') {
+          GameState.gangsters = JSON.parse(JSON.stringify(DEFAULT_STATE.gangsters));
+        }
+        if (!Array.isArray(GameState.gangsters.owned)) GameState.gangsters.owned = [];
+        if (!Array.isArray(GameState.gangsters.activeMissions)) GameState.gangsters.activeMissions = [];
+        if (!Array.isArray(GameState.gangsters.completedMissions)) GameState.gangsters.completedMissions = [];
+        if (typeof GameState.gangsters.nextId !== 'number') GameState.gangsters.nextId = 1;
+
+        // Safehouse interior
+        if (!GameState.safehouseInterior || typeof GameState.safehouseInterior !== 'object') {
+          GameState.safehouseInterior = JSON.parse(JSON.stringify(DEFAULT_STATE.safehouseInterior));
+        }
 
         // Character appearance (needed for SafeHouseTab)
         if (!GameState.character.appearance || typeof GameState.character.appearance !== 'object') {
@@ -23790,6 +23819,1189 @@ function ensureLandmarkProperties() {
     };
 
 
+    // ================================================
+    // SAFEHOUSE INTERIOR SYSTEM
+    // Canvas-based playable interior when player "Lays Low"
+    // ================================================
+    const SafehouseInterior = {
+      canvas: null,
+      ctx: null,
+      active: false,
+      animFrame: null,
+      playerPos: { x: 200, y: 280 },
+      playerSpeed: 3,
+      playerSize: 32,
+      playerFacing: 'down',
+      touchActive: false,
+      touchStartX: 0,
+      touchStartY: 0,
+      touchDirX: 0,
+      touchDirY: 0,
+      joystickEl: null,
+      joystickKnobEl: null,
+      joystickActive: false,
+      joystickBaseX: 0,
+      joystickBaseY: 0,
+
+      // Room dimensions (interior space)
+      roomW: 400,
+      roomH: 350,
+
+      // Furniture items (interactive + decorative)
+      furniture: [
+        { id: 'sofa1', type: 'sofa', x: 30, y: 60, w: 80, h: 40, color: '#4a3728', label: 'Sofa' },
+        { id: 'sofa2', type: 'sofa', x: 290, y: 60, w: 80, h: 40, color: '#4a3728', label: 'Sofa' },
+        { id: 'table', type: 'table', x: 150, y: 70, w: 100, h: 50, color: '#5c3d2e', label: 'Table' },
+        { id: 'tv', type: 'decor', x: 170, y: 15, w: 60, h: 20, color: '#1a1a2e', label: 'TV' },
+        { id: 'shelf', type: 'decor', x: 10, y: 150, w: 30, h: 60, color: '#6b4423', label: 'Shelf' },
+        { id: 'fridge', type: 'decor', x: 355, y: 150, w: 35, h: 50, color: '#8a8a8a', label: 'Fridge' },
+        { id: 'bed', type: 'decor', x: 310, y: 250, w: 70, h: 50, color: '#2d4a6f', label: 'Bed' },
+        { id: 'command_center', type: 'command', x: 140, y: 160, w: 120, h: 60, color: '#1a3a1a', label: 'Command Center', interactive: true },
+        { id: 'rug', type: 'decor', x: 130, y: 240, w: 140, h: 80, color: '#8b4513', label: '' }
+      ],
+
+      init() {
+        console.log('[SafehouseInterior] Initialized');
+      },
+
+      enter() {
+        if (this.active) return;
+        this.active = true;
+        GameState.safehouseInterior.active = true;
+
+        // Stop free roam if active
+        if (GameState.character.freeRoam) {
+          GameState.character.freeRoam = false;
+          TurfTab.stopFreeRoam();
+        }
+
+        // Restore saved position
+        if (GameState.safehouseInterior.playerPos) {
+          this.playerPos.x = GameState.safehouseInterior.playerPos.x;
+          this.playerPos.y = GameState.safehouseInterior.playerPos.y;
+        }
+
+        this.createOverlay();
+        this.startLoop();
+        console.log('[SafehouseInterior] Player entered safehouse');
+      },
+
+      exit() {
+        if (!this.active) return;
+        this.active = false;
+        GameState.safehouseInterior.active = false;
+        GameState.safehouseInterior.playerPos = { x: this.playerPos.x, y: this.playerPos.y };
+
+        if (this.animFrame) {
+          cancelAnimationFrame(this.animFrame);
+          this.animFrame = null;
+        }
+
+        // Remove overlay
+        const overlay = document.getElementById('safehouse-interior-overlay');
+        if (overlay) overlay.remove();
+
+        // Remove joystick
+        if (this.joystickEl) {
+          this.joystickEl.remove();
+          this.joystickEl = null;
+        }
+
+        this.canvas = null;
+        this.ctx = null;
+        Storage.save();
+        console.log('[SafehouseInterior] Player exited safehouse');
+
+        // Update popover button states
+        if (typeof TurfTab !== 'undefined') {
+          TurfTab.updatePopoverButtonStates();
+        }
+      },
+
+      createOverlay() {
+        // Remove existing
+        const existing = document.getElementById('safehouse-interior-overlay');
+        if (existing) existing.remove();
+
+        const overlay = document.createElement('div');
+        overlay.id = 'safehouse-interior-overlay';
+        overlay.className = 'safehouse-interior-overlay';
+
+        // Header bar
+        overlay.innerHTML = `
+          <div class="shi-header">
+            <span class="shi-title">Safe House</span>
+            <button class="shi-exit-btn" id="shi-exit-btn">Leave</button>
+          </div>
+          <canvas id="shi-canvas" class="shi-canvas"></canvas>
+          <div class="shi-hint" id="shi-hint">Walk to the <span style="color:#4ade80">Command Center</span> to manage your gangsters</div>
+        `;
+
+        document.body.appendChild(overlay);
+
+        // Setup canvas
+        this.canvas = document.getElementById('shi-canvas');
+        const rect = overlay.getBoundingClientRect();
+        const headerH = 44;
+        this.canvas.width = Math.min(rect.width, 500);
+        this.canvas.height = Math.min(rect.height - headerH - 20, 450);
+        this.ctx = this.canvas.getContext('2d');
+
+        // Scale room to canvas
+        this.scaleX = this.canvas.width / this.roomW;
+        this.scaleY = this.canvas.height / this.roomH;
+
+        // Exit button
+        document.getElementById('shi-exit-btn').addEventListener('click', () => this.exit());
+
+        // Canvas touch/click for command center interaction
+        this.canvas.addEventListener('click', (e) => this.handleCanvasClick(e));
+
+        // Create joystick
+        this.createJoystick(overlay);
+      },
+
+      createJoystick(container) {
+        // Joystick container
+        const joy = document.createElement('div');
+        joy.className = 'shi-joystick';
+        joy.id = 'shi-joystick';
+
+        const knob = document.createElement('div');
+        knob.className = 'shi-joystick-knob';
+        joy.appendChild(knob);
+
+        container.appendChild(joy);
+        this.joystickEl = joy;
+        this.joystickKnobEl = knob;
+
+        const maxDist = 30;
+
+        const getCenter = () => {
+          const r = joy.getBoundingClientRect();
+          return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+        };
+
+        const onMove = (cx, cy) => {
+          const center = getCenter();
+          let dx = cx - center.x;
+          let dy = cy - center.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist > maxDist) {
+            dx = (dx / dist) * maxDist;
+            dy = (dy / dist) * maxDist;
+          }
+          knob.style.transform = `translate(${dx}px, ${dy}px)`;
+          this.touchDirX = dx / maxDist;
+          this.touchDirY = dy / maxDist;
+        };
+
+        const onEnd = () => {
+          this.joystickActive = false;
+          this.touchDirX = 0;
+          this.touchDirY = 0;
+          knob.style.transform = 'translate(0, 0)';
+        };
+
+        joy.addEventListener('touchstart', (e) => {
+          e.preventDefault();
+          this.joystickActive = true;
+          const t = e.touches[0];
+          onMove(t.clientX, t.clientY);
+        }, { passive: false });
+
+        joy.addEventListener('touchmove', (e) => {
+          e.preventDefault();
+          if (!this.joystickActive) return;
+          const t = e.touches[0];
+          onMove(t.clientX, t.clientY);
+        }, { passive: false });
+
+        joy.addEventListener('touchend', onEnd);
+        joy.addEventListener('touchcancel', onEnd);
+
+        // Mouse support
+        joy.addEventListener('mousedown', (e) => {
+          this.joystickActive = true;
+          onMove(e.clientX, e.clientY);
+          const mouseMoveHandler = (ev) => onMove(ev.clientX, ev.clientY);
+          const mouseUpHandler = () => {
+            onEnd();
+            document.removeEventListener('mousemove', mouseMoveHandler);
+            document.removeEventListener('mouseup', mouseUpHandler);
+          };
+          document.addEventListener('mousemove', mouseMoveHandler);
+          document.addEventListener('mouseup', mouseUpHandler);
+        });
+
+        // Keyboard support (WASD / arrows)
+        this._keyState = { up: false, down: false, left: false, right: false };
+        this._keydownHandler = (e) => {
+          if (!this.active) return;
+          if (e.key === 'w' || e.key === 'ArrowUp') this._keyState.up = true;
+          if (e.key === 's' || e.key === 'ArrowDown') this._keyState.down = true;
+          if (e.key === 'a' || e.key === 'ArrowLeft') this._keyState.left = true;
+          if (e.key === 'd' || e.key === 'ArrowRight') this._keyState.right = true;
+          this.updateKeyDir();
+        };
+        this._keyupHandler = (e) => {
+          if (e.key === 'w' || e.key === 'ArrowUp') this._keyState.up = false;
+          if (e.key === 's' || e.key === 'ArrowDown') this._keyState.down = false;
+          if (e.key === 'a' || e.key === 'ArrowLeft') this._keyState.left = false;
+          if (e.key === 'd' || e.key === 'ArrowRight') this._keyState.right = false;
+          this.updateKeyDir();
+        };
+        document.addEventListener('keydown', this._keydownHandler);
+        document.addEventListener('keyup', this._keyupHandler);
+      },
+
+      updateKeyDir() {
+        let dx = 0, dy = 0;
+        if (this._keyState.left) dx -= 1;
+        if (this._keyState.right) dx += 1;
+        if (this._keyState.up) dy -= 1;
+        if (this._keyState.down) dy += 1;
+        const mag = Math.sqrt(dx * dx + dy * dy);
+        this.touchDirX = mag > 0 ? dx / mag : 0;
+        this.touchDirY = mag > 0 ? dy / mag : 0;
+      },
+
+      handleCanvasClick(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        const clickX = (e.clientX - rect.left) / this.scaleX;
+        const clickY = (e.clientY - rect.top) / this.scaleY;
+
+        // Check if player is near command center and clicked on it
+        const cc = this.furniture.find(f => f.id === 'command_center');
+        if (cc) {
+          const inBounds = clickX >= cc.x && clickX <= cc.x + cc.w &&
+                           clickY >= cc.y && clickY <= cc.y + cc.h;
+          const playerDist = Math.sqrt(
+            Math.pow(this.playerPos.x - (cc.x + cc.w / 2), 2) +
+            Math.pow(this.playerPos.y - (cc.y + cc.h / 2), 2)
+          );
+          if (inBounds && playerDist < 80) {
+            GangsterSystem.openCommandCenter();
+          } else if (inBounds) {
+            this.showFloatingText('Walk closer to interact', cc.x + cc.w / 2, cc.y);
+          }
+        }
+      },
+
+      floatingTexts: [],
+
+      showFloatingText(text, x, y) {
+        this.floatingTexts.push({ text, x, y, alpha: 1, vy: -1 });
+      },
+
+      startLoop() {
+        const loop = () => {
+          if (!this.active) return;
+          this.update();
+          this.render();
+          this.animFrame = requestAnimationFrame(loop);
+        };
+        this.animFrame = requestAnimationFrame(loop);
+      },
+
+      update() {
+        // Move player based on joystick/keyboard direction
+        if (Math.abs(this.touchDirX) > 0.1 || Math.abs(this.touchDirY) > 0.1) {
+          let nx = this.playerPos.x + this.touchDirX * this.playerSpeed;
+          let ny = this.playerPos.y + this.touchDirY * this.playerSpeed;
+
+          // Clamp to room bounds
+          nx = Math.max(this.playerSize / 2, Math.min(this.roomW - this.playerSize / 2, nx));
+          ny = Math.max(this.playerSize / 2 + 30, Math.min(this.roomH - this.playerSize / 2, ny));
+
+          // Simple collision with furniture (skip rug)
+          let blocked = false;
+          for (const f of this.furniture) {
+            if (f.id === 'rug') continue;
+            if (f.id === 'command_center') continue; // Can walk near command center
+            const pad = this.playerSize / 3;
+            if (nx + pad > f.x && nx - pad < f.x + f.w &&
+                ny + pad > f.y && ny - pad < f.y + f.h) {
+              blocked = true;
+              break;
+            }
+          }
+
+          if (!blocked) {
+            this.playerPos.x = nx;
+            this.playerPos.y = ny;
+          }
+
+          // Update facing direction
+          if (Math.abs(this.touchDirX) > Math.abs(this.touchDirY)) {
+            this.playerFacing = this.touchDirX > 0 ? 'right' : 'left';
+          } else {
+            this.playerFacing = this.touchDirY > 0 ? 'down' : 'up';
+          }
+        }
+
+        // Update floating texts
+        this.floatingTexts = this.floatingTexts.filter(ft => {
+          ft.y += ft.vy;
+          ft.alpha -= 0.02;
+          return ft.alpha > 0;
+        });
+
+        // Check proximity to command center for hint glow
+        const cc = this.furniture.find(f => f.id === 'command_center');
+        if (cc) {
+          const dist = Math.sqrt(
+            Math.pow(this.playerPos.x - (cc.x + cc.w / 2), 2) +
+            Math.pow(this.playerPos.y - (cc.y + cc.h / 2), 2)
+          );
+          cc._glowing = dist < 80;
+        }
+      },
+
+      render() {
+        const ctx = this.ctx;
+        if (!ctx) return;
+        const w = this.canvas.width;
+        const h = this.canvas.height;
+        const sx = this.scaleX;
+        const sy = this.scaleY;
+
+        // Clear
+        ctx.clearRect(0, 0, w, h);
+
+        // Floor
+        ctx.fillStyle = '#2a2216';
+        ctx.fillRect(0, 0, w, h);
+
+        // Floor tiles pattern
+        ctx.strokeStyle = '#3a3226';
+        ctx.lineWidth = 0.5;
+        for (let tx = 0; tx < this.roomW; tx += 30) {
+          ctx.beginPath();
+          ctx.moveTo(tx * sx, 0);
+          ctx.lineTo(tx * sx, h);
+          ctx.stroke();
+        }
+        for (let ty = 0; ty < this.roomH; ty += 30) {
+          ctx.beginPath();
+          ctx.moveTo(0, ty * sy);
+          ctx.lineTo(w, ty * sy);
+          ctx.stroke();
+        }
+
+        // Walls
+        ctx.fillStyle = '#1a1510';
+        ctx.fillRect(0, 0, w, 12 * sy);
+        ctx.fillStyle = '#151210';
+        ctx.fillRect(0, 0, 6 * sx, h);
+        ctx.fillRect(w - 6 * sx, 0, 6 * sx, h);
+
+        // Draw furniture (sorted by y for depth)
+        const sorted = [...this.furniture].sort((a, b) => a.y - b.y);
+        for (const f of sorted) {
+          ctx.save();
+
+          if (f.id === 'rug') {
+            // Rug with pattern
+            ctx.fillStyle = '#6b3a1f';
+            ctx.fillRect(f.x * sx, f.y * sy, f.w * sx, f.h * sy);
+            ctx.strokeStyle = '#8b5a3f';
+            ctx.lineWidth = 2;
+            ctx.strokeRect((f.x + 5) * sx, (f.y + 5) * sy, (f.w - 10) * sx, (f.h - 10) * sy);
+          } else if (f.id === 'command_center') {
+            // Command center with glow effect when nearby
+            if (f._glowing) {
+              ctx.shadowColor = '#4ade80';
+              ctx.shadowBlur = 15;
+            }
+            // Main desk
+            ctx.fillStyle = '#1a3a1a';
+            ctx.fillRect(f.x * sx, f.y * sy, f.w * sx, f.h * sy);
+            // Monitor screens
+            ctx.fillStyle = f._glowing ? '#4ade80' : '#2a5a2a';
+            ctx.fillRect((f.x + 10) * sx, (f.y + 5) * sy, 30 * sx, 20 * sy);
+            ctx.fillRect((f.x + 45) * sx, (f.y + 5) * sy, 30 * sx, 20 * sy);
+            ctx.fillRect((f.x + 80) * sx, (f.y + 5) * sy, 30 * sx, 20 * sy);
+            // Scanlines on screens
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            for (let sl = 0; sl < 20; sl += 3) {
+              ctx.fillRect((f.x + 10) * sx, (f.y + 5 + sl) * sy, 100 * sx, 1);
+            }
+            // Label
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = f._glowing ? '#4ade80' : '#888';
+            ctx.font = `${Math.max(10, 11 * sx)}px monospace`;
+            ctx.textAlign = 'center';
+            ctx.fillText('COMMAND CENTER', (f.x + f.w / 2) * sx, (f.y + f.h + 12) * sy);
+            if (f._glowing) {
+              ctx.fillStyle = '#4ade80';
+              ctx.font = `${Math.max(8, 9 * sx)}px monospace`;
+              ctx.fillText('[ TAP TO OPEN ]', (f.x + f.w / 2) * sx, (f.y + f.h + 24) * sy);
+            }
+          } else if (f.type === 'sofa') {
+            // Sofa
+            ctx.fillStyle = f.color;
+            const r = 5 * sx;
+            ctx.beginPath();
+            ctx.roundRect(f.x * sx, f.y * sy, f.w * sx, f.h * sy, r);
+            ctx.fill();
+            // Cushions
+            ctx.fillStyle = '#5a4738';
+            ctx.fillRect((f.x + 5) * sx, (f.y + 5) * sy, (f.w / 2 - 7) * sx, (f.h - 10) * sy);
+            ctx.fillRect((f.x + f.w / 2 + 2) * sx, (f.y + 5) * sy, (f.w / 2 - 7) * sx, (f.h - 10) * sy);
+          } else if (f.id === 'table') {
+            // Coffee table
+            ctx.fillStyle = f.color;
+            ctx.fillRect(f.x * sx, f.y * sy, f.w * sx, f.h * sy);
+            ctx.strokeStyle = '#7a5d4e';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(f.x * sx, f.y * sy, f.w * sx, f.h * sy);
+          } else if (f.id === 'tv') {
+            // TV
+            ctx.fillStyle = '#111';
+            ctx.fillRect(f.x * sx, f.y * sy, f.w * sx, f.h * sy);
+            ctx.fillStyle = '#1a1a3e';
+            ctx.fillRect((f.x + 2) * sx, (f.y + 2) * sy, (f.w - 4) * sx, (f.h - 4) * sy);
+          } else if (f.id === 'bed') {
+            // Bed
+            ctx.fillStyle = '#2d4a6f';
+            ctx.fillRect(f.x * sx, f.y * sy, f.w * sx, f.h * sy);
+            ctx.fillStyle = '#3d5a7f';
+            ctx.fillRect((f.x + 3) * sx, (f.y + 3) * sy, (f.w - 6) * sx, (f.h / 2) * sy);
+            // Pillow
+            ctx.fillStyle = '#eee';
+            ctx.fillRect((f.x + 10) * sx, (f.y + 5) * sy, 20 * sx, 12 * sy);
+            ctx.fillRect((f.x + 40) * sx, (f.y + 5) * sy, 20 * sx, 12 * sy);
+          } else {
+            // Generic furniture
+            ctx.fillStyle = f.color;
+            ctx.fillRect(f.x * sx, f.y * sy, f.w * sx, f.h * sy);
+          }
+
+          // Label for non-command items
+          if (f.label && f.id !== 'command_center' && f.id !== 'rug') {
+            ctx.fillStyle = '#666';
+            ctx.font = `${Math.max(8, 9 * sx)}px monospace`;
+            ctx.textAlign = 'center';
+            ctx.fillText(f.label, (f.x + f.w / 2) * sx, (f.y - 3) * sy);
+          }
+
+          ctx.restore();
+        }
+
+        // Draw player sprite
+        this.renderPlayer(ctx, sx, sy);
+
+        // Draw floating texts
+        for (const ft of this.floatingTexts) {
+          ctx.save();
+          ctx.globalAlpha = ft.alpha;
+          ctx.fillStyle = '#fff';
+          ctx.font = `${12 * sx}px monospace`;
+          ctx.textAlign = 'center';
+          ctx.fillText(ft.text, ft.x * sx, ft.y * sy);
+          ctx.restore();
+        }
+      },
+
+      renderPlayer(ctx, sx, sy) {
+        const px = this.playerPos.x * sx;
+        const py = this.playerPos.y * sy;
+        const ps = this.playerSize * Math.min(sx, sy);
+
+        ctx.save();
+
+        // Shadow
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.beginPath();
+        ctx.ellipse(px, py + ps * 0.4, ps * 0.35, ps * 0.12, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Body
+        ctx.fillStyle = '#4a6741';
+        ctx.beginPath();
+        ctx.ellipse(px, py, ps * 0.28, ps * 0.35, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Head
+        ctx.fillStyle = '#d4a574';
+        ctx.beginPath();
+        ctx.arc(px, py - ps * 0.32, ps * 0.18, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Direction indicator (eyes)
+        ctx.fillStyle = '#222';
+        const eyeOff = { up: { x: 0, y: -2 }, down: { x: 0, y: 2 }, left: { x: -3, y: 0 }, right: { x: 3, y: 0 } };
+        const eo = eyeOff[this.playerFacing] || eyeOff.down;
+        ctx.beginPath();
+        ctx.arc(px + (eo.x - 3) * sx, py - ps * 0.32 + eo.y * sy, 2 * sx, 0, Math.PI * 2);
+        ctx.arc(px + (eo.x + 3) * sx, py - ps * 0.32 + eo.y * sy, 2 * sx, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+      }
+    };
+
+
+    // ================================================
+    // GANGSTER SYSTEM
+    // Buy, assign, and manage gangsters for missions
+    // ================================================
+    const GangsterSystem = {
+      // Gangster name pool
+      NAMES: [
+        'Vinnie', 'Marco', 'DeShawn', 'Tommy', 'Rico', 'Jamal', 'Carlos', 'Eddie',
+        'Sal', 'Dmitri', 'Hector', 'Andre', 'Mickey', 'Big Tony', 'Slim', 'Ghost',
+        'Snake', 'Razor', 'Knuckles', 'Ace', 'Blade', 'Stitches', 'Bones', 'Smokey',
+        'Duke', 'Rook', 'Trigger', 'Chains', 'Fixer', 'Wolf', 'Pyro', 'Dodger'
+      ],
+
+      // Mission types
+      MISSION_TYPES: {
+        petty_crime: {
+          name: 'Petty Crime',
+          icon: '🔓',
+          duration: 60000,       // 60 seconds
+          rewards: { cashMin: 100, cashMax: 500, xpMin: 10, xpMax: 30 },
+          riskBase: 0.05,       // Base risk of failure
+          description: 'Shoplifting, pickpocketing, petty theft'
+        },
+        drug_run: {
+          name: 'Drug Run',
+          icon: '💊',
+          duration: 120000,      // 2 minutes
+          rewards: { cashMin: 300, cashMax: 1200, xpMin: 25, xpMax: 60 },
+          riskBase: 0.12,
+          description: 'Street-level drug dealing and distribution'
+        },
+        weapon_deal: {
+          name: 'Weapon Deal',
+          icon: '🔫',
+          duration: 180000,      // 3 minutes
+          rewards: { cashMin: 500, cashMax: 2000, xpMin: 40, xpMax: 80 },
+          riskBase: 0.18,
+          description: 'Illegal firearms trading'
+        },
+        heist: {
+          name: 'Heist',
+          icon: '💰',
+          duration: 300000,      // 5 minutes
+          rewards: { cashMin: 1000, cashMax: 5000, xpMin: 80, xpMax: 150 },
+          riskBase: 0.25,
+          description: 'High-risk robbery operations'
+        },
+        territory_grab: {
+          name: 'Territory Grab',
+          icon: '🏴',
+          duration: 240000,      // 4 minutes
+          rewards: { cashMin: 600, cashMax: 3000, xpMin: 50, xpMax: 100 },
+          riskBase: 0.20,
+          description: 'Expand turf influence by force'
+        }
+      },
+
+      init() {
+        // Start mission tick timer
+        this.tickInterval = setInterval(() => this.tick(), 1000);
+        console.log('[GangsterSystem] Initialized');
+      },
+
+      // === LOYALTY CALCULATION ===
+      // Based on player heat, level, and reputation
+      calculateLoyalty() {
+        const heat = GameState.player.globalHeat || 0;
+        const level = GameState.player.level || 1;
+        const rep = GameState.player.reputation || 0;
+
+        // Heat penalty: high heat = gangsters don't trust you (0-100 heat → 0 to -40 loyalty)
+        const heatPenalty = (heat / 100) * 40;
+
+        // Level bonus: higher level = more respect (1-50 → 0 to +25 loyalty)
+        const levelBonus = Math.min(25, (level / 50) * 25);
+
+        // Reputation bonus: bigger rep = more loyalty (0-1000 → 0 to +35 loyalty)
+        const repBonus = Math.min(35, (rep / 1000) * 35);
+
+        // Base loyalty 50% + bonuses - penalties
+        const loyalty = Math.max(5, Math.min(100, 50 + levelBonus + repBonus - heatPenalty));
+
+        return Math.round(loyalty);
+      },
+
+      // === GANGSTER GENERATION (for shop) ===
+      generateGangsterForSale() {
+        const id = GameState.gangsters.nextId++;
+        const loyalty = this.calculateLoyalty();
+        const name = this.NAMES[Math.floor(Math.random() * this.NAMES.length)];
+
+        // Price scales with loyalty (loyal ones cost more)
+        const basePrice = 500 + Math.floor(Math.random() * 1000);
+        const price = Math.round(basePrice * (1 + loyalty / 100));
+
+        // Random skill bonus
+        const skills = ['combat', 'stealth', 'charisma', 'luck'];
+        const primarySkill = skills[Math.floor(Math.random() * skills.length)];
+        const skillLevel = Math.floor(Math.random() * 5) + 1;
+
+        return {
+          id: id,
+          name: name,
+          loyalty: loyalty,
+          price: price,
+          primarySkill: primarySkill,
+          skillLevel: skillLevel,
+          status: 'idle',      // 'idle', 'on_mission', 'kia', 'fled', 'snitched'
+          missionsCompleted: 0,
+          hiredAt: Date.now()
+        };
+      },
+
+      // === SHOP: Generate available gangsters ===
+      getShopGangsters(count) {
+        const available = [];
+        for (let i = 0; i < (count || 4); i++) {
+          available.push(this.generateGangsterForSale());
+        }
+        return available;
+      },
+
+      // === BUY A GANGSTER ===
+      buyGangster(gangster) {
+        if (GameState.player.cash < gangster.price) {
+          return { success: false, message: 'Not enough cash!' };
+        }
+
+        GameState.player.cash -= gangster.price;
+        gangster.status = 'idle';
+        gangster.loyalty = this.calculateLoyalty(); // Recalculate at time of purchase
+        GameState.gangsters.owned.push(gangster);
+        Storage.save();
+
+        return { success: true, message: `${gangster.name} joined your crew!` };
+      },
+
+      // === ASSIGN GANGSTER TO MISSION ===
+      assignMission(gangsterId, missionType) {
+        const gangster = GameState.gangsters.owned.find(g => g.id === gangsterId);
+        if (!gangster || gangster.status !== 'idle') {
+          return { success: false, message: 'Gangster unavailable!' };
+        }
+
+        const missionDef = this.MISSION_TYPES[missionType];
+        if (!missionDef) {
+          return { success: false, message: 'Invalid mission type!' };
+        }
+
+        gangster.status = 'on_mission';
+
+        const mission = {
+          id: Date.now() + '_' + gangsterId,
+          gangsterId: gangsterId,
+          type: missionType,
+          startTime: Date.now(),
+          duration: missionDef.duration,
+          endTime: Date.now() + missionDef.duration
+        };
+
+        GameState.gangsters.activeMissions.push(mission);
+        Storage.save();
+
+        return { success: true, message: `${gangster.name} deployed on ${missionDef.name}!` };
+      },
+
+      // === MISSION TICK (called every second) ===
+      tick() {
+        const now = Date.now();
+        const completed = [];
+
+        // Check for completed missions
+        for (let i = GameState.gangsters.activeMissions.length - 1; i >= 0; i--) {
+          const mission = GameState.gangsters.activeMissions[i];
+          if (now >= mission.endTime) {
+            completed.push(mission);
+            GameState.gangsters.activeMissions.splice(i, 1);
+          }
+        }
+
+        // Resolve completed missions
+        for (const mission of completed) {
+          this.resolveMission(mission);
+        }
+
+        // Re-render command center if it's open
+        if (completed.length > 0 && GameState.safehouseInterior.commandCenterOpen) {
+          this.renderCommandCenterContent();
+        }
+      },
+
+      // === RESOLVE COMPLETED MISSION ===
+      resolveMission(mission) {
+        const gangster = GameState.gangsters.owned.find(g => g.id === mission.gangsterId);
+        if (!gangster) return;
+
+        const missionDef = this.MISSION_TYPES[mission.type];
+        if (!missionDef) return;
+
+        // Calculate outcome based on loyalty, heat, skill
+        const heat = GameState.player.globalHeat || 0;
+        const loyalty = gangster.loyalty || 50;
+
+        // Risk factors
+        let risk = missionDef.riskBase;
+        risk += (heat / 100) * 0.15;            // High heat increases risk
+        risk -= (loyalty / 100) * 0.10;          // High loyalty reduces risk
+        risk -= (gangster.skillLevel || 1) * 0.02; // Skill reduces risk
+
+        risk = Math.max(0.02, Math.min(0.60, risk)); // Clamp between 2% and 60%
+
+        const roll = Math.random();
+
+        if (roll < risk * 0.4) {
+          // KIA - gangster killed in action
+          gangster.status = 'kia';
+          GameState.gangsters.completedMissions.push({
+            ...mission,
+            outcome: 'kia',
+            gangsterName: gangster.name,
+            resolvedAt: Date.now()
+          });
+        } else if (roll < risk * 0.7) {
+          // Fled - gangster ran with the loot
+          gangster.status = 'fled';
+          GameState.gangsters.completedMissions.push({
+            ...mission,
+            outcome: 'fled',
+            gangsterName: gangster.name,
+            resolvedAt: Date.now()
+          });
+        } else if (roll < risk) {
+          // Snitched - gangster got caught, adds heat
+          gangster.status = 'snitched';
+          const heatGain = 5 + Math.random() * 10;
+          GameState.player.globalHeat = Math.min(100, GameState.player.globalHeat + heatGain);
+          GameState.gangsters.completedMissions.push({
+            ...mission,
+            outcome: 'snitched',
+            gangsterName: gangster.name,
+            heatGain: Math.round(heatGain),
+            resolvedAt: Date.now()
+          });
+        } else {
+          // Success!
+          gangster.status = 'idle';
+          gangster.missionsCompleted = (gangster.missionsCompleted || 0) + 1;
+
+          // Calculate rewards
+          const cashReward = Math.floor(missionDef.rewards.cashMin + Math.random() * (missionDef.rewards.cashMax - missionDef.rewards.cashMin));
+          const xpReward = Math.floor(missionDef.rewards.xpMin + Math.random() * (missionDef.rewards.xpMax - missionDef.rewards.xpMin));
+
+          // Loyalty bonus increases rewards slightly
+          const loyaltyMultiplier = 1 + (loyalty - 50) / 200;
+
+          GameState.gangsters.completedMissions.push({
+            ...mission,
+            outcome: 'success',
+            gangsterName: gangster.name,
+            rewards: {
+              cash: Math.round(cashReward * loyaltyMultiplier),
+              xp: Math.round(xpReward * loyaltyMultiplier)
+            },
+            resolvedAt: Date.now()
+          });
+        }
+
+        Storage.save();
+      },
+
+      // === COLLECT MISSION REWARDS ===
+      collectReward(missionId) {
+        const idx = GameState.gangsters.completedMissions.findIndex(m => m.id === missionId);
+        if (idx === -1) return null;
+
+        const mission = GameState.gangsters.completedMissions[idx];
+        GameState.gangsters.completedMissions.splice(idx, 1);
+
+        if (mission.outcome === 'success' && mission.rewards) {
+          GameState.player.cash += mission.rewards.cash;
+          GameState.player.xp += mission.rewards.xp;
+        }
+
+        // Remove KIA/fled/snitched gangsters from owned
+        if (mission.outcome === 'kia' || mission.outcome === 'fled') {
+          const gIdx = GameState.gangsters.owned.findIndex(g => g.id === mission.gangsterId);
+          if (gIdx !== -1) GameState.gangsters.owned.splice(gIdx, 1);
+        }
+        // Snitched gangsters also removed
+        if (mission.outcome === 'snitched') {
+          const gIdx = GameState.gangsters.owned.findIndex(g => g.id === mission.gangsterId);
+          if (gIdx !== -1) GameState.gangsters.owned.splice(gIdx, 1);
+        }
+
+        Storage.save();
+        return mission;
+      },
+
+      // === COMMAND CENTER UI ===
+      openCommandCenter() {
+        GameState.safehouseInterior.commandCenterOpen = true;
+
+        // Create modal
+        const existing = document.getElementById('command-center-modal');
+        if (existing) existing.remove();
+
+        const modal = document.createElement('div');
+        modal.id = 'command-center-modal';
+        modal.className = 'command-center-modal';
+        modal.innerHTML = `
+          <div class="cc-modal-backdrop" id="cc-modal-backdrop"></div>
+          <div class="cc-modal-panel">
+            <div class="cc-modal-header">
+              <span class="cc-modal-title">Command Center</span>
+              <button class="cc-modal-close" id="cc-modal-close">✕</button>
+            </div>
+            <div class="cc-modal-tabs">
+              <button class="cc-tab active" data-cctab="missions">Missions</button>
+              <button class="cc-tab" data-cctab="crew">My Crew</button>
+              <button class="cc-tab" data-cctab="results">Results</button>
+            </div>
+            <div class="cc-modal-body" id="cc-modal-body">
+            </div>
+          </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        // Close handlers
+        document.getElementById('cc-modal-close').addEventListener('click', () => this.closeCommandCenter());
+        document.getElementById('cc-modal-backdrop').addEventListener('click', () => this.closeCommandCenter());
+
+        // Tab handlers
+        modal.querySelectorAll('.cc-tab').forEach(tab => {
+          tab.addEventListener('click', () => {
+            modal.querySelectorAll('.cc-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            this.ccActiveTab = tab.dataset.cctab;
+            this.renderCommandCenterContent();
+          });
+        });
+
+        this.ccActiveTab = 'missions';
+        this.renderCommandCenterContent();
+      },
+
+      closeCommandCenter() {
+        GameState.safehouseInterior.commandCenterOpen = false;
+        const modal = document.getElementById('command-center-modal');
+        if (modal) modal.remove();
+      },
+
+      renderCommandCenterContent() {
+        const body = document.getElementById('cc-modal-body');
+        if (!body) return;
+
+        switch (this.ccActiveTab) {
+          case 'missions':
+            this.renderMissionsTab(body);
+            break;
+          case 'crew':
+            this.renderCrewTab(body);
+            break;
+          case 'results':
+            this.renderResultsTab(body);
+            break;
+        }
+      },
+
+      // === MISSIONS TAB ===
+      renderMissionsTab(container) {
+        const idleGangsters = GameState.gangsters.owned.filter(g => g.status === 'idle');
+        const activeMissions = GameState.gangsters.activeMissions;
+
+        let html = '';
+
+        // Active missions with progress bars
+        if (activeMissions.length > 0) {
+          html += '<div class="cc-section-title">Active Missions</div>';
+          for (const mission of activeMissions) {
+            const gangster = GameState.gangsters.owned.find(g => g.id === mission.gangsterId);
+            const missionDef = this.MISSION_TYPES[mission.type];
+            const elapsed = Date.now() - mission.startTime;
+            const progress = Math.min(100, (elapsed / mission.duration) * 100);
+
+            html += `
+              <div class="cc-mission-active">
+                <div class="cc-mission-header">
+                  <span>${missionDef.icon} ${missionDef.name}</span>
+                  <span class="cc-gangster-name">${gangster ? gangster.name : 'Unknown'}</span>
+                </div>
+                <div class="cc-progress-bar">
+                  <div class="cc-progress-fill" style="width:${progress}%"></div>
+                </div>
+                <div class="cc-progress-label">${Math.round(progress)}% - ${Math.ceil((mission.duration - elapsed) / 1000)}s remaining</div>
+              </div>
+            `;
+          }
+        }
+
+        // Assign new missions
+        if (idleGangsters.length > 0) {
+          html += '<div class="cc-section-title">Assign Mission</div>';
+          html += '<div class="cc-assign-row">';
+          html += '<label class="cc-label">Gangster:</label>';
+          html += '<select class="cc-select" id="cc-gangster-select">';
+          for (const g of idleGangsters) {
+            html += `<option value="${g.id}">${g.name} (Loyalty: ${g.loyalty}%)</option>`;
+          }
+          html += '</select></div>';
+
+          html += '<div class="cc-mission-grid">';
+          for (const [key, def] of Object.entries(this.MISSION_TYPES)) {
+            html += `
+              <div class="cc-mission-card" data-mission="${key}">
+                <div class="cc-mission-icon">${def.icon}</div>
+                <div class="cc-mission-name">${def.name}</div>
+                <div class="cc-mission-desc">${def.description}</div>
+                <div class="cc-mission-info">
+                  <span>⏱ ${def.duration / 1000}s</span>
+                  <span>💰 $${def.rewards.cashMin}-${def.rewards.cashMax}</span>
+                </div>
+                <div class="cc-mission-risk">Risk: ${Math.round(def.riskBase * 100)}%</div>
+                <button class="cc-deploy-btn" data-mission="${key}">Deploy</button>
+              </div>
+            `;
+          }
+          html += '</div>';
+        } else if (GameState.gangsters.owned.filter(g => g.status !== 'kia' && g.status !== 'fled' && g.status !== 'snitched').length === 0) {
+          html += '<div class="cc-empty">No gangsters in your crew yet. Buy some from the Gangsters tab in your Safehouse!</div>';
+        } else {
+          html += '<div class="cc-empty">All gangsters are on missions. Wait for them to return.</div>';
+        }
+
+        container.innerHTML = html;
+
+        // Bind deploy buttons
+        container.querySelectorAll('.cc-deploy-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const select = document.getElementById('cc-gangster-select');
+            if (!select) return;
+            const gangsterId = parseInt(select.value);
+            const missionType = btn.dataset.mission;
+            const result = this.assignMission(gangsterId, missionType);
+            if (result.success) {
+              this.renderCommandCenterContent();
+            }
+          });
+        });
+      },
+
+      // === CREW TAB ===
+      renderCrewTab(container) {
+        const owned = GameState.gangsters.owned.filter(g =>
+          g.status !== 'kia' && g.status !== 'fled' && g.status !== 'snitched'
+        );
+
+        if (owned.length === 0) {
+          container.innerHTML = '<div class="cc-empty">No gangsters in your crew. Visit the Gangsters tab in your Safehouse to recruit!</div>';
+          return;
+        }
+
+        let html = '<div class="cc-section-title">Your Crew</div>';
+        for (const g of owned) {
+          const statusClass = g.status === 'on_mission' ? 'cc-status-busy' : 'cc-status-idle';
+          const statusText = g.status === 'on_mission' ? 'On Mission' : 'Available';
+          const skillIcons = { combat: '⚔️', stealth: '🕵️', charisma: '🗣️', luck: '🍀' };
+
+          html += `
+            <div class="cc-crew-card">
+              <div class="cc-crew-header">
+                <span class="cc-crew-name">${g.name}</span>
+                <span class="cc-crew-status ${statusClass}">${statusText}</span>
+              </div>
+              <div class="cc-crew-stats">
+                <span>Loyalty: ${g.loyalty}%</span>
+                <span>${skillIcons[g.primarySkill] || '⭐'} ${g.primarySkill} Lv.${g.skillLevel}</span>
+                <span>Missions: ${g.missionsCompleted || 0}</span>
+              </div>
+              <div class="cc-loyalty-bar">
+                <div class="cc-loyalty-fill" style="width:${g.loyalty}%; background:${g.loyalty > 70 ? '#4ade80' : g.loyalty > 40 ? '#fbbf24' : '#ef4444'}"></div>
+              </div>
+            </div>
+          `;
+        }
+
+        container.innerHTML = html;
+      },
+
+      // === RESULTS TAB ===
+      renderResultsTab(container) {
+        const completed = GameState.gangsters.completedMissions;
+
+        if (completed.length === 0) {
+          container.innerHTML = '<div class="cc-empty">No completed missions to review.</div>';
+          return;
+        }
+
+        let html = '<div class="cc-section-title">Mission Results</div>';
+
+        for (const m of completed) {
+          const missionDef = this.MISSION_TYPES[m.type] || {};
+          let outcomeHtml = '';
+          let outcomeClass = '';
+
+          switch (m.outcome) {
+            case 'success':
+              outcomeClass = 'cc-outcome-success';
+              outcomeHtml = `
+                <div class="cc-result-rewards">
+                  <span>💰 +$${m.rewards.cash}</span>
+                  <span>⭐ +${m.rewards.xp} XP</span>
+                </div>
+                <button class="cc-collect-btn" data-mission-id="${m.id}">Collect</button>
+              `;
+              break;
+            case 'kia':
+              outcomeClass = 'cc-outcome-kia';
+              outcomeHtml = `
+                <div class="cc-result-status">☠️ KIA - ${m.gangsterName} was killed in action</div>
+                <button class="cc-collect-btn cc-dismiss-btn" data-mission-id="${m.id}">Dismiss</button>
+              `;
+              break;
+            case 'fled':
+              outcomeClass = 'cc-outcome-fled';
+              outcomeHtml = `
+                <div class="cc-result-status">🏃 FLED - ${m.gangsterName} ran off with the loot</div>
+                <button class="cc-collect-btn cc-dismiss-btn" data-mission-id="${m.id}">Dismiss</button>
+              `;
+              break;
+            case 'snitched':
+              outcomeClass = 'cc-outcome-snitched';
+              outcomeHtml = `
+                <div class="cc-result-status">🐀 SNITCHED - ${m.gangsterName} ratted you out! (+${m.heatGain}% heat)</div>
+                <button class="cc-collect-btn cc-dismiss-btn" data-mission-id="${m.id}">Dismiss</button>
+              `;
+              break;
+          }
+
+          html += `
+            <div class="cc-result-card ${outcomeClass}">
+              <div class="cc-result-header">
+                <span>${missionDef.icon || '❓'} ${missionDef.name || 'Unknown'}</span>
+                <span class="cc-result-name">${m.gangsterName}</span>
+              </div>
+              <div class="cc-progress-bar"><div class="cc-progress-fill" style="width:100%"></div></div>
+              ${outcomeHtml}
+            </div>
+          `;
+        }
+
+        container.innerHTML = html;
+
+        // Bind collect buttons
+        container.querySelectorAll('.cc-collect-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const missionId = btn.dataset.missionId;
+            this.collectReward(missionId);
+            this.renderCommandCenterContent();
+            // Also refresh profile if it exists
+            if (typeof ProfileTab !== 'undefined' && ProfileTab.render) ProfileTab.render();
+          });
+        });
+      },
+
+      // === GANGSTERS SHOP TAB (for Safehouse micro tab) ===
+      renderGangstersShop(container) {
+        const loyalty = this.calculateLoyalty();
+        const heat = GameState.player.globalHeat || 0;
+        const level = GameState.player.level || 1;
+        const rep = GameState.player.reputation || 0;
+        const ownedCount = GameState.gangsters.owned.filter(g =>
+          g.status !== 'kia' && g.status !== 'fled' && g.status !== 'snitched'
+        ).length;
+
+        let html = `
+          <div class="gangster-shop-header">
+            <div class="gangster-shop-title">Recruit Gangsters</div>
+            <div class="gangster-shop-stats">
+              <span>Crew: ${ownedCount}/8</span>
+              <span>Loyalty Rate: <span style="color:${loyalty > 70 ? '#4ade80' : loyalty > 40 ? '#fbbf24' : '#ef4444'}">${loyalty}%</span></span>
+            </div>
+            <div class="gangster-loyalty-factors">
+              <span>🔥 Heat: ${Math.round(heat)}%</span>
+              <span>📊 Level: ${level}</span>
+              <span>⭐ Rep: ${rep}</span>
+            </div>
+          </div>
+        `;
+
+        if (ownedCount >= 8) {
+          html += '<div class="cc-empty">Crew is full! Max 8 gangsters.</div>';
+        } else {
+          // Generate shop gangsters (re-generate each time tab is viewed)
+          if (!this._shopGangsters || this._shopRefreshTime < Date.now() - 60000) {
+            this._shopGangsters = this.getShopGangsters(4);
+            this._shopRefreshTime = Date.now();
+          }
+
+          html += '<div class="gangster-shop-grid">';
+          for (const g of this._shopGangsters) {
+            const canAfford = GameState.player.cash >= g.price;
+            const skillIcons = { combat: '⚔️', stealth: '🕵️', charisma: '🗣️', luck: '🍀' };
+
+            html += `
+              <div class="gangster-shop-card ${canAfford ? '' : 'cant-afford'}">
+                <div class="gangster-shop-portrait">👤</div>
+                <div class="gangster-shop-name">${g.name}</div>
+                <div class="gangster-shop-skill">${skillIcons[g.primarySkill] || '⭐'} ${g.primarySkill} Lv.${g.skillLevel}</div>
+                <div class="gangster-shop-loyalty">
+                  <span>Loyalty:</span>
+                  <div class="cc-loyalty-bar" style="flex:1;margin-left:6px;">
+                    <div class="cc-loyalty-fill" style="width:${g.loyalty}%;background:${g.loyalty > 70 ? '#4ade80' : g.loyalty > 40 ? '#fbbf24' : '#ef4444'}"></div>
+                  </div>
+                  <span style="margin-left:4px;">${g.loyalty}%</span>
+                </div>
+                <button class="gangster-buy-btn ${canAfford ? '' : 'disabled'}" data-gangster-id="${g.id}" ${canAfford ? '' : 'disabled'}>
+                  Buy - $${g.price.toLocaleString()}
+                </button>
+              </div>
+            `;
+          }
+          html += '</div>';
+
+          html += '<button class="gangster-refresh-btn" id="gangster-refresh-btn">🔄 Refresh Recruits</button>';
+        }
+
+        container.innerHTML = html;
+
+        // Bind buy buttons
+        container.querySelectorAll('.gangster-buy-btn:not(.disabled)').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const gId = parseInt(btn.dataset.gangsterId);
+            const gangster = this._shopGangsters.find(g => g.id === gId);
+            if (!gangster) return;
+
+            const result = this.buyGangster(gangster);
+            if (result.success) {
+              // Remove from shop
+              this._shopGangsters = this._shopGangsters.filter(g => g.id !== gId);
+              this.renderGangstersShop(container);
+              if (typeof ProfileTab !== 'undefined' && ProfileTab.render) ProfileTab.render();
+            }
+          });
+        });
+
+        // Refresh button
+        const refreshBtn = document.getElementById('gangster-refresh-btn');
+        if (refreshBtn) {
+          refreshBtn.addEventListener('click', () => {
+            this._shopGangsters = this.getShopGangsters(4);
+            this._shopRefreshTime = Date.now();
+            this.renderGangstersShop(container);
+          });
+        }
+      }
+    };
+
+
     const TurfTab = {
       roamInterval: null,
       eventInterval: null,
@@ -28580,7 +29792,17 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
           laylowBtn.addEventListener('click', (e) => {
             if (HitAreaEditor.active) return; // Don't trigger in hit area editor mode
             e.stopPropagation();
+            // Warp into safehouse interior
             this.setPlayerStatus('laying_low');
+            // Close the popover menu
+            const popoverMenu = document.getElementById('turf-popover-menu');
+            if (popoverMenu) popoverMenu.classList.remove('open');
+            const backdrop = document.getElementById('turf-modal-backdrop');
+            if (backdrop) backdrop.classList.remove('active');
+            // Enter safehouse interior after a brief delay (let status transition start)
+            setTimeout(() => {
+              SafehouseInterior.enter();
+            }, 300);
             this.updatePopoverButtonStates();
           });
         }
@@ -29635,7 +30857,15 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
         if (subtab === 'upgrades') {
           this.renderUpgradesTab();
         }
-        
+
+        // Render gangsters tab content dynamically
+        if (subtab === 'gangsters') {
+          const gangsterContainer = document.getElementById('safehouse-gangsters-content');
+          if (gangsterContainer && typeof GangsterSystem !== 'undefined') {
+            GangsterSystem.renderGangstersShop(gangsterContainer);
+          }
+        }
+
         // Bind Character Forge category buttons when character tab is shown
         if (subtab === 'character') {
           this.initForgeCategories();
@@ -31952,6 +33182,8 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       SafeHouseTab.init();
       GangTab.init();
       CityNewsTicker.init();
+      SafehouseInterior.init();
+      GangsterSystem.init();
       
       // Render active tab
       const activeTab = GameState.ui.activeTab;
