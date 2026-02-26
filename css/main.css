@@ -8832,3 +8832,339 @@ body {
 .gangster-refresh-btn:active {
   transform: scale(0.96);
 }
+
+/* ================================================
+   FREE ROAM TOUCH CONTROLLER
+   ================================================ */
+.fr-touch-zone {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 500;
+  touch-action: none;
+  /* Invisible - no visual indicator */
+  background: transparent;
+  pointer-events: auto;
+}
+
+/* Enter Building Button */
+.fr-enter-btn {
+  position: absolute;
+  right: 10px;
+  bottom: 80px;
+  z-index: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  background: rgba(26, 58, 26, 0.85);
+  border: 1px solid rgba(74, 222, 128, 0.4);
+  border-radius: 8px;
+  color: #4ade80;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  transition: all 0.2s;
+  animation: fr-enter-pulse 1.5s ease-in-out infinite;
+}
+
+.fr-enter-btn:active {
+  transform: scale(0.92);
+}
+
+@keyframes fr-enter-pulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(74, 222, 128, 0.2); }
+  50% { box-shadow: 0 0 16px rgba(74, 222, 128, 0.4); }
+}
+
+.fr-enter-icon {
+  font-size: 16px;
+}
+
+.fr-enter-text {
+  white-space: nowrap;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ================================================
+   BUILDING TAKEOVER OVERLAY
+   ================================================ */
+.building-takeover-overlay {
+  position: fixed;
+  inset: 0;
+  background: #0a0a0a;
+  z-index: 9500;
+  display: flex;
+  flex-direction: column;
+  animation: bt-fade-in 0.4s ease-out;
+}
+
+@keyframes bt-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.bt-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: #111;
+  border-bottom: 1px solid #222;
+  flex-shrink: 0;
+}
+
+.bt-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #e0e0e0;
+}
+
+.bt-floor-indicator {
+  display: flex;
+  gap: 6px;
+}
+
+.bt-floor-dot {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #1a1a1a;
+  border: 2px solid #333;
+  color: #555;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s;
+}
+
+.bt-floor-dot.cleared {
+  background: #1a3a1a;
+  border-color: #4ade80;
+  color: #4ade80;
+}
+
+.bt-floor-dot.current {
+  border-color: #fbbf24;
+  color: #fbbf24;
+  animation: bt-dot-pulse 1s ease-in-out infinite;
+}
+
+@keyframes bt-dot-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+}
+
+.bt-exit-btn {
+  padding: 6px 14px;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 6px;
+  color: #e0e0e0;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.bt-exit-btn:active {
+  transform: scale(0.96);
+}
+
+.bt-body {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+/* Dialog Scene */
+.bt-dialog-scene {
+  max-width: 400px;
+  width: 100%;
+  text-align: center;
+}
+
+.bt-floor-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: #fbbf24;
+  margin-bottom: 16px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.bt-enemy-portrait {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 20px;
+}
+
+.bt-enemy-icon {
+  font-size: 48px;
+}
+
+.bt-enemy-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #e0e0e0;
+}
+
+.bt-enemy-level {
+  font-size: 12px;
+  color: #888;
+}
+
+.bt-dialog-box {
+  background: #111;
+  border: 1px solid #222;
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+  min-height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bt-dialog-text {
+  font-size: 14px;
+  color: #ccc;
+  line-height: 1.6;
+  font-family: monospace;
+  white-space: pre-wrap;
+  text-align: left;
+}
+
+.bt-dialog-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.bt-action-btn {
+  padding: 12px 28px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid;
+}
+
+.bt-action-btn:active {
+  transform: scale(0.95);
+}
+
+.bt-fight-btn {
+  background: linear-gradient(135deg, #3a1a1a, #260d0d);
+  border-color: #6b2d2d;
+  color: #ef4444;
+}
+
+.bt-fight-btn:hover {
+  background: linear-gradient(135deg, #4a2020, #351515);
+}
+
+.bt-retreat-btn {
+  background: #1a1a1a;
+  border-color: #333;
+  color: #888;
+}
+
+.bt-retreat-btn:hover {
+  background: #222;
+}
+
+/* Building name / owned badge */
+.bt-building-name {
+  font-size: 20px;
+  font-weight: 700;
+  color: #e0e0e0;
+  margin-bottom: 10px;
+}
+
+.bt-owned-badge {
+  display: inline-block;
+  padding: 4px 16px;
+  background: rgba(74, 222, 128, 0.15);
+  border: 1px solid rgba(74, 222, 128, 0.4);
+  border-radius: 20px;
+  color: #4ade80;
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 14px;
+  letter-spacing: 2px;
+}
+
+/* Victory / Defeat */
+.bt-victory {
+  animation: bt-victory-glow 1s ease-out;
+}
+
+@keyframes bt-victory-glow {
+  from { text-shadow: 0 0 40px rgba(255, 215, 0, 0.8); }
+  to { text-shadow: none; }
+}
+
+.bt-victory-icon {
+  font-size: 64px;
+  margin-bottom: 12px;
+}
+
+.bt-victory-title {
+  font-size: 24px;
+  font-weight: 800;
+  color: #ffd700;
+  margin-bottom: 8px;
+  letter-spacing: 2px;
+}
+
+.bt-victory-text {
+  font-size: 15px;
+  color: #ccc;
+  margin-bottom: 6px;
+}
+
+.bt-victory-btn {
+  background: linear-gradient(135deg, #1a3a1a, #0d260d) !important;
+  border-color: #2d6b2d !important;
+  color: #4ade80 !important;
+  margin-top: 16px;
+}
+
+.bt-defeat-icon {
+  font-size: 64px;
+  margin-bottom: 12px;
+}
+
+.bt-defeat-title {
+  font-size: 24px;
+  font-weight: 800;
+  color: #ef4444;
+  margin-bottom: 8px;
+  letter-spacing: 2px;
+}
+
+.bt-defeat-text {
+  font-size: 15px;
+  color: #ccc;
+  margin-bottom: 6px;
+}
+
+.bt-defeat-btn {
+  background: #1a1a1a !important;
+  border-color: #333 !important;
+  color: #888 !important;
+  margin-top: 16px;
+}
