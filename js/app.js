@@ -25327,7 +25327,9 @@ function ensureLandmarkProperties() {
       startLoop() {
         const loop = () => {
           if (!this.active) return;
-          this.updatePosition();
+          const isMoving = Math.abs(this.dirX) >= 0.05 || Math.abs(this.dirY) >= 0.05;
+          if (isMoving) this.updatePosition();
+          this.updateAnimation(isMoving);
           this.checkBuildingProximity();
           this.animFrame = requestAnimationFrame(loop);
         };
@@ -25335,8 +25337,6 @@ function ensureLandmarkProperties() {
       },
 
       updatePosition() {
-        if (Math.abs(this.dirX) < 0.05 && Math.abs(this.dirY) < 0.05) return;
-
         const pos = GameState.character.position;
         let nx = pos.x + this.dirX * this.moveSpeed;
         let ny = pos.y + this.dirY * this.moveSpeed;
@@ -25354,26 +25354,33 @@ function ensureLandmarkProperties() {
           playerEl.style.left = nx + '%';
           playerEl.style.top = ny + '%';
         }
+      },
 
-        // Update sprite facing and animation
-        if (typeof TurfTab !== 'undefined' && TurfTab.roamSprite) {
-          const sprite = TurfTab.roamSprite;
-          // Convert direction to degrees for sprite rotation
-          if (Math.abs(this.dirX) > 0.1 || Math.abs(this.dirY) > 0.1) {
-            const deg = Math.atan2(this.dirY, this.dirX) * 180 / Math.PI;
-            if (typeof sprite.setFacingFromVector === 'function') {
-              sprite.setFacingFromVector(this.dirX, this.dirY, 0.016);
-            } else if (playerEl) {
+      updateAnimation(isMoving) {
+        if (typeof TurfTab === 'undefined' || !TurfTab.roamSprite) return;
+        const sprite = TurfTab.roamSprite;
+
+        // Update facing direction when moving
+        if (isMoving) {
+          if (typeof sprite.setFacingFromVector === 'function') {
+            sprite.setFacingFromVector(this.dirX, this.dirY, 0.016);
+          } else {
+            const playerEl = document.getElementById('freeRoamPlayer');
+            if (playerEl) {
+              const deg = Math.atan2(this.dirY, this.dirX) * 180 / Math.PI;
               playerEl.style.setProperty('--fr-rot', deg.toFixed(1) + 'deg');
             }
-            // Set moving state for walk animation
-            if (typeof sprite.setFrameMoving === 'function') {
-              sprite.setFrameMoving(true);
-            }
-            if (typeof sprite.updateFrames === 'function') {
-              sprite.updateFrames(performance.now(), true);
-            }
           }
+        }
+
+        // Always update moving state (handles idle ↔ walk transitions)
+        if (typeof sprite.setFrameMoving === 'function') {
+          sprite.setFrameMoving(isMoving);
+        }
+
+        // Always call updateFrames so both idle and walk animations cycle
+        if (typeof sprite.updateFrames === 'function') {
+          sprite.updateFrames(performance.now(), isMoving);
         }
       },
 
@@ -25576,12 +25583,17 @@ function ensureLandmarkProperties() {
       },
 
       exit() {
+        console.log('[BuildingTakeover] Exiting building');
         this.active = false;
         this.building = null;
+        this.currentFloor = 0;
         if (this.overlayEl) {
           this.overlayEl.remove();
           this.overlayEl = null;
         }
+        // Also remove any stale overlays by ID
+        const stale = document.getElementById('building-takeover-overlay');
+        if (stale) stale.remove();
 
         // Resume free roam
         if (typeof TurfTab !== 'undefined') {
@@ -25608,7 +25620,11 @@ function ensureLandmarkProperties() {
       },
 
       createOverlay() {
+        // Clean up any existing overlay (both reference and DOM)
         if (this.overlayEl) this.overlayEl.remove();
+        const stale = document.getElementById('building-takeover-overlay');
+        if (stale) stale.remove();
+        this.overlayEl = null;
 
         const el = document.createElement('div');
         el.id = 'building-takeover-overlay';
@@ -25627,7 +25643,9 @@ function ensureLandmarkProperties() {
         document.body.appendChild(el);
         this.overlayEl = el;
 
-        el.querySelector('#bt-exit-btn').addEventListener('click', () => this.exit());
+        el.querySelector('#bt-exit-btn').addEventListener('click', () => {
+          if (this.active) this.exit();
+        });
       },
 
       showFloorDialog() {
@@ -25718,18 +25736,23 @@ function ensureLandmarkProperties() {
         const enemy = this.FLOOR_ENEMIES[this.currentFloor];
         const isBoss = this.currentFloor === 4;
 
-        // Hide the takeover overlay during battle
-        if (this.overlayEl) this.overlayEl.style.display = 'none';
+        // Remove the takeover overlay during battle (will be recreated after)
+        if (this.overlayEl) {
+          this.overlayEl.remove();
+          this.overlayEl = null;
+        }
 
         // Configure and start the PokemonBattle system
         if (window.PokemonBattle && typeof window.PokemonBattle.startBattle === 'function') {
-          // Override enemy stats for this floor
           const battleApp = window.PokemonBattle;
 
-          // Store callback for when battle ends
+          // Store callback for when battle ends - use setTimeout to decouple
+          // from resetBattle() call stack so DOM settles before we show next floor
           window._buildingBattleCallback = (playerWon, playerLost) => {
             window._buildingBattleCallback = null;
-            this.onBattleEnd(playerWon, playerLost);
+            setTimeout(() => {
+              this.onBattleEnd(playerWon, playerLost);
+            }, 150);
           };
 
           // Start battle - the battle system will initialize with GameState stats
@@ -25755,8 +25778,13 @@ function ensureLandmarkProperties() {
       },
 
       onBattleEnd(playerWon, playerLost) {
-        // Show overlay again
-        if (this.overlayEl) this.overlayEl.style.display = '';
+        // Guard: ensure we're still in an active takeover
+        if (!this.active || !this.building) {
+          console.warn('[BuildingTakeover] onBattleEnd called but takeover not active');
+          return;
+        }
+
+        console.log('[BuildingTakeover] Battle ended - Won:', playerWon, 'Floor:', this.currentFloor);
 
         if (playerWon) {
           this.currentFloor++;
@@ -25777,7 +25805,8 @@ function ensureLandmarkProperties() {
             this.showTakeoverComplete();
           } else {
             Storage.save();
-            // Update floor indicators
+            console.log('[BuildingTakeover] Advancing to floor', this.currentFloor + 1);
+            // Show next floor dialog (overlay is recreated fresh)
             this.showFloorDialog();
           }
         } else {
