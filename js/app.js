@@ -25423,17 +25423,21 @@ function ensureLandmarkProperties() {
         const threshold = 6; // % distance threshold
         const isOwned = nearest && nearest.owned;
         const isLandmark = nearest && nearest.isLandmark;
-        const showBtn = nearest && nearestDist < threshold && !isOwned && !isLandmark;
+        const showBtn = nearest && nearestDist < threshold && !isLandmark;
 
         if (showBtn) {
           this.nearestBuilding = nearest;
           if (this.enterBtnEl) {
             this.enterBtnEl.style.display = 'flex';
-            // Show floor progress if partially taken over
-            const progress = GameState.buildingTakeover && GameState.buildingTakeover[nearest.id];
-            const floorLabel = progress && progress.floor > 0 ? ` (F${progress.floor + 1}/5)` : '';
             const textEl = this.enterBtnEl.querySelector('.fr-enter-text');
-            if (textEl) textEl.textContent = nearest.name ? `Enter ${nearest.name.substring(0, 10)}${floorLabel}` : 'Enter';
+            if (isOwned) {
+              if (textEl) textEl.textContent = nearest.name ? `${nearest.name.substring(0, 12)}` : 'View';
+            } else {
+              // Show floor progress if partially taken over
+              const progress = GameState.buildingTakeover && GameState.buildingTakeover[nearest.id];
+              const floorLabel = progress && progress.floor > 0 ? ` (F${progress.floor + 1}/5)` : '';
+              if (textEl) textEl.textContent = nearest.name ? `Enter ${nearest.name.substring(0, 10)}${floorLabel}` : 'Enter';
+            }
           }
         } else {
           this.nearestBuilding = null;
@@ -25445,9 +25449,16 @@ function ensureLandmarkProperties() {
         if (!this.nearestBuilding) return;
         const building = this.nearestBuilding;
 
-        // Skip if building is already purchased/owned
+        // If building is already purchased/owned, show property modal instead of takeover
         if (building.owned) {
-          if (typeof TurfTab !== 'undefined' && TurfTab.showTemporaryNotification) {
+          if (typeof showPropertyModal === 'function') {
+            const propBuilding = GameState.propertyBuildings.find(b => b.id === building.id);
+            if (propBuilding) {
+              showPropertyModal(propBuilding);
+            } else if (typeof TurfTab !== 'undefined' && TurfTab.showTemporaryNotification) {
+              TurfTab.showTemporaryNotification(`You already own ${building.name}!`);
+            }
+          } else if (typeof TurfTab !== 'undefined' && TurfTab.showTemporaryNotification) {
             TurfTab.showTemporaryNotification(`You already own ${building.name}!`);
           }
           return;
@@ -26324,7 +26335,7 @@ function ensureLandmarkProperties() {
             const el = document.elementFromPoint(e.clientX, e.clientY);
             if (el && el !== viewport && viewport.contains(el)) {
               // Prefer clicking a meaningful parent (icons/markers are often wrapped)
-              const clickable = el.closest?.('.map-icon, [data-location], [data-landmark], button, a, .clickable') || el;
+              const clickable = el.closest?.('.map-icon, .property-building, [data-location], [data-landmark], button, a, .clickable') || el;
               try {
                 clickable.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
               } catch (_) {}
@@ -26788,7 +26799,7 @@ function ensureLandmarkProperties() {
           const viewport = document.getElementById('map-viewport');
         this._zoomViewport = viewport; // cache for cancelPanZoomCapture()
           if (el && viewport && el !== viewport && viewport.contains(el)) {
-            const clickable = el.closest?.('.map-icon, [data-location], [data-landmark], button, a, .clickable') || el;
+            const clickable = el.closest?.('.map-icon, .property-building, [data-location], [data-landmark], button, a, .clickable') || el;
             try {
               clickable.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
             } catch (_) {}
