@@ -25822,6 +25822,7 @@ function ensureLandmarkProperties() {
       },
 
       showTakeoverComplete() {
+        if (!this.overlayEl) this.createOverlay();
         const body = this.overlayEl.querySelector('.bt-body');
         if (!body) return;
 
@@ -25848,6 +25849,7 @@ function ensureLandmarkProperties() {
       },
 
       showDefeat() {
+        if (!this.overlayEl) this.createOverlay();
         const body = this.overlayEl.querySelector('.bt-body');
         if (!body) return;
 
@@ -26850,7 +26852,23 @@ function ensureLandmarkProperties() {
 
         // Ensure sprite exists and show it
         this.ensureRoamSprite();
-        if (this.roamSprite) this.roamSprite.stop(); // Stop auto-movement
+        if (this.roamSprite) {
+          // Save current percentage position before stop() resets it to safehouse
+          const savedPctX = GameState.character.position.x;
+          const savedPctY = GameState.character.position.y;
+          const hadPosition = (savedPctX > 0 || savedPctY > 0);
+          this.roamSprite.stop(); // Stop auto-movement (resets pos to safehouse)
+          // Restore position if player was already on the map (resuming after battle)
+          if (hadPosition) {
+            GameState.character.position.x = savedPctX;
+            GameState.character.position.y = savedPctY;
+            const playerEl = document.getElementById('freeRoamPlayer');
+            if (playerEl) {
+              playerEl.style.left = savedPctX + '%';
+              playerEl.style.top = savedPctY + '%';
+            }
+          }
+        }
 
         // Start touch-controlled movement
         FreeRoamController.start();
@@ -27839,7 +27857,10 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
               return;
             }
 
-            if (this.active) return; // Don't run if free roaming is active
+            if (this.active) return; // Don't run if auto-roaming is active
+
+            // Don't run idle animation if FreeRoamController is driving the sprite
+            if (typeof FreeRoamController !== 'undefined' && FreeRoamController.active) return;
 
             // Only animate idle frames, not movement
             this.updateFrames(ts, false);
@@ -29101,8 +29122,11 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
             colorClass: 'outcome-negative'
           };
         } else {
-          // Shouldn't happen, but handle gracefully
-          console.warn('[Battle] Unknown outcome state');
+          // Escaped or unknown outcome - resume free roam
+          console.log('[Battle] Escaped or unknown outcome - resuming free roam');
+          GameState.character.freeRoam = true;
+          this.startFreeRoam();
+          this.updateRoamButton();
           return;
         }
 
@@ -29223,8 +29247,11 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
           
           console.log(`Sent to jail for ${Math.floor(jailDuration/1000)} seconds (heat: ${GameState.player.globalHeat.toFixed(1)}%)`);
         } else {
-          // Continue - player retains control
+          // Continue - player retains control, resume free roam from current position
           console.log('Event resolved - player can continue');
+          GameState.character.freeRoam = true;
+          this.startFreeRoam();
+          this.updateRoamButton();
         }
       },
       
@@ -31013,7 +31040,10 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
         try {
           this.ensureRoamSprite();
           if (!GameState.character.freeRoam && this.roamSprite && typeof this.roamSprite.stop === 'function') {
-            this.roamSprite.stop();
+            // Don't reset sprite during building takeover (it's expected to be paused)
+            if (!(typeof BuildingTakeover !== 'undefined' && BuildingTakeover.active)) {
+              this.roamSprite.stop();
+            }
           }
         } catch (e) {
           console.warn('ensureRoamSprite failed', e);
@@ -31281,6 +31311,9 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
         }
       }
     };
+
+    // Expose TurfTab to window so cross-file code (e.g. PokemonBattle in index.html) can access it
+    window.TurfTab = TurfTab;
 
     const CrimesTab = {
       cooldownUpdateInterval: null,
