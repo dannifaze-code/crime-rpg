@@ -78,6 +78,36 @@ try {
     console.log('🏗️ BUILD_STAMP:', BUILD_STAMP);
 
     // ========================================
+    // DESKTOP PHONE-FRAME: Modal Containment
+    // On wider screens (PC/tablet), redirect modals
+    // appended to document.body into #app so they
+    // render inside the phone frame instead of the
+    // full viewport. Mobile is unaffected.
+    // ========================================
+    (function initDesktopFrame() {
+      if (window.innerWidth < 768) return; // Mobile — skip
+      var origAppendChild = Node.prototype.appendChild;
+      document.body.appendChild = function(child) {
+        // Only redirect DOM elements (not text/comments/scripts/stylesheets)
+        if (child && child.nodeType === 1 && child.tagName !== 'SCRIPT' && child.tagName !== 'LINK' && child.tagName !== 'STYLE') {
+          var app = document.getElementById('app');
+          // Only redirect when #app is visible (after login); otherwise append to body normally
+          if (app && app.style.display && app.style.display !== 'none') {
+            return origAppendChild.call(app, child);
+          }
+        }
+        return origAppendChild.call(document.body, child);
+      };
+      // Re-evaluate on resize (e.g., user resizes to mobile width)
+      window.addEventListener('resize', function() {
+        if (window.innerWidth < 768) {
+          document.body.appendChild = origAppendChild.bind(document.body);
+        }
+      }, { once: true });
+      console.log('[DesktopFrame] Modal containment active (>768px)');
+    })();
+
+    // ========================================
     // CHAT SYSTEM: Real-time Messaging
     // ========================================
     const ChatSystem = {

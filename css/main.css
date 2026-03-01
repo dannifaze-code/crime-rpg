@@ -9177,3 +9177,182 @@ body {
   color: #888 !important;
   margin-top: 16px;
 }
+
+/* ========================================================
+   DESKTOP / TABLET PHONE FRAME
+   Displays the game in a centered mobile-sized container
+   with an atmospheric background on wider screens.
+   Mobile (<768px) is completely unaffected.
+   ======================================================== */
+
+@media (min-width: 768px) {
+  html {
+    height: 100%;
+  }
+
+  body {
+    background: #030305 !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    height: 100vh !important;
+    width: 100vw !important;
+    overflow: hidden !important;
+    position: relative !important;
+  }
+
+  /* Atmospheric background behind the phone frame */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background:
+      /* Dark urban vignette */
+      radial-gradient(ellipse at 50% 0%, rgba(60, 30, 10, 0.15) 0%, transparent 50%),
+      radial-gradient(ellipse at 50% 100%, rgba(60, 30, 10, 0.15) 0%, transparent 50%),
+      /* Center glow behind phone */
+      radial-gradient(ellipse at 50% 50%, rgba(20, 15, 10, 0.4) 0%, transparent 40%),
+      /* Base dark texture */
+      repeating-linear-gradient(
+        0deg,
+        rgba(255,255,255,0.01) 0px,
+        transparent 1px,
+        transparent 3px
+      ),
+      repeating-linear-gradient(
+        90deg,
+        rgba(255,255,255,0.01) 0px,
+        transparent 1px,
+        transparent 3px
+      ),
+      /* Deep dark base */
+      linear-gradient(180deg, #0a0808 0%, #050305 50%, #080608 100%);
+    pointer-events: none;
+  }
+
+  /* Game title branding in background */
+  body::after {
+    content: 'HEATLINE: UNDERWORLD';
+    position: fixed;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: 'Cinzel', serif;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 6px;
+    color: rgba(200, 160, 80, 0.12);
+    text-transform: uppercase;
+    pointer-events: none;
+    z-index: 0;
+    white-space: nowrap;
+  }
+
+  /* Phone frame container */
+  #app {
+    max-width: 430px !important;
+    width: 430px !important;
+    height: 100vh !important;
+    max-height: 932px !important;
+    margin: 0 auto !important;
+    position: relative !important;
+    overflow: hidden !important;
+    border-radius: 24px !important;
+    border: 1px solid rgba(255, 255, 255, 0.06) !important;
+    box-shadow:
+      0 0 0 1px rgba(0, 0, 0, 0.8),
+      0 8px 40px rgba(0, 0, 0, 0.7),
+      0 0 120px rgba(0, 0, 0, 0.5),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+    /* KEY: transform creates a containing block for position:fixed children */
+    transform: translateZ(0);
+    z-index: 1;
+  }
+
+  /* Ensure content scrolls within the frame */
+  #content {
+    max-height: calc(100% - 72px);
+  }
+
+  /* Tab bar sticks to bottom of frame (not viewport) */
+  #tab-bar {
+    position: absolute !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    border-radius: 0 0 24px 24px !important;
+  }
+
+  /* ---- Body-level overlays: contain within phone frame ---- */
+
+  /* Battle screen */
+  #battle-app {
+    position: fixed !important;
+    width: 430px !important;
+    max-height: 932px !important;
+    height: 100vh !important;
+    left: 50% !important;
+    top: 50% !important;
+    right: auto !important;
+    bottom: auto !important;
+    transform: translate(-50%, -50%) !important;
+    border-radius: 24px !important;
+    overflow: hidden !important;
+  }
+
+  /* Skill tree modal */
+  #skill-tree-modal {
+    width: 430px !important;
+    max-height: 932px !important;
+    height: 100vh !important;
+    left: 50% !important;
+    top: 50% !important;
+    right: auto !important;
+    bottom: auto !important;
+    transform: translate(-50%, -50%) !important;
+    border-radius: 24px !important;
+    overflow: hidden !important;
+  }
+
+  /* Account/login overlay - centered phone frame on desktop */
+  .account-overlay {
+    width: 430px !important;
+    max-height: 932px !important;
+    left: 50% !important;
+    top: 50% !important;
+    right: auto !important;
+    bottom: auto !important;
+    transform: translate(-50%, -50%) !important;
+    border-radius: 24px !important;
+    overflow: hidden !important;
+    box-shadow:
+      0 0 0 1px rgba(0, 0, 0, 0.8),
+      0 8px 40px rgba(0, 0, 0, 0.7),
+      0 0 120px rgba(0, 0, 0, 0.5) !important;
+  }
+
+  /* Loading screen overlay - match phone frame */
+  #loading-screen,
+  [style*="z-index: 99999"],
+  [style*="z-index:99999"] {
+    width: 430px !important;
+    max-height: 932px !important;
+    left: 50% !important;
+    top: 50% !important;
+    right: auto !important;
+    bottom: auto !important;
+    transform: translate(-50%, -50%) !important;
+    border-radius: 24px !important;
+    overflow: hidden !important;
+  }
+}
+
+/* Larger desktop screens - bigger frame and visible branding */
+@media (min-width: 1200px) {
+  body::after {
+    font-size: 18px;
+    letter-spacing: 10px;
+    color: rgba(200, 160, 80, 0.08);
+  }
+}
