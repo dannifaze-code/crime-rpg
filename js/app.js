@@ -26330,8 +26330,9 @@ function ensureLandmarkProperties() {
           this.activePointerId = null;
           viewport.classList.remove('is-panning');
 
-          if (wasTap) {
+          if (wasTap && !this._touchTapHandled) {
             // Let the DOM handle the interaction by synthesizing a click on the element under the pointer.
+            // Skip if the touch handler already forwarded this tap (prevents duplicate clicks on mobile).
             const el = document.elementFromPoint(e.clientX, e.clientY);
             if (el && el !== viewport && viewport.contains(el)) {
               // Prefer clicking a meaningful parent (icons/markers are often wrapped)
@@ -26350,6 +26351,7 @@ function ensureLandmarkProperties() {
           // Reset tap tracking
           this._tapPointerId = null;
           this._tapMoved = false;
+          this._touchTapHandled = false;
         };
 
         viewport.addEventListener('pointerup', endPan);
@@ -26792,16 +26794,22 @@ function ensureLandmarkProperties() {
           return;
         }
 
-        // Forward tap to underlying icon/landmark (touch) if this gesture was a tap (no drag, no pinch)
-        if (!this.isPinching && !this._touchTapMoved && !this._isScrolling && e && e.changedTouches && e.changedTouches.length) {
+        // Determine if this was a tap (no drag, no pinch, no scroll)
+        const wasTouchTap = !this.isPinching && !this._touchTapMoved && !this._isScrolling;
+
+        // Forward tap to underlying icon/landmark (touch) if this gesture was a tap
+        if (wasTouchTap && e && e.changedTouches && e.changedTouches.length) {
           const t = e.changedTouches[0];
           const el = document.elementFromPoint(t.clientX, t.clientY);
           const viewport = document.getElementById('map-viewport');
-        this._zoomViewport = viewport; // cache for cancelPanZoomCapture()
+          this._zoomViewport = viewport; // cache for cancelPanZoomCapture()
           if (el && viewport && el !== viewport && viewport.contains(el)) {
             const clickable = el.closest?.('.map-icon, .property-building, [data-location], [data-landmark], button, a, .clickable') || el;
             try {
               clickable.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+              // Mark that touch handler already forwarded this tap so pointer handler
+              // doesn't dispatch a duplicate click
+              this._touchTapHandled = true;
             } catch (_) {}
           }
         }
@@ -26810,7 +26818,8 @@ function ensureLandmarkProperties() {
         this._touchTapStartX = null;
         this._touchTapStartY = null;
         // Track scroll/pan end time to prevent accidental property modal opens
-        if (this._isScrolling || this.isPanning) {
+        // Only set _lastScrollEnd for actual scrolls/pans, NOT for taps
+        if (!wasTouchTap) {
           this._lastScrollEnd = Date.now();
         }
         this._isScrolling = false;
@@ -30498,9 +30507,11 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
       setIconState(iconType, newState) {
         const icon = GameState.mapIcons.find(i => i.type === iconType);
         if (!icon) return;
-        
+
         icon.state = newState;
         this.renderIcons();
+        // renderIcons() clears #map-icons — must re-render property buildings
+        if (typeof renderPropertyBuildings === 'function') renderPropertyBuildings();
         Storage.save();
         
         console.log(`Icon ${iconType} state changed to: ${newState}`);
@@ -32377,10 +32388,12 @@ return { feetIdle: EMBED_FEET_IDLE, feetWalk: EMBED_FEET_WALK, bodyIdle: EMBED_B
         this.renderUpgradesTab();
         
         // Re-render map icons to show the new safehouse sprite
+        // renderIcons() clears #map-icons — must re-render property buildings afterward
         if (typeof TurfTab !== 'undefined' && TurfTab.renderIcons) {
           TurfTab.renderIcons();
+          if (typeof renderPropertyBuildings === 'function') renderPropertyBuildings();
         }
-        
+
         console.log(`🏠 Safe House upgraded to Level ${level}! Cost: $${upgrade.cost.toLocaleString()}`);
       },
       
