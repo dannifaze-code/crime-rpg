@@ -18210,9 +18210,22 @@ function ensureLandmarkProperties() {
         }
       },
 
+      // Scale a saved pixel value to the current viewport.
+      // If the layout was saved on a 400px-wide phone and loaded on a 800px tablet,
+      // x-positions are doubled so buttons land at the same relative spot.
+      _scaleValue(savedVal, savedDimension, currentDimension) {
+        if (!savedDimension || savedDimension <= 0) return savedVal;
+        return savedVal * (currentDimension / savedDimension);
+      },
+
       saveLayout() {
         if (typeof database !== 'undefined' && database) {
-          const payload = { layout: this._layout, updatedAt: Date.now() };
+          const payload = {
+            layout: this._layout,
+            viewportWidth: window.innerWidth,
+            viewportHeight: window.innerHeight,
+            updatedAt: Date.now()
+          };
           database.ref('gameConfig/turfUILayout').set(payload)
             .then(() => {
               console.log('🎨 ✅ Turf UI layout saved globally to Firebase');
@@ -18235,6 +18248,9 @@ function ensureLandmarkProperties() {
             if (data && data.layout && typeof data.layout === 'object') {
               console.log('🎨 Loading saved turf UI layout from Firebase...');
               this._layout = data.layout;
+              // Store the viewport dimensions the layout was saved on
+              this._savedViewportWidth = data.viewportWidth || 0;
+              this._savedViewportHeight = data.viewportHeight || 0;
               this._applyAllLayout();
               console.log('🎨 ✅ Turf UI layout loaded and applied');
             }
@@ -18246,13 +18262,24 @@ function ensureLandmarkProperties() {
       },
 
       _applyAllLayout() {
+        var savedW = this._savedViewportWidth || 0;
+        var savedH = this._savedViewportHeight || 0;
+        var curW = window.innerWidth;
+        var curH = window.innerHeight;
+
         Object.keys(this._layout).forEach(elementId => {
           const el = document.getElementById(elementId);
           if (!el) return;
           const layout = this._layout[elementId];
-          const x = (typeof layout.x === 'number') ? layout.x : 0;
-          const y = (typeof layout.y === 'number') ? layout.y : 0;
+          var x = (typeof layout.x === 'number') ? layout.x : 0;
+          var y = (typeof layout.y === 'number') ? layout.y : 0;
           const scale = (typeof layout.scale === 'number') ? layout.scale : 1.0;
+
+          // Scale positions proportionally when loading on a different-sized device
+          if (savedW > 0 && savedH > 0) {
+            x = this._scaleValue(x, savedW, curW);
+            y = this._scaleValue(y, savedH, curH);
+          }
 
           if (this._popupIds.includes(elementId)) {
             // Popups use absolute positioning (they're overlays)
@@ -18287,18 +18314,47 @@ function ensureLandmarkProperties() {
             }
           }
         });
+
+        // Safety net: ensure the three main buttons are never fully off-screen
+        this._clampButtonsToViewport();
+      },
+
+      // Clamp the turf action, world map, and inventory buttons so they
+      // remain at least partially visible on the current screen.
+      _clampButtonsToViewport() {
+        var buttonIds = ['turf-actions-wrapper', 'worldmap-wrapper', 'inventory-wrapper'];
+        var vw = window.innerWidth;
+        var vh = window.innerHeight;
+        buttonIds.forEach(function(id) {
+          var el = document.getElementById(id);
+          if (!el) return;
+          var rect = el.getBoundingClientRect();
+          // If the button is completely outside the viewport, reset its transform
+          if (rect.right < 0 || rect.left > vw || rect.bottom < 0 || rect.top > vh) {
+            el.style.transform = '';
+            console.warn('🎨 Clamped ' + id + ' back to default position (was off-screen)');
+          }
+        });
       },
 
       // Position a popup near its button when opened (if no saved layout)
       positionPopupNearButton(popupId, buttonId) {
         if (this._layout[popupId]) {
-          // Use saved layout position
+          // Use saved layout position, scaled to current viewport
           const layout = this._layout[popupId];
           const popup = document.getElementById(popupId);
           if (!popup) return;
+          var x = (typeof layout.x === 'number') ? layout.x : 0;
+          var y = (typeof layout.y === 'number') ? layout.y : 0;
+          var savedW = this._savedViewportWidth || 0;
+          var savedH = this._savedViewportHeight || 0;
+          if (savedW > 0 && savedH > 0) {
+            x = this._scaleValue(x, savedW, window.innerWidth);
+            y = this._scaleValue(y, savedH, window.innerHeight);
+          }
           popup.style.position = 'absolute';
-          popup.style.left = layout.x + 'px';
-          popup.style.top = layout.y + 'px';
+          popup.style.left = x + 'px';
+          popup.style.top = y + 'px';
           if (typeof layout.scale === 'number' && layout.scale !== 1.0) {
             popup.style.transform = 'scale(' + layout.scale + ')';
             popup.style.transformOrigin = 'left top';
