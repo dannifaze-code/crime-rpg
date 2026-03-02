@@ -9353,34 +9353,40 @@ body {
   #content {
     padding: 0 !important;
     padding-bottom: 0 !important;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  #content::-webkit-scrollbar {
+    display: none;
   }
 
   /* Tab content: don't use viewport-based min-height within the frame */
   .tab-content {
     min-height: auto !important;
-    padding-bottom: 24px !important;
+    padding-bottom: 16px !important;
   }
 
   #profile-tab,
   #turf-tab,
   #crimes-tab,
   #safehouse-tab,
-  #gang-tab {
-    padding-bottom: 24px !important;
+  #gang-tab,
+  #market-tab {
+    padding-bottom: 16px !important;
   }
 
-  /* Crime board grid - compact spacing matching mobile */
+  /* Crime board grid - tight spacing for 430px frame */
   .crime-board {
-    gap: 10px !important;
-    padding: 6px 10px 18px !important;
+    gap: 8px !important;
+    padding: 4px 6px 14px !important;
     max-width: 100% !important;
   }
 
-  /* Crime cards - fixed heights to match mobile layout in the phone frame */
+  /* Crime cards - compact fixed height (proportional to ~200px width) */
   .crime-card {
-    height: 150px !important;
-    min-height: 150px !important;
-    max-height: 150px !important;
+    height: 130px !important;
+    min-height: 130px !important;
+    max-height: 130px !important;
     padding: 12px !important;
     aspect-ratio: unset !important;
   }
@@ -9388,41 +9394,42 @@ body {
   /* Profile card - flexible height, prominent */
   .crime-card.card-profile {
     height: auto !important;
-    min-height: 220px !important;
-    max-height: none !important;
-    padding: 18px 22px !important;
+    min-height: 190px !important;
+    max-height: 230px !important;
+    padding: 16px 20px !important;
     aspect-ratio: unset !important;
   }
 
-  /* Leaderboard and players-online cards - uniform height */
-  .crime-card.card-players-online,
+  /* Leaderboard card - match standard card height */
   .crime-card.card-leaderboard {
-    height: 150px !important;
-    min-height: 150px !important;
-    max-height: 150px !important;
+    height: 130px !important;
+    min-height: 130px !important;
+    max-height: 130px !important;
     aspect-ratio: unset !important;
   }
 
-  /* Stats card - auto height to avoid clipping stat rows */
-  .crime-card.card-stats {
+  /* Stats & Players cards - need extra height for content */
+  .crime-card.card-stats,
+  .crime-card.card-players-online {
     height: auto !important;
-    min-height: 150px !important;
+    min-height: 145px !important;
     max-height: none !important;
     aspect-ratio: unset !important;
   }
 
-  /* Heat log card - auto height */
-  .crime-card.card-heat-log {
-    height: auto !important;
-    min-height: 150px !important;
-    max-height: none !important;
+  /* Log cards - fixed height matching standard */
+  .crime-card.card-heat-log,
+  .crime-card.card-expense-log {
+    height: 130px !important;
+    min-height: 130px !important;
+    max-height: 130px !important;
   }
 
   /* Skill tree card - flexible */
   .crime-card.card-skill-tree,
   .crime-card.skill-tree-card {
     height: auto !important;
-    min-height: 150px !important;
+    min-height: 130px !important;
     max-height: none !important;
     aspect-ratio: unset !important;
   }
@@ -9469,10 +9476,26 @@ body {
     font-size: 20px !important;
   }
 
+  /* Fullscreen button: smaller on desktop */
+  .fullscreen-toggle-btn {
+    width: 32px !important;
+    height: 32px !important;
+    margin-bottom: 6px !important;
+  }
+  .fullscreen-toggle-btn svg {
+    width: 16px !important;
+    height: 16px !important;
+  }
+
   /* Turf tab - full-width, no side padding so map fills frame */
   #turf-tab {
     padding: 0 !important;
-    padding-bottom: 24px !important;
+    padding-bottom: 0 !important;
+  }
+
+  /* Hide redundant Turf page header (heat bar serves as header) */
+  #turf-tab .page-header {
+    display: none !important;
   }
 
   /* City map - fill the phone frame width, sane max-height */
@@ -9507,6 +9530,29 @@ body {
   /* Placeholder content spacing */
   .placeholder {
     padding: 30px 16px !important;
+  }
+
+  /* --- Tab Bar: ensure all 6 tabs fit cleanly in 430px --- */
+  .tab {
+    padding: 6px 2px !important;
+  }
+
+  .tab-icon {
+    width: 28px !important;
+    height: 28px !important;
+  }
+
+  .tab-label {
+    font-size: 8px !important;
+    letter-spacing: 0.3px !important;
+  }
+
+  /* Market tab: no custom icon sprite, show emoji fallback */
+  .tab[data-tab="market"] .tab-icon {
+    font-size: 18px !important;
+    color: inherit !important;
+    line-height: 28px;
+    text-align: center;
   }
 }
 
