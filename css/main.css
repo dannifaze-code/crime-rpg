@@ -9346,6 +9346,168 @@ body {
     border-radius: 24px !important;
     overflow: hidden !important;
   }
+
+  /* ---- Desktop phone frame: match mobile layout within 430px ---- */
+
+  /* Remove #content padding so game fills the phone frame edge-to-edge */
+  #content {
+    padding: 0 !important;
+    padding-bottom: 0 !important;
+  }
+
+  /* Tab content: don't use viewport-based min-height within the frame */
+  .tab-content {
+    min-height: auto !important;
+    padding-bottom: 24px !important;
+  }
+
+  #profile-tab,
+  #turf-tab,
+  #crimes-tab,
+  #safehouse-tab,
+  #gang-tab {
+    padding-bottom: 24px !important;
+  }
+
+  /* Crime board grid - compact spacing matching mobile */
+  .crime-board {
+    gap: 10px !important;
+    padding: 6px 10px 18px !important;
+    max-width: 100% !important;
+  }
+
+  /* Crime cards - fixed heights to match mobile layout in the phone frame */
+  .crime-card {
+    height: 150px !important;
+    min-height: 150px !important;
+    max-height: 150px !important;
+    padding: 12px !important;
+    aspect-ratio: unset !important;
+  }
+
+  /* Profile card - flexible height, prominent */
+  .crime-card.card-profile {
+    height: auto !important;
+    min-height: 220px !important;
+    max-height: none !important;
+    padding: 18px 22px !important;
+    aspect-ratio: unset !important;
+  }
+
+  /* Leaderboard and players-online cards - uniform height */
+  .crime-card.card-players-online,
+  .crime-card.card-leaderboard {
+    height: 150px !important;
+    min-height: 150px !important;
+    max-height: 150px !important;
+    aspect-ratio: unset !important;
+  }
+
+  /* Stats card - auto height to avoid clipping stat rows */
+  .crime-card.card-stats {
+    height: auto !important;
+    min-height: 150px !important;
+    max-height: none !important;
+    aspect-ratio: unset !important;
+  }
+
+  /* Heat log card - auto height */
+  .crime-card.card-heat-log {
+    height: auto !important;
+    min-height: 150px !important;
+    max-height: none !important;
+  }
+
+  /* Skill tree card - flexible */
+  .crime-card.card-skill-tree,
+  .crime-card.skill-tree-card {
+    height: auto !important;
+    min-height: 150px !important;
+    max-height: none !important;
+    aspect-ratio: unset !important;
+  }
+
+  /* Card text sizing - use fixed sizes not vw within phone frame */
+  .crime-card-value {
+    font-size: 17px !important;
+  }
+
+  .crime-card-label {
+    font-size: 10px !important;
+    letter-spacing: 1.2px !important;
+  }
+
+  .crime-card-icon {
+    width: 34px !important;
+    height: 34px !important;
+  }
+
+  /* Override centered large icons to stay proportional in the frame */
+  .crime-card.card-cash .crime-card-icon,
+  .crime-card.card-xp .crime-card-icon,
+  .crime-card.card-heat .crime-card-icon,
+  .crime-card.card-global-heat .crime-card-icon,
+  .crime-card.card-players-online .crime-card-icon {
+    width: 60px !important;
+    height: 60px !important;
+  }
+
+  .crime-card.card-rep .crime-card-icon,
+  .crime-card.card-leaderboard .crime-card-icon {
+    width: 70px !important;
+    height: 70px !important;
+  }
+
+  /* Profile card avatar and name sizing */
+  .profile-card-avatar {
+    width: 68px !important;
+    height: 68px !important;
+    font-size: 26px !important;
+  }
+
+  .profile-card-name {
+    font-size: 20px !important;
+  }
+
+  /* Turf tab - full-width, no side padding so map fills frame */
+  #turf-tab {
+    padding: 0 !important;
+    padding-bottom: 24px !important;
+  }
+
+  /* City map - fill the phone frame width, sane max-height */
+  #city-map {
+    width: 100% !important;
+    max-height: 780px !important;
+    border: none !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Heat bar - fit within frame width */
+  .new-heat-bar-main {
+    max-width: 100% !important;
+  }
+
+  .new-heat-bar-wrapper {
+    margin-left: 4px !important;
+    margin-right: 4px !important;
+  }
+
+  /* Other tabs need horizontal padding since #content padding was removed */
+  #crimes-tab,
+  #safehouse-tab,
+  #gang-tab,
+  #market-tab,
+  #inventory-tab {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+
+  /* Placeholder content spacing */
+  .placeholder {
+    padding: 30px 16px !important;
+  }
 }
 
 /* Larger desktop screens - bigger frame and visible branding */
