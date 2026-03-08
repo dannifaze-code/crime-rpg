@@ -16,6 +16,7 @@
       color: #e0e0e0;
       overflow: hidden;
       height: 100vh;
+      height: 100svh; /* stable viewport height — doesn't shift when mobile browser chrome hides */
       width: 100vw;
     }
 
@@ -24,6 +25,7 @@
       display: none;
       flex-direction: column;
       height: 100vh;
+      height: 100svh;
       width: 100vw;
     }
 
@@ -1325,6 +1327,7 @@
       width: 100%;
       aspect-ratio: 9 / 16;
       max-height: calc(100vh - 140px);
+      max-height: calc(100svh - 140px); /* stable viewport height — doesn't change when browser chrome hides */
       /* background-image removed: managed by DayNightCycle on #map-background */
       background-color: #1a1a2e;
       background-size: cover;
@@ -6557,8 +6560,9 @@
 
 /* Global Background for ALL tabs */
 body {
-  background: url('../sprites/ui-new/PlayerProfile/background.png') no-repeat center center fixed !important;
+  background: url('../sprites/ui-new/PlayerProfile/background.png') no-repeat center center !important;
   background-size: cover !important;
+  background-attachment: scroll !important;
 }
 
 #app {
