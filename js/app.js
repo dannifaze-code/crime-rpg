@@ -18329,10 +18329,17 @@ function ensureLandmarkProperties() {
           var el = document.getElementById(id);
           if (!el) return;
           var rect = el.getBoundingClientRect();
-          // If the button is completely outside the viewport, reset its transform
-          if (rect.right < 0 || rect.left > vw || rect.bottom < 0 || rect.top > vh) {
+          // If the element reports zero dimensions it is likely inside a hidden
+          // tab (display:none).  In that case getBoundingClientRect() returns all
+          // zeros and we cannot trust the position — clear the transform so the
+          // element falls back to its natural flex position when the tab shows.
+          var isHidden = (rect.width === 0 && rect.height === 0);
+          // If the button is completely outside the viewport OR hidden, reset its transform
+          if (isHidden || rect.right < 0 || rect.left > vw || rect.bottom < 0 || rect.top > vh) {
             el.style.transform = '';
-            console.warn('🎨 Clamped ' + id + ' back to default position (was off-screen)');
+            if (!isHidden) {
+              console.warn('🎨 Clamped ' + id + ' back to default position (was off-screen)');
+            }
           }
         });
       },
@@ -22925,6 +22932,15 @@ function ensureLandmarkProperties() {
           content.classList.toggle('active', content.id === `${tabId}-tab`);
         });
         
+        // Re-apply turf UI layout now that the tab is visible so positions
+        // are correctly clamped to the viewport (layout loaded while the tab
+        // was hidden would have zero-dimension rects and incorrect transforms).
+        if (tabId === 'turf' && typeof TurfUIEditor !== 'undefined' && TurfUIEditor._layout && Object.keys(TurfUIEditor._layout).length > 0) {
+          requestAnimationFrame(function() {
+            TurfUIEditor._applyAllLayout();
+          });
+        }
+
         // Special handling for turf tab - ensure weather overlay is ready AFTER DOM update
         if (tabId === 'turf') {
 
