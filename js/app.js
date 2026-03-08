@@ -18253,6 +18253,25 @@ function ensureLandmarkProperties() {
               this._savedViewportHeight = data.viewportHeight || 0;
               this._applyAllLayout();
               console.log('🎨 ✅ Turf UI layout loaded and applied');
+              // Register a debounced resize listener once so the layout is
+              // re-applied whenever the viewport changes (e.g. fullscreen
+              // toggle, orientation change, browser resize on desktop).
+              if (!this._resizeListenerRegistered) {
+                this._resizeListenerRegistered = true;
+                var self = this;
+                var _resizeTimer = null;
+                window.addEventListener('resize', function() {
+                  clearTimeout(_resizeTimer);
+                  _resizeTimer = setTimeout(function() {
+                    if (self._layout && Object.keys(self._layout).length > 0) {
+                      var turfTab = document.getElementById('turf-tab');
+                      if (turfTab && turfTab.classList.contains('active')) {
+                        self._applyAllLayout();
+                      }
+                    }
+                  }, 150);
+                }, { passive: true });
+              }
             }
           }).catch(err => {
             console.warn('🎨 Failed to load turf UI layout from Firebase:', err);
@@ -18266,7 +18285,30 @@ function ensureLandmarkProperties() {
       // so they never end up off-screen on a different device.
       _buttonWrapperIds: ['turf-actions-wrapper', 'worldmap-wrapper', 'inventory-wrapper'],
 
-      _applyAllLayout() {
+      _applyAllLayout(retryCount) {
+        retryCount = retryCount || 0;
+
+        // If the turf tab is active but button wrappers still report zero
+        // dimensions the browser hasn't finished the layout pass yet (this
+        // can happen even inside a requestAnimationFrame callback on some
+        // mobile browsers).  Schedule a retry so we don't permanently lock
+        // the buttons at their natural flex position.
+        var turfTab = document.getElementById('turf-tab');
+        var tabIsActive = turfTab && turfTab.classList.contains('active');
+        if (tabIsActive && retryCount < 5) {
+          var self = this;
+          var anyZero = this._buttonWrapperIds.some(function(id) {
+            var el = document.getElementById(id);
+            if (!el) return false;
+            var r = el.getBoundingClientRect();
+            return r.width === 0 && r.height === 0;
+          });
+          if (anyZero) {
+            setTimeout(function() { self._applyAllLayout(retryCount + 1); }, 50);
+            return;
+          }
+        }
+
         var savedW = this._savedViewportWidth || 0;
         var savedH = this._savedViewportHeight || 0;
         var curW = window.innerWidth;
@@ -22946,9 +22988,15 @@ function ensureLandmarkProperties() {
         // Re-apply turf UI layout now that the tab is visible so positions
         // are correctly clamped to the viewport (layout loaded while the tab
         // was hidden would have zero-dimension rects and incorrect transforms).
+        // Double-RAF: the first frame is queued immediately after the class
+        // change so the browser processes the display:block layout pass; the
+        // second frame fires once that pass is committed, guaranteeing that
+        // getBoundingClientRect() returns real dimensions.
         if (tabId === 'turf' && typeof TurfUIEditor !== 'undefined' && TurfUIEditor._layout && Object.keys(TurfUIEditor._layout).length > 0) {
           requestAnimationFrame(function() {
-            TurfUIEditor._applyAllLayout();
+            requestAnimationFrame(function() {
+              TurfUIEditor._applyAllLayout();
+            });
           });
         }
 
