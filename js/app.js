@@ -23854,15 +23854,27 @@ function ensureLandmarkProperties() {
           const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
           if (!isFs) {
             var el = document.documentElement;
-            if (el.requestFullscreen) el.requestFullscreen();
-            else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
-            else if (el.mozRequestFullScreen) el.mozRequestFullScreen();
-            else if (el.msRequestFullscreen) el.msRequestFullscreen();
+            var fsPromise;
+            if (el.requestFullscreen) fsPromise = el.requestFullscreen();
+            else if (el.webkitRequestFullscreen) fsPromise = el.webkitRequestFullscreen();
+            else if (el.mozRequestFullScreen) fsPromise = el.mozRequestFullScreen();
+            else if (el.msRequestFullscreen) fsPromise = el.msRequestFullscreen();
+            if (fsPromise && typeof fsPromise.catch === 'function') {
+              fsPromise.catch(function(err) {
+                console.warn('[Fullscreen] Request denied:', err.message || err);
+              });
+            }
           } else {
-            if (document.exitFullscreen) document.exitFullscreen();
-            else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
-            else if (document.mozCancelFullScreen) document.mozCancelFullScreen();
-            else if (document.msExitFullscreen) document.msExitFullscreen();
+            var exitPromise;
+            if (document.exitFullscreen) exitPromise = document.exitFullscreen();
+            else if (document.webkitExitFullscreen) exitPromise = document.webkitExitFullscreen();
+            else if (document.mozCancelFullScreen) exitPromise = document.mozCancelFullScreen();
+            else if (document.msExitFullscreen) exitPromise = document.msExitFullscreen();
+            if (exitPromise && typeof exitPromise.catch === 'function') {
+              exitPromise.catch(function(err) {
+                console.warn('[Fullscreen] Exit failed:', err.message || err);
+              });
+            }
           }
         });
         
