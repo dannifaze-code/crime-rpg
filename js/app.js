@@ -18252,6 +18252,7 @@ function ensureLandmarkProperties() {
               this._savedViewportWidth = data.viewportWidth || 0;
               this._savedViewportHeight = data.viewportHeight || 0;
               this._applyAllLayout();
+              this._bindResizeListener();
               console.log('🎨 ✅ Turf UI layout loaded and applied');
             }
           }).catch(err => {
@@ -18259,6 +18260,26 @@ function ensureLandmarkProperties() {
           });
         }
         return Promise.resolve();
+      },
+
+      // Re-apply layout when the viewport changes (fullscreen toggle,
+      // orientation change, window resize).  Debounced to avoid thrashing.
+      _bindResizeListener() {
+        if (this._resizeBound) return;
+        this._resizeBound = true;
+        var self = this;
+        var timer = null;
+        function onResize() {
+          clearTimeout(timer);
+          timer = setTimeout(function() {
+            // Only re-apply if the turf tab is currently visible
+            var turfTab = document.getElementById('turf-tab');
+            if (turfTab && turfTab.classList.contains('active')) {
+              self._applyAllLayout();
+            }
+          }, 150);
+        }
+        window.addEventListener('resize', onResize);
       },
 
       // IDs of the three main button wrappers (flex children that use
