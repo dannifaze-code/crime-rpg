@@ -18261,6 +18261,11 @@ function ensureLandmarkProperties() {
         return Promise.resolve();
       },
 
+      // IDs of the three main button wrappers (flex children that use
+      // translate transforms).  Positions must be validated before applying
+      // so they never end up off-screen on a different device.
+      _buttonWrapperIds: ['turf-actions-wrapper', 'worldmap-wrapper', 'inventory-wrapper'],
+
       _applyAllLayout() {
         var savedW = this._savedViewportWidth || 0;
         var savedH = this._savedViewportHeight || 0;
@@ -18291,9 +18296,48 @@ function ensureLandmarkProperties() {
               el.style.transformOrigin = 'left top';
             }
           } else {
+            // For the three main button wrappers, validate the translated
+            // position BEFORE applying it.  If the element is inside a
+            // hidden tab (zero-size rect) or the translation would push it
+            // off-screen, skip the translate and leave it at its natural
+            // flex position so it is always visible.
+            var isButtonWrapper = this._buttonWrapperIds.indexOf(elementId) !== -1;
+            if (isButtonWrapper && (x !== 0 || y !== 0)) {
+              // Temporarily clear any existing transform so we can measure
+              // the element's natural (flex) position.
+              var prevTransform = el.style.transform;
+              el.style.transform = '';
+              var natRect = el.getBoundingClientRect();
+
+              if (natRect.width === 0 && natRect.height === 0) {
+                // Element is hidden (tab not visible) — don't apply any
+                // translate; it will be re-applied when the tab shows.
+                x = 0;
+                y = 0;
+              } else {
+                // Clamp the translate so the element stays within viewport
+                // with at least 10px margin visible on each edge.
+                var margin = 10;
+                var maxX = curW - margin - natRect.left - natRect.width;
+                var minX = margin - natRect.left;
+                var maxY = curH - margin - natRect.top - natRect.height;
+                var minY = margin - natRect.top;
+                if (x < minX) x = minX;
+                if (x > maxX) x = maxX;
+                if (y < minY) y = minY;
+                if (y > maxY) y = maxY;
+                // If the clamped translate is tiny, just zero it out
+                if (Math.abs(x) < 2 && Math.abs(y) < 2) {
+                  x = 0;
+                  y = 0;
+                }
+              }
+              // Restore previous transform in case we zeroed out
+              // (will be overwritten below anyway)
+              el.style.transform = prevTransform;
+            }
+
             // Non-popup elements: use transform to avoid layout gaps
-            // position:relative + left/top creates empty space in document flow;
-            // transform: translate() moves visually without affecting flow
             var parts = [];
             if (x !== 0 || y !== 0) {
               parts.push('translate(' + x + 'px, ' + y + 'px)');
@@ -18304,6 +18348,8 @@ function ensureLandmarkProperties() {
             if (parts.length > 0) {
               el.style.transform = parts.join(' ');
               el.style.transformOrigin = 'left top';
+            } else {
+              el.style.transform = '';
             }
             // Ensure heat bar and button elements stay above city-map when repositioned
             if (elementId === 'heat-bar-main' || elementId === 'heat-bar-interface'
@@ -18311,34 +18357,6 @@ function ensureLandmarkProperties() {
                 || elementId === 'worldmap-wrapper'
                 || elementId === 'inventory-wrapper') {
               el.style.zIndex = '10';
-            }
-          }
-        });
-
-        // Safety net: ensure the three main buttons are never fully off-screen
-        this._clampButtonsToViewport();
-      },
-
-      // Clamp the turf action, world map, and inventory buttons so they
-      // remain at least partially visible on the current screen.
-      _clampButtonsToViewport() {
-        var buttonIds = ['turf-actions-wrapper', 'worldmap-wrapper', 'inventory-wrapper'];
-        var vw = window.innerWidth;
-        var vh = window.innerHeight;
-        buttonIds.forEach(function(id) {
-          var el = document.getElementById(id);
-          if (!el) return;
-          var rect = el.getBoundingClientRect();
-          // If the element reports zero dimensions it is likely inside a hidden
-          // tab (display:none).  In that case getBoundingClientRect() returns all
-          // zeros and we cannot trust the position — clear the transform so the
-          // element falls back to its natural flex position when the tab shows.
-          var isHidden = (rect.width === 0 && rect.height === 0);
-          // If the button is completely outside the viewport OR hidden, reset its transform
-          if (isHidden || rect.right < 0 || rect.left > vw || rect.bottom < 0 || rect.top > vh) {
-            el.style.transform = '';
-            if (!isHidden) {
-              console.warn('🎨 Clamped ' + id + ' back to default position (was off-screen)');
             }
           }
         });
