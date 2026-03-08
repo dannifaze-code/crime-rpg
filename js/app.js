@@ -18296,44 +18296,37 @@ function ensureLandmarkProperties() {
               el.style.transformOrigin = 'left top';
             }
           } else {
-            // For the three main button wrappers, validate the translated
-            // position BEFORE applying it.  If the element is inside a
-            // hidden tab (zero-size rect) or the translation would push it
-            // off-screen, skip the translate and leave it at its natural
-            // flex position so it is always visible.
+            // For the three main button wrappers, check whether the
+            // element is visible before applying a translate.  If the tab
+            // is hidden (display:none → zero-size rect), skip the translate
+            // so the element stays at its natural flex position; it will be
+            // re-applied when the tab becomes visible via switchTab().
+            // If the tab IS visible, trust the saved position (the admin
+            // placed it there) — only reset if it would be completely
+            // off-viewport on the current device.
             var isButtonWrapper = this._buttonWrapperIds.indexOf(elementId) !== -1;
             if (isButtonWrapper && (x !== 0 || y !== 0)) {
-              // Temporarily clear any existing transform so we can measure
-              // the element's natural (flex) position.
+              // Temporarily clear transform to measure natural position
               var prevTransform = el.style.transform;
               el.style.transform = '';
               var natRect = el.getBoundingClientRect();
 
               if (natRect.width === 0 && natRect.height === 0) {
-                // Element is hidden (tab not visible) — don't apply any
-                // translate; it will be re-applied when the tab shows.
+                // Hidden tab — skip translate
                 x = 0;
                 y = 0;
               } else {
-                // Clamp the translate so the element stays within viewport
-                // with at least 10px margin visible on each edge.
-                var margin = 10;
-                var maxX = curW - margin - natRect.left - natRect.width;
-                var minX = margin - natRect.left;
-                var maxY = curH - margin - natRect.top - natRect.height;
-                var minY = margin - natRect.top;
-                if (x < minX) x = minX;
-                if (x > maxX) x = maxX;
-                if (y < minY) y = minY;
-                if (y > maxY) y = maxY;
-                // If the clamped translate is tiny, just zero it out
-                if (Math.abs(x) < 2 && Math.abs(y) < 2) {
+                // Check if the translated position would be completely
+                // outside the viewport; if so, reset to natural position.
+                var txRight  = natRect.left + x + natRect.width;
+                var txLeft   = natRect.left + x;
+                var txBottom = natRect.top  + y + natRect.height;
+                var txTop    = natRect.top  + y;
+                if (txRight < 0 || txLeft > curW || txBottom < 0 || txTop > curH) {
                   x = 0;
                   y = 0;
                 }
               }
-              // Restore previous transform in case we zeroed out
-              // (will be overwritten below anyway)
               el.style.transform = prevTransform;
             }
 

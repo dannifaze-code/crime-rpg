@@ -2229,6 +2229,8 @@
       gap: 8px;
       margin: 8px 16px;
       align-items: flex-start;
+      position: relative;
+      z-index: 5; /* Above #city-map (z-index: 1) so buttons stay visible even when translated past the map */
     }
 
     .turf-action-btn-wrapper {
