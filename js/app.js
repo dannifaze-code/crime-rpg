@@ -15299,25 +15299,19 @@ function ensureLandmarkProperties() {
               ownedBuildings[b.id] = {
                 owned: b.owned,
                 upgradeLevel: b.upgradeLevel || 0,
-                lastCollected: b.lastCollected,
-                territoryTier: b.territoryTier || 0,
-                territoryInvested: b.territoryInvested || 0,
-                territoryCrimes: b.territoryCrimes || 0
+                lastCollected: b.lastCollected
               };
             }
           });
           console.log(`   - Preserving ownership for ${Object.keys(ownedBuildings).length} owned buildings`);
         }
-
+        
         // Rebuild from DEFAULT_STATE.fixedPropertyPositions (the canonical source)
         GameState.propertyBuildings = canonicalPositions.map(prop => ({
           ...prop,
           owned: ownedBuildings[prop.id]?.owned || false,
           upgradeLevel: ownedBuildings[prop.id]?.upgradeLevel || 0,
-          lastCollected: ownedBuildings[prop.id]?.lastCollected || null,
-          territoryTier: ownedBuildings[prop.id]?.territoryTier || 0,
-          territoryInvested: ownedBuildings[prop.id]?.territoryInvested || 0,
-          territoryCrimes: ownedBuildings[prop.id]?.territoryCrimes || 0
+          lastCollected: ownedBuildings[prop.id]?.lastCollected || null
         }));
         
         // Also update GameState.fixedPropertyPositions to match
@@ -15398,10 +15392,7 @@ function ensureLandmarkProperties() {
             ...prop,
             owned: ownedBuildings[prop.id]?.owned || false,
             upgradeLevel: ownedBuildings[prop.id]?.upgradeLevel || 0,
-            lastCollected: ownedBuildings[prop.id]?.lastCollected || null,
-            territoryTier: ownedBuildings[prop.id]?.territoryTier || 0,
-            territoryInvested: ownedBuildings[prop.id]?.territoryInvested || 0,
-            territoryCrimes: ownedBuildings[prop.id]?.territoryCrimes || 0
+            lastCollected: ownedBuildings[prop.id]?.lastCollected || null
           }));
           console.log(`✅ Rebuilt ${GameState.propertyBuildings.length} property buildings from DEFAULT_STATE`);
         } else {
@@ -15426,12 +15417,10 @@ function ensureLandmarkProperties() {
         }
         
         const el = document.createElement('div');
-        const tier = building.owned ? (building.territoryTier || 0) : -1;
-        el.className = 'property-building' + (building.owned ? ' owned' : '') + (tier >= 0 ? ` tier-${tier}` : '') + ((building.heatLeasedUntil && Date.now() < building.heatLeasedUntil) ? ' cia-highlight' : '');
+        el.className = 'property-building' + (building.owned ? ' owned' : '') + ((building.heatLeasedUntil && Date.now() < building.heatLeasedUntil) ? ' cia-highlight' : '');
         el.dataset.id = building.id;
         el.dataset.type = building.type;
-        const tierLabel = tier >= 0 ? ` ${TerritorySystem.getStarString(tier)}` : '';
-        el.dataset.label = `${building.name} - $${(building.price / 1000).toFixed(0)}k${tierLabel}`;
+        el.dataset.label = `${building.name} - $${(building.price / 1000).toFixed(0)}k`;
         const currentSprite = getBuildingSprite(building);
         if (currentSprite) {
           el.innerHTML = `<img src="${currentSprite}" alt="${building.name}" style="width: 48px; height: 48px; object-fit: contain; display: block;">`;
@@ -15449,33 +15438,19 @@ function ensureLandmarkProperties() {
         el.style.textShadow = currentSprite ? 'none' : '0 0 4px rgba(0,0,0,0.9)';
         el.style.pointerEvents = 'auto';
         
-        // Add territory star badge for owned buildings
-        if (tier >= 0) {
-          const badge = document.createElement('div');
-          badge.className = `territory-star-badge tier-${tier}`;
-          badge.textContent = TerritorySystem.getStarString(tier);
-          el.appendChild(badge);
-        }
-
         // Add click handler
         el.addEventListener('click', (e) => {
           e.stopPropagation();
           showPropertyModal(building);
         });
-
+        
         container.appendChild(el);
         renderedCount++;
       });
-
+      
       console.log(`✅ Rendered ${renderedCount}/${GameState.propertyBuildings.length} property buildings`);
       console.log('Property buildings in DOM:', container.querySelectorAll('.property-building').length);
       console.log('========================================');
-
-      // Render territory influence zones and update empire stats
-      if (typeof TerritorySystem !== 'undefined') {
-        TerritorySystem.renderInfluenceZones();
-        updateEmpireStatsBar();
-      }
 
       // Apply saved building scales
       if (typeof BuildingScaleSystem !== 'undefined' && BuildingScaleSystem._scales) {
@@ -15511,62 +15486,6 @@ function ensureLandmarkProperties() {
         levelPips += `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;margin:0 2px;${i < displayLevel ? 'background:linear-gradient(135deg,#ffd700,#ff8c00);box-shadow:0 0 4px rgba(255,215,0,0.5);' : 'background:#333;border:1px solid #555;'}"></span>`;
       }
 
-      // Territory tier info
-      const tierIndex = TerritorySystem.getTier(building);
-      const tierData = tierIndex >= 0 ? TerritorySystem.TIERS[tierIndex] : null;
-      const tierCheck = owned ? TerritorySystem.canAdvanceTier(building) : null;
-      const isMaxTier = tierIndex >= 4;
-      const territoryIncome = owned ? TerritorySystem.getTerritoryIncome(building) : 0;
-      const invested = building.territoryInvested || 0;
-      const crimesCompleted = building.territoryCrimes || 0;
-
-      // Build territory tier section for owned buildings
-      let territoryHTML = '';
-      if (owned && tierData) {
-        const nextTier = !isMaxTier ? TerritorySystem.TIERS[tierIndex + 1] : null;
-        const nextReqs = nextTier ? nextTier.requirements : null;
-
-        let reqsHTML = '';
-        if (nextReqs && tierCheck) {
-          const investRequired = Math.round(building.price * nextReqs.cashInvested);
-          const canInvest1k = GameState.player.cash >= 1000;
-          const canInvest5k = GameState.player.cash >= 5000;
-          const canInvest10k = GameState.player.cash >= 10000;
-
-          reqsHTML = `
-            <div style="font-size: 11px; color: #777; margin: 6px 0 4px;">Next: <span style="color:${nextTier.color};font-weight:700;">${nextTier.name}</span></div>
-            <ul class="territory-req-list">
-              ${nextReqs.upgradeLevel !== undefined ? `<li class="${(building.upgradeLevel || 0) >= nextReqs.upgradeLevel ? 'met' : 'unmet'}">${(building.upgradeLevel || 0) >= nextReqs.upgradeLevel ? '✓' : '✗'} Upgrade Lv${nextReqs.upgradeLevel + 1}</li>` : ''}
-              ${nextReqs.crimesNearby !== undefined ? `<li class="${crimesCompleted >= nextReqs.crimesNearby ? 'met' : 'unmet'}">${crimesCompleted >= nextReqs.crimesNearby ? '✓' : '✗'} ${crimesCompleted}/${nextReqs.crimesNearby} crimes</li>` : ''}
-              ${nextReqs.cashInvested !== undefined ? `<li class="${invested >= investRequired ? 'met' : 'unmet'}">${invested >= investRequired ? '✓' : '✗'} $${invested.toLocaleString()}/$${investRequired.toLocaleString()} invested</li>` : ''}
-              ${nextReqs.playerLevel !== undefined ? `<li class="${(GameState.player.level || 1) >= nextReqs.playerLevel ? 'met' : 'unmet'}">${(GameState.player.level || 1) >= nextReqs.playerLevel ? '✓' : '✗'} Player Lv${nextReqs.playerLevel}</li>` : ''}
-              ${nextReqs.adjacentOwned !== undefined ? `<li class="${TerritorySystem.countAdjacentOwned(building) >= nextReqs.adjacentOwned ? 'met' : 'unmet'}">${TerritorySystem.countAdjacentOwned(building) >= nextReqs.adjacentOwned ? '✓' : '✗'} ${TerritorySystem.countAdjacentOwned(building)}/${nextReqs.adjacentOwned} nearby properties</li>` : ''}
-            </ul>
-            ${nextReqs.cashInvested !== undefined && invested < investRequired ? `
-              <div class="territory-invest-row">
-                <button class="territory-invest-btn" onclick="territoryInvest('${building.id}', 1000)" ${!canInvest1k ? 'disabled' : ''}>+$1K</button>
-                <button class="territory-invest-btn" onclick="territoryInvest('${building.id}', 5000)" ${!canInvest5k ? 'disabled' : ''}>+$5K</button>
-                <button class="territory-invest-btn" onclick="territoryInvest('${building.id}', 10000)" ${!canInvest10k ? 'disabled' : ''}>+$10K</button>
-              </div>
-            ` : ''}
-          `;
-        }
-
-        territoryHTML = `
-          <div class="territory-tier-section">
-            <div class="territory-tier-header">
-              <span class="territory-tier-name" style="color:${tierData.color};">${tierData.name}</span>
-              <span class="territory-tier-stars" style="color:${tierData.color};">${TerritorySystem.getStarString(tierIndex)}</span>
-            </div>
-            <div style="font-size: 11px; color: #888;">
-              Income boost: <span style="color:#ffd700;">${tierData.incomeMultiplier}x</span>
-              &nbsp;|&nbsp; Influence: <span style="color:${tierData.color};">${tierData.influenceRadius}%</span>
-            </div>
-            ${reqsHTML}
-          </div>
-        `;
-      }
-
       const modalHTML = `
         <div class="event-modal" id="property-modal">
           <div class="event-modal-content">
@@ -15577,12 +15496,10 @@ function ensureLandmarkProperties() {
               ${owned ?
                 `<div style="color: #00ff00; font-weight: 600; margin-bottom: 8px;">● OWNED</div>
                  <div style="margin-bottom: 6px;">
-                   <strong>Income:</strong> <span style="color: #ffd700;">$${territoryIncome.toLocaleString()}/day</span>
-                   ${tierData && tierData.incomeMultiplier > 1 ? `<span style="font-size:11px;color:${tierData.color};"> (${tierData.incomeMultiplier}x)</span>` : ''}
+                   <strong>Income:</strong> <span style="color: #ffd700;">$${currentIncome.toLocaleString()}/day</span>
                  </div>
                  <div style="margin-bottom: 4px; font-size: 13px; color: #aaa;">Level ${displayLevel}/${MAX_UPGRADE_LEVEL + 1}</div>
-                 <div style="margin-bottom: 12px;">${levelPips}</div>
-                 ${territoryHTML}`
+                 <div style="margin-bottom: 12px;">${levelPips}</div>`
                 :
                 `<div style="color: #ffd700; font-size: 24px; font-weight: 600; margin: 12px 0;">
                    $${building.price.toLocaleString()}
@@ -15611,12 +15528,6 @@ function ensureLandmarkProperties() {
                   <span class="prop-btn-label">Upgrade</span>
                   <span class="prop-btn-cost">${canAffordUpgrade ? '$' + upgradeCost.toLocaleString() : 'Need $' + upgradeCost.toLocaleString()}</span>
                 </button>`
-              }
-              ${!isMaxTier && tierCheck && tierCheck.canAdvance ?
-                `<button class="prop-btn prop-btn-tierup" onclick="TerritorySystem.advanceTier('${building.id}')">
-                  <span class="prop-btn-icon">🏆</span>
-                  <span class="prop-btn-label">Advance Territory Tier</span>
-                </button>` : ''
               }`
               :
               `<button class="prop-btn prop-btn-purchase" onclick="purchaseProperty('${building.id}')" ${!canAfford ? 'disabled' : ''}>
@@ -15680,19 +15591,16 @@ function ensureLandmarkProperties() {
       // Mark as owned
       building.owned = true;
       building.lastCollected = Date.now();
-      building.territoryTier = 0;         // Start at Tier 1: Claimed
-      building.territoryInvested = 0;     // No investment yet
-      building.territoryCrimes = 0;       // No crimes tracked yet
-
+      
       // Save
       Storage.save();
-
+      
       // Close modal and re-render
       closePropertyModal();
       renderPropertyBuildings();
-
+      
       // Show notification
-      TurfTab.showTemporaryNotification(`🏢 Purchased ${building.name}! ★ Territory: Claimed`);
+      TurfTab.showTemporaryNotification(`🏢 Purchased ${building.name}!`);
       
       // Update profile if visible
       ProfileTab.render();
@@ -15719,7 +15627,7 @@ function ensureLandmarkProperties() {
         return;
       }
       
-      const dailyIncome = (typeof TerritorySystem !== 'undefined') ? TerritorySystem.getTerritoryIncome(building) : getUpgradedIncome(building);
+      const dailyIncome = getUpgradedIncome(building);
       const income = dailyIncome * Math.min(daysSince, 7); // Max 7 days
       GameState.player.cash += income;
       building.lastCollected = now;
@@ -15802,22 +15710,6 @@ function ensureLandmarkProperties() {
       setTimeout(() => burst.remove(), 1200);
     }
 
-    // Invest cash into a property for territory tier progress
-    window.territoryInvest = function(buildingId, amount) {
-      const success = TerritorySystem.investInProperty(buildingId, amount);
-      if (success) {
-        closePropertyModal();
-        const building = GameState.propertyBuildings.find(b => b.id === buildingId);
-        if (building) {
-          TurfTab.showTemporaryNotification(`💎 Invested $${amount.toLocaleString()} into ${building.name}!`);
-          showPropertyModal(building); // Reopen with updated data
-        }
-        ProfileTab.render();
-      } else {
-        TurfTab.showTemporaryNotification('❌ Not enough cash to invest!');
-      }
-    };
-
     // Close property modal
     window.closePropertyModal = function() {
       const modal = document.getElementById('property-modal');
@@ -15826,354 +15718,9 @@ function ensureLandmarkProperties() {
     };
 
     // ========================================
-    // TERRITORY CONTROL TIER SYSTEM
-    // ========================================
-    // Properties have 5 territory tiers (stars) beyond their upgrade level.
-    // Each tier requires specific achievements to unlock, creating a grind loop.
-    // Tiers affect influence radius, income multiplier, and visual prestige.
-
-    const TerritorySystem = {
-      // 5 territory tiers - each has requirements the player must meet
-      TIERS: [
-        {
-          name: 'Claimed',
-          stars: 1,
-          color: '#888888',
-          glowColor: 'rgba(136,136,136,0.3)',
-          influenceRadius: 4,    // % of map
-          incomeMultiplier: 1.0,
-          requirements: null     // Auto-granted on purchase
-        },
-        {
-          name: 'Established',
-          stars: 2,
-          color: '#4a90e2',
-          glowColor: 'rgba(74,144,226,0.35)',
-          influenceRadius: 6,
-          incomeMultiplier: 1.25,
-          requirements: {
-            upgradeLevel: 1,       // Must be upgrade level 2+
-            crimesNearby: 5,       // Complete 5 crimes (any)
-            cashInvested: 0.5,     // Invest 50% of property price
-            description: 'Upgrade to Lv2, complete 5 crimes, invest $'
-          }
-        },
-        {
-          name: 'Fortified',
-          stars: 3,
-          color: '#f39c12',
-          glowColor: 'rgba(243,156,18,0.35)',
-          influenceRadius: 8,
-          incomeMultiplier: 1.6,
-          requirements: {
-            upgradeLevel: 2,
-            crimesNearby: 15,
-            cashInvested: 1.0,     // Invest 100% of property price
-            playerLevel: 3,
-            description: 'Upgrade to Lv3, complete 15 crimes, invest $, reach Lv3'
-          }
-        },
-        {
-          name: 'Dominant',
-          stars: 4,
-          color: '#e74c3c',
-          glowColor: 'rgba(231,76,60,0.4)',
-          influenceRadius: 10,
-          incomeMultiplier: 2.0,
-          requirements: {
-            upgradeLevel: 3,
-            crimesNearby: 30,
-            cashInvested: 2.0,     // Invest 200% of property price
-            playerLevel: 5,
-            adjacentOwned: 1,      // Own at least 1 adjacent property
-            description: 'Upgrade to Lv4, 30 crimes, invest $, Lv5, own adjacent property'
-          }
-        },
-        {
-          name: 'Empire',
-          stars: 5,
-          color: '#ffd700',
-          glowColor: 'rgba(255,215,0,0.45)',
-          influenceRadius: 13,
-          incomeMultiplier: 3.0,
-          requirements: {
-            upgradeLevel: 4,       // Max upgrade
-            crimesNearby: 50,
-            cashInvested: 3.0,     // Invest 300% of property price
-            playerLevel: 8,
-            adjacentOwned: 2,      // Own 2+ adjacent properties
-            description: 'Max upgrade, 50 crimes, invest $, Lv8, own 2 adjacent properties'
-          }
-        }
-      ],
-
-      // Get the territory tier for a building (0-4)
-      getTier(building) {
-        if (!building || !building.owned) return -1;
-        return building.territoryTier || 0;
-      },
-
-      // Get tier data object
-      getTierData(building) {
-        const tier = this.getTier(building);
-        if (tier < 0) return null;
-        return this.TIERS[tier];
-      },
-
-      // Check if a building can advance to next tier
-      canAdvanceTier(building) {
-        if (!building || !building.owned) return { canAdvance: false, reason: 'Not owned' };
-        const currentTier = building.territoryTier || 0;
-        if (currentTier >= 4) return { canAdvance: false, reason: 'Max tier reached' };
-
-        const nextTier = this.TIERS[currentTier + 1];
-        const reqs = nextTier.requirements;
-        if (!reqs) return { canAdvance: true, unmet: [] };
-
-        const unmet = [];
-        const invested = building.territoryInvested || 0;
-        const investRequired = Math.round(building.price * reqs.cashInvested);
-        const crimesCompleted = building.territoryCrimes || 0;
-
-        if (reqs.upgradeLevel !== undefined && (building.upgradeLevel || 0) < reqs.upgradeLevel) {
-          unmet.push(`Upgrade to Lv${reqs.upgradeLevel + 1} (current: Lv${(building.upgradeLevel || 0) + 1})`);
-        }
-        if (reqs.crimesNearby !== undefined && crimesCompleted < reqs.crimesNearby) {
-          unmet.push(`Complete ${reqs.crimesNearby} crimes (done: ${crimesCompleted})`);
-        }
-        if (reqs.cashInvested !== undefined && invested < investRequired) {
-          unmet.push(`Invest $${investRequired.toLocaleString()} (invested: $${invested.toLocaleString()})`);
-        }
-        if (reqs.playerLevel !== undefined && (GameState.player.level || 1) < reqs.playerLevel) {
-          unmet.push(`Reach player Lv${reqs.playerLevel} (current: Lv${GameState.player.level || 1})`);
-        }
-        if (reqs.adjacentOwned !== undefined) {
-          const adjCount = this.countAdjacentOwned(building);
-          if (adjCount < reqs.adjacentOwned) {
-            unmet.push(`Own ${reqs.adjacentOwned} nearby properties (have: ${adjCount})`);
-          }
-        }
-
-        return { canAdvance: unmet.length === 0, unmet: unmet };
-      },
-
-      // Count owned properties within adjacency range (15% map distance)
-      countAdjacentOwned(building) {
-        if (!Array.isArray(GameState.propertyBuildings)) return 0;
-        const ADJACENCY_RANGE = 20; // % of map
-        let count = 0;
-        GameState.propertyBuildings.forEach(b => {
-          if (b.id === building.id || !b.owned) return;
-          const dx = b.x - building.x;
-          const dy = b.y - building.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist <= ADJACENCY_RANGE) count++;
-        });
-        return count;
-      },
-
-      // Advance a building to the next tier
-      advanceTier(buildingId) {
-        const building = GameState.propertyBuildings.find(b => b.id === buildingId);
-        if (!building || !building.owned) return false;
-
-        const check = this.canAdvanceTier(building);
-        if (!check.canAdvance) return false;
-
-        building.territoryTier = (building.territoryTier || 0) + 1;
-        const tierData = this.TIERS[building.territoryTier];
-
-        Storage.save();
-        closePropertyModal();
-        renderPropertyBuildings();
-        this.renderInfluenceZones();
-
-        // Show tier-up celebration
-        this.showTierUpEffect(building, tierData);
-
-        TurfTab.showTemporaryNotification(`${this.getStarString(building.territoryTier)} ${building.name} is now ${tierData.name}!`);
-        ProfileTab.render();
-        return true;
-      },
-
-      // Invest cash into a property toward tier requirements
-      investInProperty(buildingId, amount) {
-        const building = GameState.propertyBuildings.find(b => b.id === buildingId);
-        if (!building || !building.owned) return false;
-        if (GameState.player.cash < amount) return false;
-
-        GameState.player.cash -= amount;
-        building.territoryInvested = (building.territoryInvested || 0) + amount;
-
-        Storage.save();
-        return true;
-      },
-
-      // Record a crime completion for territory progress
-      recordCrimeForTerritory() {
-        // Credit crime to all owned properties (simplified - could be proximity-based later)
-        if (!Array.isArray(GameState.propertyBuildings)) return;
-        GameState.propertyBuildings.forEach(b => {
-          if (b.owned) {
-            b.territoryCrimes = (b.territoryCrimes || 0) + 1;
-          }
-        });
-      },
-
-      // Get income with territory tier multiplier applied
-      getTerritoryIncome(building) {
-        const baseIncome = getUpgradedIncome(building);
-        const tier = this.getTier(building);
-        if (tier < 0) return 0;
-        return Math.round(baseIncome * this.TIERS[tier].incomeMultiplier);
-      },
-
-      // Get star string for display
-      getStarString(tier) {
-        const filled = tier + 1;
-        const empty = 4 - tier;
-        return '★'.repeat(filled) + '☆'.repeat(Math.max(0, empty));
-      },
-
-      // Calculate total empire stats
-      getEmpireStats() {
-        if (!Array.isArray(GameState.propertyBuildings)) return { totalInfluence: 0, avgTier: 0, empireScore: 0, tierCounts: [0,0,0,0,0], ownedCount: 0 };
-
-        const tierCounts = [0, 0, 0, 0, 0];
-        let totalInfluence = 0;
-        let totalTier = 0;
-        let ownedCount = 0;
-        let totalDailyIncome = 0;
-
-        GameState.propertyBuildings.forEach(b => {
-          if (!b.owned) return;
-          ownedCount++;
-          const tier = b.territoryTier || 0;
-          tierCounts[tier]++;
-          totalTier += tier;
-          totalInfluence += this.TIERS[tier].influenceRadius;
-          totalDailyIncome += this.getTerritoryIncome(b);
-        });
-
-        const avgTier = ownedCount > 0 ? totalTier / ownedCount : 0;
-        // Empire score: weighted combination of properties, tiers, and income
-        const empireScore = Math.round(
-          (ownedCount * 100) +
-          (totalTier * 250) +
-          (totalDailyIncome * 0.1) +
-          (tierCounts[4] * 2000) // Bonus for Empire-tier properties
-        );
-
-        return { totalInfluence, avgTier, empireScore, tierCounts, ownedCount, totalDailyIncome };
-      },
-
-      // Render influence zone circles under owned buildings on the map
-      renderInfluenceZones() {
-        const container = document.getElementById('map-icons');
-        if (!container) return;
-
-        // Remove existing influence zones
-        container.querySelectorAll('.territory-influence-zone').forEach(el => el.remove());
-
-        if (!Array.isArray(GameState.propertyBuildings)) return;
-
-        GameState.propertyBuildings.forEach(b => {
-          if (!b.owned) return;
-          const tier = b.territoryTier || 0;
-          const tierData = this.TIERS[tier];
-
-          const zone = document.createElement('div');
-          zone.className = `territory-influence-zone territory-tier-${tier}`;
-          zone.style.left = b.x + '%';
-          zone.style.top = b.y + '%';
-          zone.style.width = (tierData.influenceRadius * 2) + '%';
-          zone.style.height = (tierData.influenceRadius * 2) + '%';
-          zone.style.position = 'absolute';
-          zone.style.transform = 'translate(-50%, -50%)';
-          zone.style.borderRadius = '50%';
-          zone.style.background = `radial-gradient(circle, ${tierData.glowColor} 0%, transparent 70%)`;
-          zone.style.pointerEvents = 'none';
-          zone.style.zIndex = '50';
-          zone.style.transition = 'all 0.5s ease';
-
-          container.appendChild(zone);
-        });
-      },
-
-      // Show tier-up celebration effect
-      showTierUpEffect(building, tierData) {
-        const container = document.getElementById('map-icons');
-        if (!container) return;
-
-        const effect = document.createElement('div');
-        effect.className = 'territory-tier-up-effect';
-        effect.style.left = building.x + '%';
-        effect.style.top = building.y + '%';
-        effect.style.position = 'absolute';
-        effect.style.transform = 'translate(-50%, -50%)';
-        effect.style.zIndex = '9999';
-        effect.style.pointerEvents = 'none';
-
-        // Expanding ring
-        const ring = document.createElement('div');
-        ring.className = 'tier-up-ring';
-        ring.style.borderColor = tierData.color;
-        effect.appendChild(ring);
-
-        // Star burst text
-        const text = document.createElement('div');
-        text.className = 'tier-up-text';
-        text.style.color = tierData.color;
-        text.textContent = tierData.name.toUpperCase();
-        effect.appendChild(text);
-
-        container.appendChild(effect);
-        setTimeout(() => effect.remove(), 2000);
-      }
-    };
-
-    // Update the empire stats bar UI on the turf tab
-    function updateEmpireStatsBar() {
-      const bar = document.getElementById('empire-stats-bar');
-      if (!bar) return;
-
-      const stats = TerritorySystem.getEmpireStats();
-      if (stats.ownedCount === 0) {
-        bar.style.display = 'none';
-        return;
-      }
-
-      bar.style.display = 'flex';
-
-      const ownedEl = document.getElementById('empire-owned-count');
-      const scoreEl = document.getElementById('empire-score');
-      const incomeEl = document.getElementById('empire-daily-income');
-      const tierEl = document.getElementById('empire-tier-display');
-
-      if (ownedEl) ownedEl.textContent = stats.ownedCount + '/21';
-      if (scoreEl) scoreEl.textContent = stats.empireScore.toLocaleString();
-      if (incomeEl) incomeEl.textContent = '$' + stats.totalDailyIncome.toLocaleString();
-
-      if (tierEl) {
-        // Show tier breakdown as colored dots
-        const tierColors = ['#888', '#4a90e2', '#f39c12', '#e74c3c', '#ffd700'];
-        let tierHTML = '';
-        stats.tierCounts.forEach((count, i) => {
-          if (count > 0) {
-            tierHTML += `<span style="color:${tierColors[i]};">${TerritorySystem.TIERS[i].name}: ${count}</span> `;
-          }
-        });
-        tierEl.innerHTML = tierHTML || '<span style="color:#888;">No tiers yet</span>';
-      }
-    }
-
-    // Make TerritorySystem available globally
-    window.TerritorySystem = TerritorySystem;
-
-    // ========================================
     // COP CAR PATROL SYSTEM
     // ========================================
-
+    
     if (typeof window !== 'undefined' && window.CopCarSystem) {
       console.log('[app.js] CopCarSystem already provided by module; skipping embedded CopCarSystem.');
     } else {
@@ -22237,15 +21784,10 @@ function ensureLandmarkProperties() {
         const pos = GameState.character.position;
         const hotspotIntensity = this.getHotspotIntensity(outcome.tier);
         MapMemory.createHotspot(pos.x, pos.y, hotspotIntensity, crime.name);
-
-        // Track crime for territory tier progress
-        if (typeof TerritorySystem !== 'undefined') {
-          TerritorySystem.recordCrimeForTerritory();
-        }
-
+        
         // Save state
         Storage.save();
-
+        
         return result;
       },
       
